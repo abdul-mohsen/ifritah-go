@@ -30,6 +30,13 @@ func Connect() *sql.DB {
 
   pingErr := db.Ping()
   if pingErr != nil {
+    
+    log.Fatal(os.Getenv("USER"),)
+    
+    log.Fatal(os.Getenv("PASSWORD"))
+    log.Fatal(os.Getenv("HOST"))
+    log.Fatal(os.Getenv("DBNAME"))
+    
     log.Fatal(pingErr)
   }
   fmt.Println("Connected!")

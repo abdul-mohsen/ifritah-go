@@ -19,6 +19,10 @@ func Connect() *sql.DB {
     DBName: os.Getenv("DBNAME"),
     AllowNativePasswords: true,
   }
+  log.Fatal(os.Getenv("USER"))
+  log.Fatal(os.Getenv("PASSWORD"))
+  log.Fatal(os.Getenv("HOST"))
+  log.Fatal(os.Getenv("DBNAME"))
   log.Fatal(cfg)
   // Get a database handle.
   var db *sql.DB
@@ -31,11 +35,6 @@ func Connect() *sql.DB {
   pingErr := db.Ping()
   if pingErr != nil {
     
-    log.Fatal(os.Getenv("USER"),)
-    
-    log.Fatal(os.Getenv("PASSWORD"))
-    log.Fatal(os.Getenv("HOST"))
-    log.Fatal(os.Getenv("DBNAME"))
     
     log.Fatal(pingErr)
   }

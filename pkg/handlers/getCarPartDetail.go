@@ -11,23 +11,22 @@ import (
 )
 
 func (h * handler) GetCarPartDetail(c *gin.Context) {
-  
-  rows, err := h.DB.Query("SELECT * FROM user")
+  id := c.Param("id") 
+  rows, err := h.DB.Query("SELECT * FROM articles where id = ?",id)
+
   if err != nil {
     log.Fatal(err)
-    return 
   }
-  var users []model.User
+  var articales []model.ArticleTable
   for rows.Next() {
-    var user model.User
-    if err := rows.Scan(&user.ID, &user.Username, &user.Password); err != nil {
+    var articale model.ArticleTable
+    if err := rows.Scan(&articale); err != nil {
       log.Fatal(err)
-      return 
     }
-    fmt.Println(user);
-    users = append(users, user)
+    fmt.Println(articale);
+    articales = append(articales, articale)
   }
   defer rows.Close()
-  c.IndentedJSON(http.StatusOK, users)
+  c.IndentedJSON(http.StatusOK, articales)
 
 }

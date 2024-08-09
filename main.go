@@ -19,7 +19,7 @@ func main() {
   DB := db.Connect()
   h := handlers.New(DB)
   router := gin.Default()
-  router.GET("/hello", h.GetCarPartDetail)
+  router.GET("/hello/*id", h.GetCarPartDetail)
   router.GET("/albums", getAlbums)
   router.POST("/albums", postAlbums)
   router.Run("localhost:8080")

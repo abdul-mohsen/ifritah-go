@@ -19,11 +19,9 @@ func Connect() *sql.DB {
     DBName: os.Getenv("DBNAME"),
     AllowNativePasswords: true,
   }
-  log.Fatal(os.Getenv("USER"))
-  log.Fatal(os.Getenv("PASSWORD"))
-  log.Fatal(os.Getenv("HOST"))
-  log.Fatal(os.Getenv("DBNAME"))
-  log.Fatal(cfg)
+
+
+  log.Print(cfg)
   // Get a database handle.
   var db *sql.DB
   var err error

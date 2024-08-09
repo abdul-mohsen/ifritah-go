@@ -15,7 +15,7 @@ func main() {
   router.GET("/hello", h.GetCarPartDetail)
   router.GET("/albums", getAlbums)
   router.POST("/albums", postAlbums)
-
+  router.Run("localhost:8080")
 }
 
 // album represents data about a record album.

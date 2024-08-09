@@ -16,7 +16,6 @@ func (h * handler) GetCarPartDetail(c *gin.Context) {
   if err != nil {
     fmt.Errorf("hahahah %q: %v", name, err)
   }
-  defer rows.Close()
   var users []model.User
   for rows.Next() {
     var user model.User
@@ -26,6 +25,7 @@ func (h * handler) GetCarPartDetail(c *gin.Context) {
     fmt.Println(user);
     users = append(users, user)
   }
+  defer rows.Close()
   c.IndentedJSON(http.StatusOK, users)
 
 }

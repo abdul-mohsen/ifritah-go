@@ -3,7 +3,7 @@ package model
 type ArticleTable struct {
   ID int64
   DataSupplierId int64
-  articleNumber string
+  ArticleNumber string
   MfrId int64
   AdditionalDescription string
   ArticleStatusId int64

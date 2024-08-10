@@ -1,10 +1,10 @@
 package model
 
 type ArticleTable struct {
-  ID int32
+  ID int64
   DataSupplierId int64
   articleNumber string
-  mfrId int64
+  MfrId int64
   AdditionalDescription string
   ArticleStatusId int64
   ArticleStatusDescription string
@@ -16,6 +16,6 @@ type ArticleTable struct {
   IsRemanufacturedPart bool
   IsAccessory bool
   GenericArticleDescription string
-  LegacyArticleId int32
+  LegacyArticleId int64
   AssemblyGroupNodeId int64
 }

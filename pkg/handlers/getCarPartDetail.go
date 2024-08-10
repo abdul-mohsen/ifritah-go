@@ -12,6 +12,7 @@ import (
 
 func (h * handler) GetCarPartDetail(c *gin.Context) {
   id := c.Param("id") 
+  log.Print(id)
   rows, err := h.DB.Query("SELECT * FROM articles where id = ?",id)
 
   if err != nil {
@@ -20,7 +21,7 @@ func (h * handler) GetCarPartDetail(c *gin.Context) {
   var articales []model.ArticleTable
   for rows.Next() {
     var articale model.ArticleTable
-    if err := rows.Scan(&articale); err != nil {
+    if err := rows.Scan(&articale.ID); err != nil {
       log.Fatal(err)
     }
     fmt.Println(articale);

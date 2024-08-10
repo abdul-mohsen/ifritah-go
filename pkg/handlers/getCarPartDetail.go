@@ -21,7 +21,7 @@ func (h * handler) GetCarPartDetail(c *gin.Context) {
   var articales []model.ArticleTable
   for rows.Next() {
     var articale model.ArticleTable
-    if err := rows.Scan(&articale.ID); err != nil {
+    if err := rows.Scan(&articale.ID, &articale.DataSupplierId, &articale.ArticleNumber, &articale.MfrId, &articale.AdditionalDescription, &articale.ArticleStatusId, &articale.ArticleStatusDescription, &articale.ArticleStatusValidFromDate, &articale.QuantityPerPackage, &articale.QuantityPerPartPerPackage, &articale.IsSelfServicePacking, &articale.HasMandatoryMaterialCertification, &articale.IsRemanufacturedPart, &articale.IsAccessory, &articale.GenericArticleDescription, &articale.LegacyArticleId, &articale.AssemblyGroupNodeId); err != nil {
       log.Fatal(err)
     }
     fmt.Println(articale);

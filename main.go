@@ -1,14 +1,11 @@
 package main
 
 import (
-  "ifritah/web-service-gin/pkg/db"
-  "ifritah/web-service-gin/pkg/handlers"
-  "log"
-  "net/http"
-
-  "github.com/gin-gonic/gin"
-  "github.com/joho/godotenv"
-
+	"ifritah/web-service-gin/pkg/db"
+	"ifritah/web-service-gin/pkg/handlers"
+	"log"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {

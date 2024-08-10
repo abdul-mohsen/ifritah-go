@@ -13,7 +13,7 @@ import (
 func (h * handler) GetCarPartDetail(c *gin.Context) {
   id := c.Param("id") 
   log.Print(id)
-  rows, err := h.DB.Query("SELECT * FROM articles where id = 1")
+  rows, err := h.DB.Query("SELECT * FROM articles where id = ?", id)
 
   if err != nil {
     log.Fatal(err)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"reflect"
 
 	"ifritah/web-service-gin/pkg/model"
 
@@ -19,8 +20,16 @@ func (h * handler) GetCarPartDetail(c *gin.Context) {
   }
   var articales []model.ArticleTable
   for rows.Next() {
-    var articale model.ArticleTable
-    if err := rows.Scan(&articale); err != nil {
+    articale := model.ArticleTable{}
+    a := reflect.ValueOf(&articale).Elem()
+    numCols := a.NumField()
+    columns := make([]interface{}, numCols)
+    for i := 0; i < numCols; i++ {
+      field := a.Field(i)
+      columns[i] = field.Addr().Interface()
+    }
+
+    if err := rows.Scan(columns...); err != nil {
       log.Fatal(err)
     }
     fmt.Println(articale);

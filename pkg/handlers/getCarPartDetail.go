@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"reflect"
 	"ifritah/web-service-gin/pkg/model"
 	"github.com/gin-gonic/gin"
 )

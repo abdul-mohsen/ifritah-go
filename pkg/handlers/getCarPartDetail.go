@@ -19,8 +19,15 @@ func (h * handler) GetCarPartDetail(c *gin.Context) {
   var articales []model.ArticleTable
   for rows.Next() {
     articale := model.ArticleTable{}
+    a := reflect.ValueOf(&articale).Elem()
+    numCols := a.NumField()
+    columns := make([]interface{}, numCols)
+    for i := 0; i < numCols; i++ {
+      field := a.Field(i)
+      columns[i] = field.Addr().Interface()
+    }
 
-    if err := rows.Scan(getCol(articale)...); err != nil {
+    if err := rows.Scan(columns...); err != nil {
       log.Fatal(err)
     }
     fmt.Println(articale);
@@ -33,7 +40,7 @@ func (h * handler) GetCarPartDetail(c *gin.Context) {
 
 func getCol(item interface{}) []interface{} {
 
-    a := reflect.ValueOf(&item).Elem()
+    a := reflect.ValueOf(&item).Elem().Elem()
     numCols := a.NumField()
     columns := make([]interface{}, numCols)
     for i := 0; i < numCols; i++ {

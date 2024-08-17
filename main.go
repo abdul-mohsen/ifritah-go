@@ -18,7 +18,8 @@ func main() {
   router := gin.Default()
   baseUrl := "/api/v2/"
   // router.GET(baseUrl + ":id", h.GetCarPartDetail)
-  router.GET(baseUrl + "parts_provider/:company_id", h.GetPartsProvider)
+  router.GET(baseUrl + "parts_provider", h.GetPartsProvider)
+  router.GET(baseUrl + "parts_provider", h.PostPartsProvider)
   router.Run("localhost:8080")
   DB.Close()
 }

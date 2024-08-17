@@ -10,11 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (h * handler) GetPartsProvider(c *gin.Context) {
+func (h * handler) PostPartsProvider(c *gin.Context) {
   id := c.Param("company_id") 
-  fmt.Print(c.Request)
-  fmt.Print(c.Request.Header)
-  fmt.Print(c.Request.Header.Get("access_token"))
   rows, err := h.DB.Query("SELECT name, address, phone_number, number, vat_number FROM parts_provider where company_id = ? and is_deleted = TRUE", id)
 
   if err != nil {

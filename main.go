@@ -17,8 +17,8 @@ func main() {
   h := handlers.New(DB)
   router := gin.Default()
   baseUrl := "/api/v2/"
-  router.GET(baseUrl + ":id", h.GetCarPartDetail)
-  router.GET(baseUrl + ":company_id", h.GetPartsProvider)
+  // router.GET(baseUrl + ":id", h.GetCarPartDetail)
+  router.GET(baseUrl + "parts_provider/:company_id", h.GetPartsProvider)
   router.Run("localhost:8080")
   DB.Close()
 }

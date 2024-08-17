@@ -12,7 +12,7 @@ import (
 func Connect() *sql.DB {
   // Capture connection properties.
   cfg := mysql.Config{
-    User:   os.Getenv("USER"),
+    User:   "root",
     Passwd: os.Getenv("PASSWORD"),
     Net:    "tcp",
     Addr:   os.Getenv("HOST"),

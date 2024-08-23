@@ -42,6 +42,3 @@ func (h * handler) GetPartsProvider(c *gin.Context) {
 
 }
 
-func verifyJWT(endpointHandler func(writer http.ResponseWriter, request *http.Request)) http.HandlerFunc {
-
-}

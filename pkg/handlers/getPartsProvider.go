@@ -1,27 +1,34 @@
 package handlers
 
 import (
-  "fmt"
-  "log"
-  "net/http"
-  "github.com/dgrijalva/jwt-go"
-  "ifritah/web-service-gin/pkg/model"
+	"fmt"
+	"ifritah/web-service-gin/pkg/model"
+	"log"
+	"net/http"
 
-  "github.com/gin-gonic/gin"
+	"github.com/dgrijalva/jwt-go"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (h * handler) GetPartsProvider(c *gin.Context) {
 
-  auth := c.Request.Header.Get("Authorization")
-  token, err := jwt.Parse(auth, func(token *jwt.Token) (interface{}, error) {
-    _, ok := token.Method.(*jwt.SigningMethodECDSA)
-    if !ok {
-      log.Fatal("fuck")
+  tokenString := c.Request.Header.Get("Authorization")
+  fmt.Println(tokenString)
+  token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+
+    sampleSecretKey := []byte("hi")
+    if _, ok := token.Method.(*jwt.SigningMethodECDSA); !ok {
+      return nil, fmt.Errorf("there's an error with the signing method")
     }
-    fmt.Println(ok)
-    return ok, nil
+    return sampleSecretKey, nil
+
   })
+  if err != nil {
+    log.Fatal(err)
+  }
   fmt.Println(token)
+
   id := 1
   rows, err := h.DB.Query("SELECT name, address, phone_number, number, vat_number FROM parts_provider where company_id = ? and is_deleted = TRUE", id)
 

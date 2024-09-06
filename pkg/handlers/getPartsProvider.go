@@ -19,7 +19,7 @@ func (h * handler) GetPartsProvider(c *gin.Context) {
   token, err := jwt.Parse(strings.Split(tokenString, "Bearer ")[1], func(token *jwt.Token) (interface{}, error) {
 
     sampleSecretKey := []byte("hi")
-    if _, ok := token.Method.(*jwt.SigningMethodECDSA); !ok {
+    if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
       return nil, fmt.Errorf("there's an error with the signing method")
     }
     return sampleSecretKey, nil

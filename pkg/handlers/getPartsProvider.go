@@ -5,6 +5,7 @@ import (
 	"ifritah/web-service-gin/pkg/model"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/dgrijalva/jwt-go"
@@ -12,19 +13,32 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func verifyToken(tokenString string) (*jwt.Token, error) {
+	// Parse the token with the secret key
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return os.Getenv("JWT_SECRET_KEY"), nil
+	})
+
+	// Check for verification errors
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the token is valid
+	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+
+	// Return the verified token
+	return token, nil
+}
+
 func (h * handler) GetPartsProvider(c *gin.Context) {
 
-  tokenString := c.Request.Header.Get("Authorization")
-  fmt.Println(tokenString)
-  token, err := jwt.Parse(strings.Split(tokenString, "Bearer ")[1], func(token *jwt.Token) (interface{}, error) {
-
-    sampleSecretKey := []byte("hi")
-    if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-      return nil, fmt.Errorf("there's an error with the signing method")
-    }
-    return sampleSecretKey, nil
-
-  })
+  fullTokenString := c.Request.Header.Get("Authorization")
+  tokenString := strings.Split(fullTokenString, "Bearer ")[1]
+  fmt.Println(fullTokenString)
+  token, err := verifyToken(tokenString)
   if err != nil {
     log.Fatal(err)
   }

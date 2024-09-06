@@ -5,6 +5,7 @@ import (
 	"ifritah/web-service-gin/pkg/model"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/dgrijalva/jwt-go"
 

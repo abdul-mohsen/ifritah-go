@@ -22,16 +22,19 @@ func verifyToken(tokenString string) (*jwt.Token, error) {
     return key, nil
   })
   fmt.Println(token)
+  fmt.Println("_1")
 
   // Check for verification errors
   if err != nil {
     return nil, err
   }
+  fmt.Println("_2")
 
   // Check if the token is valid
   if !token.Valid {
     return nil, fmt.Errorf("invalid token")
   }
+  fmt.Println("_3")
 
   // Return the verified token
   return token, nil

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/dgrijalva/jwt-go"
 
@@ -37,7 +38,7 @@ func verifyToken(tokenString string) (*jwt.Token, error) {
 func (h * handler) GetPartsProvider(c *gin.Context) {
 
   fullTokenString := c.Request.Header.Get("Authorization")
-  tokenString := fullTokenString
+  tokenString := strings.Split(fullTokenString, "Bearer ")[1]
   fmt.Println(tokenString)
   token, err := verifyToken(tokenString)
   if err != nil {

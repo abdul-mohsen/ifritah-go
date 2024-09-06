@@ -19,6 +19,7 @@ func verifyToken(tokenString string) (*jwt.Token, error) {
   token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
     key := os.Getenv("JWT_SECRET_KEY")
     fmt.Println(key)
+    fmt.Println("_0")
     return key, nil
   })
   fmt.Println(token)

@@ -9,6 +9,8 @@ import (
 )
 
 func main() {
+  
+  log.SetFlags(log.LstdFlags | log.Lshortfile)
   err := godotenv.Load()
   if err != nil {
     log.Fatalf("unable to load .env file: %e", err)

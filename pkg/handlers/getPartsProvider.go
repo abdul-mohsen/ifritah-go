@@ -15,7 +15,7 @@ func (h * handler) GetPartsProvider(c *gin.Context) {
 
   tokenString := c.Request.Header.Get("Authorization")
   fmt.Println(tokenString)
-  token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+  token, err := jwt.Parse(strings.Split(tokenString, "Bearer ")[1], func(token *jwt.Token) (interface{}, error) {
 
     sampleSecretKey := []byte("hi")
     if _, ok := token.Method.(*jwt.SigningMethodECDSA); !ok {

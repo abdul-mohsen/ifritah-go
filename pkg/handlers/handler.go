@@ -12,6 +12,12 @@ type handler struct {
   DB *sql.DB
 }
 
+type userSession struct {
+  id string
+  username string
+  exp int64
+}
+
 func New(db *sql.DB) handler {
   return handler{db}
 }
@@ -40,4 +46,15 @@ func VerifyToken(tokenString string) (*jwt.Token, error) {
 
   // Return the verified token
   return token, nil
+}
+
+func GetSessionInfo(token jwt.Token ) userSession {
+
+  claims := token.Claims.(jwt.MapClaims)
+  user := userSession{
+    id: claims["userId"].(string),
+    username: claims["username"].(string),
+    exp : claims["exp"].(int64),
+  }
+  return user
 }

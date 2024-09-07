@@ -21,10 +21,13 @@ func (h * handler) GetPartsProvider(c *gin.Context) {
     log.Fatal(err)
   }
   userSession := GetSessionInfo(*token)
-  fmt.Println(userSession)
 
 
-  id := 1
+  id := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id)
+  fmt.Println(id)
+  fmt.Println("_id")
+
+
   rows, err := h.DB.Query("SELECT name, address, phone_number, number, vat_number FROM parts_provider where company_id = ? and is_deleted = TRUE", id)
 
   if err != nil {

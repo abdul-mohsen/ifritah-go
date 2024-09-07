@@ -15,7 +15,7 @@ type handler struct {
 type userSession struct {
   id float64 
   username string
-  exp int64
+  exp float64
 }
 
 func New(db *sql.DB) handler {
@@ -54,7 +54,7 @@ func GetSessionInfo(token jwt.Token ) userSession {
   user := userSession{
     id: claims["userId"].(float64),
     username: claims["username"].(string),
-    exp : claims["exp"].(int64),
+    exp : claims["exp"].(float64),
   }
   return user
 }

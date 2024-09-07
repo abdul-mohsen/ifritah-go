@@ -20,7 +20,7 @@ func verifyToken(tokenString string) (*jwt.Token, error) {
     key := os.Getenv("JWT_SECRET_KEY")
     fmt.Println(key)
     fmt.Println("_0")
-    return key, nil
+    return []byte(key), nil
   })
   fmt.Println(token)
   fmt.Println("_1")

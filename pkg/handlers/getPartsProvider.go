@@ -40,7 +40,7 @@ func (h * handler) GetPartsProvider(c *gin.Context) {
   for rows.Next() {
     var partsProvider model.PartsProvider
 
-    if err := rows.Scan(&model.PartsProvider.Id, &model.PartsProvider.Copany_id, &model.PartsProvider.Name, &model.PartsProvider.Address, &model.PartsProvider.PhoneNumber, &model.PartsProvider.Number, &model.PartsProvider.VatNumber, &model.PartsProvider.IsDeleted); err != nil {
+    if err := rows.Scan(&partsProvider.Id, &partsProvider.Copany_id, &partsProvider.Name, &partsProvider.Address, &partsProvider.PhoneNumber, &partsProvider.Number, &partsProvider.VatNumber, &partsProvider.IsDeleted); err != nil {
       log.Fatal(err)
     }
     fmt.Println(partsProvider);

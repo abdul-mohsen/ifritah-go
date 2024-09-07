@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,7 +21,9 @@ func (h * handler) GetPartsProvider(c *gin.Context) {
   if err != nil {
     log.Fatal(err)
   }
-  fmt.Println(token.Claims)
+
+  claims := token.Claims.(jwt.MapClaims)
+  fmt.Println(claims["userId"])
 
   id := 1
   rows, err := h.DB.Query("SELECT name, address, phone_number, number, vat_number FROM parts_provider where company_id = ? and is_deleted = TRUE", id)

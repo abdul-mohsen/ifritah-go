@@ -23,7 +23,10 @@ func (h * handler) GetPartsProvider(c *gin.Context) {
   userSession := GetSessionInfo(*token)
 
 
-  id := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id)
+  var id int
+  if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&id); err != nil {
+    log.Fatal(err)
+  }
   fmt.Println(id)
   fmt.Println("_id")
 

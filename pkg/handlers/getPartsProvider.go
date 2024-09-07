@@ -20,7 +20,7 @@ func (h * handler) GetPartsProvider(c *gin.Context) {
   if err != nil {
     log.Fatal(err)
   }
-  fmt.Println(token.Header["userId"])
+  fmt.Println(token.Claims)
 
   id := 1
   rows, err := h.DB.Query("SELECT name, address, phone_number, number, vat_number FROM parts_provider where company_id = ? and is_deleted = TRUE", id)

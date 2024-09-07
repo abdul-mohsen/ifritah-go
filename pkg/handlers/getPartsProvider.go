@@ -31,7 +31,7 @@ func (h * handler) GetPartsProvider(c *gin.Context) {
   fmt.Println("_id")
 
 
-  rows, err := h.DB.Query("SELECT name, address, phone_number, number, vat_number FROM parts_provider where company_id = ? and is_deleted = TRUE", id)
+  rows, err := h.DB.Query("SELECT * FROM parts_provider where company_id = ? and is_deleted = TRUE", id)
 
   if err != nil {
     log.Fatal(err)
@@ -39,7 +39,8 @@ func (h * handler) GetPartsProvider(c *gin.Context) {
   var partsProviders []model.PartsProvider
   for rows.Next() {
     var partsProvider model.PartsProvider
-    if err := rows.Scan(); err != nil {
+
+    if err := rows.Scan(&model.PartsProvider.Id, &model.PartsProvider.Copany_id, &model.PartsProvider.Name, &model.PartsProvider.Address, &model.PartsProvider.PhoneNumber, &model.PartsProvider.Number, &model.PartsProvider.VatNumber, &model.PartsProvider.IsDeleted); err != nil {
       log.Fatal(err)
     }
     fmt.Println(partsProvider);

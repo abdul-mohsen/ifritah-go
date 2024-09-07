@@ -13,7 +13,7 @@ type handler struct {
 }
 
 type userSession struct {
-  id string
+  id int32 
   username string
   exp int64
 }
@@ -52,7 +52,7 @@ func GetSessionInfo(token jwt.Token ) userSession {
 
   claims := token.Claims.(jwt.MapClaims)
   user := userSession{
-    id: claims["userId"].(string),
+    id: claims["userId"].(int32),
     username: claims["username"].(string),
     exp : claims["exp"].(int64),
   }

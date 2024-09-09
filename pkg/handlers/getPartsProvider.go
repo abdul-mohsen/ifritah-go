@@ -31,7 +31,7 @@ func (h * handler) GetPartsProvider(c *gin.Context) {
   fmt.Println("_id")
 
 
-  rows, err := h.DB.Query("SELECT * FROM parts_provider where company_id = ? and is_deleted = TRUE", id)
+  rows, err := h.DB.Query("SELECT * FROM parts_provider where company_id = ? and is_deleted = FALSE", id)
 
   if err != nil {
     log.Fatal(err)

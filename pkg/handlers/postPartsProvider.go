@@ -16,7 +16,7 @@ type PartsProviderRequest struct {
   VatNumber string
 }
 
-func (h * handler) postPartsProvider(c *gin.Context) {
+func (h * handler) PostPartsProvider(c *gin.Context) {
 
   token, err := VerifyToken(c)
   if err != nil {

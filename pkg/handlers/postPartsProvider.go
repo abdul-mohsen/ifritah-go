@@ -9,11 +9,11 @@ import (
 )
 
 type PartsProviderRequest struct {
-  Name string
-  Address string
-  PhoneNumber string
-  Number string
-  VatNumber string
+  Name string `json:"name"`
+  Address string `json:"address"`
+  PhoneNumber string `json:"phone_number"`
+  Number string `json:"number"`
+  VatNumber string `json:"vat_number"`
 }
 
 func (h * handler) PostPartsProvider(c *gin.Context) {

@@ -42,6 +42,6 @@ func (h * handler) PostPartsProvider(c *gin.Context) {
     log.Fatal(err)
   }
 
-  c.IndentedJSON(http.StatusCreated, nil)
+  c.Status(http.StatusCreated)
 
 }

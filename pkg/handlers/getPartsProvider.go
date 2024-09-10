@@ -10,18 +10,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-
 func (h * handler) GetPartsProvider(c *gin.Context) {
 
-  fullTokenString := c.Request.Header.Get("Authorization")
-  tokenString := strings.Split(fullTokenString, "Bearer ")[1]
-  fmt.Println(tokenString)
-  token, err := VerifyToken(tokenString)
+  token, err := VerifyToken(c)
   if err != nil {
     log.Fatal(err)
   }
   userSession := GetSessionInfo(*token)
-
 
   var id int
   if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&id); err != nil {

@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/dgrijalva/jwt-go"
+	"github.com/gin-gonic/gin"
 )
 
 type handler struct {
@@ -22,8 +24,10 @@ func New(db *sql.DB) handler {
   return handler{db}
 }
 
-
-func VerifyToken(tokenString string) (*jwt.Token, error) {
+func VerifyToken(c *gin.Context) (*jwt.Token, error) {
+  fullTokenString := c.Request.Header.Get("Authorization")
+  tokenString := strings.Split(fullTokenString, "Bearer ")[1]
+  fmt.Println(tokenString)
   // Parse the token with the secret key
   fmt.Println(tokenString)
   token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {

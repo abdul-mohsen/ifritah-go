@@ -5,28 +5,43 @@ import (
 	"log"
 	"net/http"
 
-	"ifritah/web-service-gin/pkg/model"
-
 	"github.com/gin-gonic/gin"
 )
 
-func (h * handler) PostPartsProvider(c *gin.Context) {
-  id := c.Param("company_id") 
-  rows, err := h.DB.Query("SELECT name, address, phone_number, number, vat_number FROM parts_provider where company_id = ? and is_deleted = TRUE", id)
+type PartsProviderRequest struct {
+  Name string
+  Address string
+  PhoneNumber string
+  Number string
+  VatNumber string
+}
 
+func (h * handler) postPartsProvider(c *gin.Context) {
+
+  token, err := VerifyToken(c)
   if err != nil {
     log.Fatal(err)
   }
-  var partsProviders []model.PartsProvider
-  for rows.Next() {
-    var partsProvider model.PartsProvider
-    if err := rows.Scan(); err != nil {
-      log.Fatal(err)
-    }
-    fmt.Println(partsProvider);
-    partsProviders = append(partsProviders, partsProvider)
+  userSession := GetSessionInfo(*token)
+
+  var id int
+  if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&id); err != nil {
+    log.Fatal(err)
   }
-  defer rows.Close()
-  c.IndentedJSON(http.StatusOK, partsProviders)
+  fmt.Println(id)
+  fmt.Println("_id")
+
+  var request PartsProviderRequest
+  if err := c.BindJSON(&request); err != nil {
+    log.Fatal(err)
+  }
+  fmt.Print(request)
+
+  if _, err := h.DB.Exec(
+    "INSERT INTO parts_provider (company_id, name, address, phone_number, number, vat_number) VALUES (?, ?, ?, ?, ?, ?)", id, request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber); err != nil {
+    log.Fatal(err)
+  }
+
+  c.IndentedJSON(http.StatusCreated, nil)
 
 }

@@ -8,5 +8,5 @@ type PartsProvider struct {
   PhoneNumber string `json:"phone_number"`
   Number string `json:"number"`
   VatNumber string `json:"vat_number"`
-  IsDeleted bool `json:"is_deleted"`
+  IsDeleted bool `json:"-"`
 }

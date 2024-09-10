@@ -5,7 +5,6 @@ import (
 	"ifritah/web-service-gin/pkg/model"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 )

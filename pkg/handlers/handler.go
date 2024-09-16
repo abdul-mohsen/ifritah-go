@@ -26,6 +26,7 @@ func New(db *sql.DB) handler {
 
 func VerifyToken(c *gin.Context) (*jwt.Token, error) {
   fullTokenString := c.Request.Header.Get("Authorization")
+  fmt.Println(fullTokenString)
   tokenString := strings.Split(fullTokenString, "Bearer ")[1]
   fmt.Println(tokenString)
   // Parse the token with the secret key

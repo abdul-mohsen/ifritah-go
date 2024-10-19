@@ -1,7 +1,7 @@
 package model
 
 type PartsProvider struct {
-  Id int32 `json:"-"`
+  Id int32 `json:"id"`
   Copany_id int32 `json:"-"`
   Name string `json:"name"`
   Address string `json:"address"`

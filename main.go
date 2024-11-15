@@ -28,6 +28,7 @@ func main() {
   router.DELETE(baseUrl + "supplier:id", h.DeleteSupplier)
   router.POST(baseUrl + "register", h.Register)
   router.GET(baseUrl + "company/all", h.GetAllCompanies)
+  router.GET(baseUrl + "vin/:vin", h.SearchByVin)
   router.Run("localhost:8080")
   DB.Close()
 }

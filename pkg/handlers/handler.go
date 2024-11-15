@@ -31,12 +31,12 @@ func VerifyToken(c *gin.Context) (*jwt.Token, error) {
   fmt.Println(tokenString)
   // Parse the token with the secret key
   token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+    key := os.Getenv("JWT_SECRET_KEY")
     fmt.Println(key)
     fmt.Println("_0")
     if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
       return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
     }
-    key := os.Getenv("JWT_SECRET_KEY")
     return []byte(key), nil
   })
   fmt.Println(token)

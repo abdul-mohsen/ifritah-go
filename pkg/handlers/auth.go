@@ -13,7 +13,7 @@ type RegisterRequest struct {
   Password string `json:"password"`
   Address string `json:"address"`
   PhoneNumber string `json:"phone_number"`
-  Email string `json:"Email"`
+  Email string `json:"email"`
   CompanyID int `json:"company_id"`
 }
 

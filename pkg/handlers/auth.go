@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -56,8 +57,8 @@ var JWTSettings = JWTConfig{
 }
 
 type LoginRequest struct {
-  username string
-  password string
+  Username string `json:"username"`
+  Password string `json:"password"`
 }
 
 func GenerateAccessToken(username string, userid int) (string, error) {
@@ -88,10 +89,11 @@ func (h * handler) Login(c *gin.Context) {
     log.Panic(err)
   }
 
-  hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.password), 10)
+  hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.Password), 10)
+  fmt.Println(hashedPassword)
 
   var id int
-  if err := h.DB.QueryRow("SELECT id FROM user where username = ? and password = ?;", request.username, hashedPassword).Scan(&id); err != nil {
+  if err := h.DB.QueryRow("SELECT id FROM user where username = ? and password = ?;", request.Username, hashedPassword).Scan(&id); err != nil {
     log.Panic(err)
   }
 
@@ -99,13 +101,13 @@ func (h * handler) Login(c *gin.Context) {
     log.Fatalf("Error hashing password: %v", err)
   }
 
-  accessToken, err := GenerateAccessToken(request.username, id)
+  accessToken, err := GenerateAccessToken(request.Username, id)
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate access token"})
     return
   }
 
-  refreshToken, err := GenerateRefreshToken(request.username, id)
+  refreshToken, err := GenerateRefreshToken(request.Username, id)
   if err != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate refresh token"})
     return

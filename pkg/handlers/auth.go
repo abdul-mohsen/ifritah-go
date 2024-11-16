@@ -81,7 +81,10 @@ func GenerateRefreshToken(username string, userid int) (string, error) {
   return token.SignedString([]byte(JWTSettings.RefreshSecretKey))
 }
 
-// GenerateTokens generates both access and refresh tokens
+func checkPassword(hashedPassword [] byte, password string) error {
+    return bcrypt.CompareHashAndPassword(hashedPassword, []byte(password))
+}
+
 func (h * handler) Login(c *gin.Context) {
 
   var request LoginRequest 
@@ -93,12 +96,18 @@ func (h * handler) Login(c *gin.Context) {
   fmt.Println(string(hashedPassword))
 
   var id int
-  if err := h.DB.QueryRow("SELECT id FROM user where username = ? and password = ?;", request.Username, string(hashedPassword)).Scan(&id); err != nil {
+  var password string
+  if err := h.DB.QueryRow("SELECT id, password FROM user where username = ? limit 1;", request.Username).Scan(&id, &password); err != nil {
     log.Panic(err)
   }
 
   if err != nil {
     log.Fatalf("Error hashing password: %v", err)
+  }
+
+  err = checkPassword(hashedPassword, password)
+  if err != nil {
+    fmt.Println("Invalid password")
   }
 
   accessToken, err := GenerateAccessToken(request.Username, id)

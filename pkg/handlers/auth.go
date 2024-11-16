@@ -64,7 +64,7 @@ type LoginRequest struct {
 func GenerateAccessToken(username string, userid int) (string, error) {
   token := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
     "username": username,
-    "id": userid,
+    "userId": userid,
     "exp":      time.Now().Add(JWTSettings.AccessExpiration).Unix(),
   })
 
@@ -74,7 +74,7 @@ func GenerateAccessToken(username string, userid int) (string, error) {
 func GenerateRefreshToken(username string, userid int) (string, error) {
   token := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
     "username": username,
-    "id": userid,
+    "userId": userid,
     "exp":      time.Now().Add(JWTSettings.RefreshExpiration).Unix(),
   })
 

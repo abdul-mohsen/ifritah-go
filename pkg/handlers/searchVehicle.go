@@ -28,6 +28,8 @@ func (h * handler) SearchByVin(c *gin.Context) {
     }
     c.Data(200,"json", body)
   }
+
+  fmt.Println(body)
   c.Data(200,"json", body)
 }
 

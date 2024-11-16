@@ -90,10 +90,10 @@ func (h * handler) Login(c *gin.Context) {
   }
 
   hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.Password), 10)
-  fmt.Println(hashedPassword)
+  fmt.Println(string(hashedPassword))
 
   var id int
-  if err := h.DB.QueryRow("SELECT id FROM user where username = ? and password = ?;", request.Username, hashedPassword).Scan(&id); err != nil {
+  if err := h.DB.QueryRow("SELECT id FROM user where username = ? and password = ?;", request.Username, string(hashedPassword)).Scan(&id); err != nil {
     log.Panic(err)
   }
 

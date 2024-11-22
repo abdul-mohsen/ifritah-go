@@ -30,6 +30,7 @@ func main() {
   router.POST(baseUrl + "login", h.Login)
   router.GET(baseUrl + "company/all", h.GetAllCompanies)
   router.GET(baseUrl + "vin/:vin", h.SearchByVin)
+  router.GET(baseUrl + "notification", h.GetNotificationAll)
   router.Run("localhost:8080")
   DB.Close()
 }

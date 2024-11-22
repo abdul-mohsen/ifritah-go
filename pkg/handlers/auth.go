@@ -93,7 +93,6 @@ func (h * handler) Login(c *gin.Context) {
   }
 
   hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.Password), 10)
-  fmt.Println(string(hashedPassword))
 
   var id int
   var password string

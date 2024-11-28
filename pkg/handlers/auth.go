@@ -62,6 +62,9 @@ type LoginRequest struct {
 
 func GenerateAccessToken(username string, userid int) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
+		"aud":      "http://0.0.0.0:4194/hello",
+		"sub":      "Authentication",
+		"iss":      "softwaret",
 		"username": username,
 		"userId":   userid,
 		"exp":      time.Now().Add(JWTSettings.AccessExpiration).Unix(),
@@ -72,9 +75,6 @@ func GenerateAccessToken(username string, userid int) (string, error) {
 
 func GenerateRefreshToken(username string, userid int) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
-		"aud":      "http://0.0.0.0:4194/hello",
-		"sub":      "Authentication",
-		"iss":      "softwaret",
 		"username": username,
 		"userId":   userid,
 		"exp":      time.Now().Add(JWTSettings.RefreshExpiration).Unix(),

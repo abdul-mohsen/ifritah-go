@@ -76,6 +76,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 
 	if err != nil || !token.Valid {
 		fmt.Println("Error in token")
+		fmt.Println(err)
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}

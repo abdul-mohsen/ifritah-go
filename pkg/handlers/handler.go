@@ -72,7 +72,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 		}
 
 		// Return the secret key
-		return secretKey, nil
+		return []byte(secretKey), nil
 	})
 
 	if err != nil || !token.Valid {

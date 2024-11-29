@@ -2,13 +2,6 @@ package handlers
 
 import (
 	"database/sql"
-	"fmt"
-	"net/http"
-	"os"
-	"strings"
-
-	"github.com/dgrijalva/jwt-go"
-	"github.com/gin-gonic/gin"
 )
 
 type handler struct {

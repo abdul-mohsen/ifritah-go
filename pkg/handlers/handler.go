@@ -59,6 +59,7 @@ func VerifyToken(c *gin.Context) (*jwt.Token, error) {
 func JWTVerifyMiddleware(c *gin.Context) {
 	// Get the JWT token from the Authorization header
 	tokenString := c.GetHeader("Authorization")
+	fmt.Println(tokenString)
 
 	// Define the secret key used to sign the token
 	secretKey := os.Getenv("JWT_SECRET_KEY") // Parse the JWT token
@@ -74,6 +75,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	})
 
 	if err != nil || !token.Valid {
+		fmt.Println("Error in token")
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
@@ -81,6 +83,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	// Store the decoded JWT in the context for later use
 	c.Set("decoded_jwt", token.Claims)
 
+	fmt.Println("Everything is good")
 	// Continue the request processing
 	c.Next()
 }

@@ -22,11 +22,6 @@ func main() {
 	router := gin.Default()
 	baseUrl := os.Getenv("BASEURL")
 
-	// Global middleware
-	// Logger middleware will write the logs to gin.DefaultWriter even if you set with GIN_MODE=release.
-	// By default gin.DefaultWriter = os.Stdout
-	router.Use(gin.Logger())
-
 	// Recovery middleware recovers from any panics and writes a 500 if there was one.
 	router.Use(gin.Recovery())
 
@@ -42,13 +37,13 @@ func main() {
 	authorized.Use(handlers.JWTVerifyMiddleware)
 	{
 
-		router.GET("supplier/all", h.GetAllSupplier)
-		router.POST("supplier", h.AddSupplier)
-		router.PUT("supplier:id", h.EditSupplier)
-		router.DELETE("supplier:id", h.DeleteSupplier)
-		router.GET("company/all", h.GetAllCompanies)
-		router.GET("vin/:vin", h.SearchByVin)
-		router.GET("notification", h.GetNotificationAll)
+		authorized.GET("supplier/all", h.GetAllSupplier)
+		authorized.POST("supplier", h.AddSupplier)
+		authorized.PUT("supplier:id", h.EditSupplier)
+		authorized.DELETE("supplier:id", h.DeleteSupplier)
+		authorized.GET("company/all", h.GetAllCompanies)
+		authorized.GET("vin/:vin", h.SearchByVin)
+		authorized.GET("notification", h.GetNotificationAll)
 		// router.GET(baseUrl + ":id", h.GetCarPartDetail)
 	}
 	router.POST(baseUrl+"register", h.Register)

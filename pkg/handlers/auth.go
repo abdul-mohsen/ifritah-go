@@ -60,14 +60,19 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type Claims struct {
+	Username string `json:"username"`
+	Realm    string `json:"realm"`
+}
+
 func GenerateAccessToken(username string, userid int) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
 		"aud":      "http://0.0.0.0:4194/hello",
 		"sub":      "Authentication",
 		"iss":      "softwaret",
+		"exp":      time.Now().Add(JWTSettings.AccessExpiration).Unix(),
 		"username": username,
 		"userId":   userid,
-		"exp":      time.Now().Add(JWTSettings.AccessExpiration).Unix(),
 	})
 
 	return token.SignedString([]byte(JWTSettings.AccessSecretKey))

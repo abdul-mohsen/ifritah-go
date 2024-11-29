@@ -176,9 +176,10 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	secretKey := os.Getenv("JWT_SECRET_KEY") // Parse the JWT token
 
 	token, err := jwt.ParseWithClaims(tokenString, jwt.MapClaims{
-		"aud": "http://0.0.0.0:4194/hello",
-		"sub": "Authentication",
-		"iss": "softwaret",
+		"aud":    "http://0.0.0.0:4194/hello",
+		"sub":    "Authentication",
+		"iss":    "softwaret",
+		"releam": "Access to 'hello'",
 	},
 		func(token *jwt.Token) (interface{}, error) {
 			// Verify the signing method

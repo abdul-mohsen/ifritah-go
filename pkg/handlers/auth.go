@@ -62,8 +62,9 @@ type LoginRequest struct {
 }
 
 type Claims struct {
-	Username string `json:"username"`
-	Realm    string `json:"realm"`
+	Id         int     `json:"userId"`
+	Username   string  `json:"username"`
+	Expiration float64 `json:"exp"`
 }
 
 func GenerateAccessToken(username string, userid int) (string, error) {
@@ -135,37 +136,6 @@ func (h *handler) Login(c *gin.Context) {
 	})
 }
 
-func VerifyToken(c *gin.Context) (*jwt.Token, error) {
-	fullTokenString := c.Request.Header.Get("Authorization")
-	fmt.Println(fullTokenString)
-	tokenString := strings.Split(fullTokenString, "Bearer ")[1]
-	fmt.Println(tokenString)
-	// Parse the token with the secret key
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		key := os.Getenv("JWT_SECRET_KEY")
-		fmt.Println(key)
-		fmt.Println("_0")
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte(key), nil
-	})
-	fmt.Println(token)
-
-	// Check for verification errors
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if the token is valid
-	if !token.Valid {
-		return nil, fmt.Errorf("invalid token")
-	}
-
-	// Return the verified token
-	return token, nil
-}
-
 func JWTVerifyMiddleware(c *gin.Context) {
 	// Get the JWT token from the Authorization header
 	fullTokenString := c.GetHeader("Authorization")
@@ -218,9 +188,13 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	c.Next()
 }
 
-func GetSessionInfo(token jwt.Token) userSession {
+func GetSessionInfo(c *gin.Context) userSession {
 
-	claims := token.Claims.(jwt.MapClaims)
+	claimsStr, exist := c.Get("decoded_jwt")
+	if exist == false {
+		fmt.Println("hahahhah I am going places")
+	}
+	claims := claimsStr.(jwt.MapClaims)
 	user := userSession{
 		id:       claims["userId"].(float64),
 		username: claims["username"].(string),

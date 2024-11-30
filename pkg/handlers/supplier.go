@@ -105,11 +105,7 @@ func (h *handler) EditSupplier(c *gin.Context) {
 
 func (h *handler) DeleteSupplier(c *gin.Context) {
 
-	token, err := VerifyToken(c)
-	if err != nil {
-		log.Panic(err)
-	}
-	userSession := GetSessionInfo(*token)
+	userSession := GetSessionInfo(c)
 
 	var companyId int
 	if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&companyId); err != nil {

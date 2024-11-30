@@ -18,11 +18,7 @@ type PartsProviderRequest struct {
 
 func (h *handler) GetAllSupplier(c *gin.Context) {
 
-	token, err := VerifyToken(c)
-	if err != nil {
-		log.Panic(err)
-	}
-	userSession := GetSessionInfo(*token)
+	userSession := GetSessionInfo(c)
 
 	var id int
 	if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&id); err != nil {
@@ -51,11 +47,7 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 
 func (h *handler) AddSupplier(c *gin.Context) {
 
-	token, err := VerifyToken(c)
-	if err != nil {
-		log.Panic(err)
-	}
-	userSession := GetSessionInfo(*token)
+	userSession := GetSessionInfo(c)
 
 	var id int
 	if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&id); err != nil {
@@ -78,11 +70,7 @@ func (h *handler) AddSupplier(c *gin.Context) {
 
 func (h *handler) EditSupplier(c *gin.Context) {
 
-	token, err := VerifyToken(c)
-	if err != nil {
-		log.Panic(err)
-	}
-	userSession := GetSessionInfo(*token)
+	userSession := GetSessionInfo(c)
 
 	var companyId int
 	if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&companyId); err != nil {

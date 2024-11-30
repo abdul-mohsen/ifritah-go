@@ -39,8 +39,8 @@ func main() {
 
 		authorized.GET("supplier/all", h.GetAllSupplier)
 		authorized.POST("supplier", h.AddSupplier)
-		authorized.PUT("supplier:id", h.EditSupplier)
-		authorized.DELETE("supplier:id", h.DeleteSupplier)
+		authorized.PUT("supplier/:id", h.EditSupplier)
+		authorized.DELETE("supplier/:id", h.DeleteSupplier)
 		authorized.GET("company/all", h.GetAllCompanies)
 		authorized.GET("vin/:vin", h.SearchByVin)
 		authorized.GET("notification", h.GetNotificationAll)

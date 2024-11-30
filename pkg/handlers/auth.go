@@ -175,11 +175,24 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	// Define the secret key used to sign the token
 	secretKey := os.Getenv("JWT_SECRET_KEY") // Parse the JWT token
 
+	token, args, nerr := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{
+		"aud": "http://0.0.0.0:4194/hello",
+		"sub": "Authentication",
+		"iss": "softwaret",
+	})
+
+	if nerr != nil {
+		fmt.Println(nerr)
+	} else {
+		fmt.Println(token.Valid)
+		fmt.Println(token)
+		fmt.Println(args)
+	}
+
 	token, err := jwt.ParseWithClaims(tokenString, jwt.MapClaims{
-		"aud":    "http://0.0.0.0:4194/hello",
-		"sub":    "Authentication",
-		"iss":    "softwaret",
-		"releam": "Access to 'hello'",
+		"aud": "http://0.0.0.0:4194/hello",
+		"sub": "Authentication",
+		"iss": "softwaret",
 	},
 		func(token *jwt.Token) (interface{}, error) {
 			// Verify the signing method

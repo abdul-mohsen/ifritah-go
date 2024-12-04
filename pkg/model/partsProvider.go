@@ -9,5 +9,5 @@ type Supplier struct {
 	Number      string `json:"number"`
 	VatNumber   string `json:"vat_number"`
 	IsDeleted   bool   `json:"-"`
-	BankAccount bool   `json:"bank_account"`
+	BankAccount string `json:"bank_account"`
 }

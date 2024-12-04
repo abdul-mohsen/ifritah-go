@@ -27,7 +27,7 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 
 	}
 
-	rows, err := h.DB.Query("SELECT * where company_id = ? and is_deleted = FALSE", id)
+	rows, err := h.DB.Query("SELECT * From supplier where company_id = ? and is_deleted = FALSE", id)
 
 	if err != nil {
 		log.Panic(err)

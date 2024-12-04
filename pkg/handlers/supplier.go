@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type PartsProviderRequest struct {
+type SupplierRequest struct {
 	Name        string `json:"name"`
 	Address     string `json:"address"`
 	PhoneNumber string `json:"phone_number"`
@@ -27,23 +27,23 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 
 	}
 
-	rows, err := h.DB.Query("SELECT * FROM parts_provider where company_id = ? and is_deleted = FALSE", id)
+	rows, err := h.DB.Query("SELECT name, address, phone_number, number vat_number FROM supplier where company_id = ? and is_deleted = FALSE", id)
 
 	if err != nil {
 		log.Panic(err)
 	}
-	var partsProviders []model.PartsProvider
+	var suppliers []model.Supplier
 	for rows.Next() {
-		var partsProvider model.PartsProvider
+		var supplier model.Supplier
 
-		if err := rows.Scan(&partsProvider.Id, &partsProvider.Copany_id, &partsProvider.Name, &partsProvider.Address, &partsProvider.PhoneNumber, &partsProvider.Number, &partsProvider.VatNumber, &partsProvider.IsDeleted); err != nil {
+		if err := rows.Scan(&supplier.Id, &supplier.Copany_id, &supplier.Name, &supplier.Address, &supplier.PhoneNumber, &supplier.Number, &supplier.VatNumber, &supplier.IsDeleted); err != nil {
 			log.Panic(err)
 		}
 
-		partsProviders = append(partsProviders, partsProvider)
+		suppliers = append(suppliers, supplier)
 	}
 	defer rows.Close()
-	c.IndentedJSON(http.StatusOK, partsProviders)
+	c.IndentedJSON(http.StatusOK, suppliers)
 }
 
 func (h *handler) AddSupplier(c *gin.Context) {
@@ -55,13 +55,13 @@ func (h *handler) AddSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	var request PartsProviderRequest
+	var request SupplierRequest
 	if err := c.BindJSON(&request); err != nil {
 		log.Panic(err)
 	}
 
 	if _, err := h.DB.Exec(
-		"INSERT INTO parts_provider (company_id, name, address, phone_number, number, vat_number, bank_account) VALUES (?, ?, ?, ?, ?, ?, ?)", id, request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber, request.BankAccount); err != nil {
+		"INSERT INTO supplier (company_id, name, address, phone_number, number, vat_number, bank_account) VALUES (?, ?, ?, ?, ?, ?, ?)", id, request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber, request.BankAccount); err != nil {
 		log.Panic(err)
 	}
 
@@ -85,7 +85,7 @@ func (h *handler) EditSupplier(c *gin.Context) {
 
 	var id string = c.Param("id")
 	if _, err := h.DB.Exec(
-		"UPDATE parts_provider SET name=?, address=?, phone_number=?, number=?, vat_number=? bank_account=? where company_id=? and id=?;", request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber, request.BankAccount, companyId, id); err != nil {
+		"UPDATE supplier SET name=?, address=?, phone_number=?, number=?, vat_number=? bank_account=? where company_id=? and id=?;", request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber, request.BankAccount, companyId, id); err != nil {
 		log.Panic(err)
 	}
 
@@ -104,7 +104,7 @@ func (h *handler) DeleteSupplier(c *gin.Context) {
 	id := c.Param("id")
 
 	if _, err := h.DB.Exec(
-		"DELETE FROM parts_provider where id = ? and company_id = ?", id, companyId); err != nil {
+		"DELETE FROM supplier where id = ? and company_id = ?", id, companyId); err != nil {
 		log.Panic(err)
 	}
 

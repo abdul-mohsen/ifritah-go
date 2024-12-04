@@ -157,28 +157,28 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	}
 
 	// Define the secret key used to sign the token
-	// secretKey := os.Getenv("JWT_SECRET_KEY") // Parse the JWT token
-	// token, err := jwt.ParseWithClaims(tokenString, jwt.MapClaims{
-	// 	"aud": "http://0.0.0.0:4194/hello",
-	// 	"sub": "Authentication",
-	// 	"iss": "softwaret",
-	// },
-	// 	func(token *jwt.Token) (interface{}, error) {
-	// 		// Verify the signing method
-	// 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-	// 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
-	// 		}
-	//
-	// 		// Return the secret key
-	// 		return []byte(secretKey), nil
-	// 	})
-	//
-	// if err != nil || !token.Valid {
-	// 	fmt.Println("Error in token")
-	// 	fmt.Println(err)
-	// 	c.AbortWithStatus(http.StatusUnauthorized)
-	// 	return
-	// }
+	secretKey := os.Getenv("JWT_SECRET_KEY") // Parse the JWT token
+	token, err := jwt.ParseWithClaims(tokenString, jwt.MapClaims{
+		"aud": "http://0.0.0.0:4194/hello",
+		"sub": "Authentication",
+		"iss": "softwaret",
+	},
+		func(token *jwt.Token) (interface{}, error) {
+			// Verify the signing method
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+			}
+
+			// Return the secret key
+			return []byte(secretKey), nil
+		})
+
+	if err != nil || !token.Valid {
+		fmt.Println("Error in token")
+		fmt.Println(err)
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
 
 	// Store the decoded JWT in the context for later use
 	c.Set("decoded_jwt", token.Claims)

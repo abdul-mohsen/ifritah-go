@@ -88,7 +88,7 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	c.Status(http.StatusCreated)
+	c.Status(http.StatusOK)
 }
 
 func (h *handler) DeleteSupplier(c *gin.Context) {
@@ -107,5 +107,5 @@ func (h *handler) DeleteSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	c.Status(http.StatusCreated)
+	c.Status(http.StatusNoContent)
 }

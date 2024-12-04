@@ -78,7 +78,7 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	var request PartsProviderRequest
+	var request SupplierRequest
 	if err := c.BindJSON(&request); err != nil {
 		log.Panic(err)
 	}

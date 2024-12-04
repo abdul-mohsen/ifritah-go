@@ -14,6 +14,7 @@ type PartsProviderRequest struct {
 	PhoneNumber string `json:"phone_number"`
 	Number      string `json:"number"`
 	VatNumber   string `json:"vat_number"`
+	BankAccount string `json:"bank_account"`
 }
 
 func (h *handler) GetAllSupplier(c *gin.Context) {
@@ -60,7 +61,7 @@ func (h *handler) AddSupplier(c *gin.Context) {
 	}
 
 	if _, err := h.DB.Exec(
-		"INSERT INTO parts_provider (company_id, name, address, phone_number, number, vat_number) VALUES (?, ?, ?, ?, ?, ?)", id, request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber); err != nil {
+		"INSERT INTO parts_provider (company_id, name, address, phone_number, number, vat_number, bank_account) VALUES (?, ?, ?, ?, ?, ?, ?)", id, request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber, request.BankAccount); err != nil {
 		log.Panic(err)
 	}
 
@@ -84,7 +85,7 @@ func (h *handler) EditSupplier(c *gin.Context) {
 
 	var id string = c.Param("id")
 	if _, err := h.DB.Exec(
-		"UPDATE parts_provider SET name=?, address=?, phone_number=?, number=?, vat_number=? where company_id=? and id=?;", request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber, companyId, id); err != nil {
+		"UPDATE parts_provider SET name=?, address=?, phone_number=?, number=?, vat_number=? bank_account=? where company_id=? and id=?;", request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber, request.BankAccount, companyId, id); err != nil {
 		log.Panic(err)
 	}
 

@@ -104,7 +104,7 @@ func (h *handler) DeleteSupplier(c *gin.Context) {
 	id := c.Param("id")
 
 	if _, err := h.DB.Exec(
-		"DELETE FROM supplier where id = ? and company_id = ?", id, companyId); err != nil {
+		"UPDATE supplier SET is_deleted=TRUE where company_id=? and id=?;", companyId, id); err != nil {
 		log.Panic(err)
 	}
 

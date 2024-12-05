@@ -62,20 +62,33 @@ type LoginRequest struct {
 }
 
 type Claims struct {
-	Id         int     `json:"userId"`
-	Username   string  `json:"username"`
-	Expiration float64 `json:"exp"`
+	Id         int    `json:"userId"`
+	Username   string `json:"username"`
+	Expiration int64  `json:"exp"`
+	Realm      string `json:"realm"` // Custom claim
+	Issue      string `json:"iss"`
+	Sub        string `json:"sub"`
+	Aud        string `json:"aud"`
+	jwt.StandardClaims
 }
 
 func GenerateAccessToken(username string, userid int) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
-		"aud":      "http://0.0.0.0:4194/hello",
-		"sub":      "Authentication",
-		"iss":      "softwaret",
-		"exp":      time.Now().Add(JWTSettings.AccessExpiration).Unix(),
-		"username": username,
-		"userId":   userid,
-	})
+
+	// Create a new token with custom claims
+	claims := Claims{
+		Id:         userid,
+		Username:   username,
+		Realm:      "Access to 'hello'",
+		Expiration: time.Now().Add(JWTSettings.AccessExpiration).Unix(), // Token expiration
+		Aud:        "http://0.0.0.0:4194/hello",
+		Sub:        "Authentication",
+		Issue:      "softwaret",
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(JWTSettings.AccessExpiration).Unix(), // Token expiration
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
 
 	return token.SignedString([]byte(JWTSettings.AccessSecretKey))
 }
@@ -144,11 +157,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 
 	// Define the secret key used to sign the token
 	secretKey := []byte(JWTSettings.AccessSecretKey)
-	token, err := jwt.ParseWithClaims(tokenString, jwt.MapClaims{
-		"aud": "http://0.0.0.0:4194/hello",
-		"sub": "Authentication",
-		"iss": "softwaret",
-	},
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{},
 		func(token *jwt.Token) (interface{}, error) {
 			// Verify the signing method
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -166,11 +175,23 @@ func JWTVerifyMiddleware(c *gin.Context) {
 		return
 	}
 
-	// Store the decoded JWT in the context for later use
-	c.Set("decoded_jwt", token.Claims)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	// Continue the request processing
-	c.Next()
+	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		fmt.Println("valid token")
+		// Store the decoded JWT in the context for later use
+		c.Set("decoded_jwt", claims)
+
+		// Continue the request processing
+		c.Next()
+		return
+	}
+
+	fmt.Println("invalid token")
+
 }
 
 func GetSessionInfo(c *gin.Context) userSession {

@@ -62,7 +62,7 @@ type LoginRequest struct {
 }
 
 type Claims struct {
-	Id         int    `json:"userId"`
+	Id         int64  `json:"userId"`
 	Username   string `json:"username"`
 	Expiration int64  `json:"exp"`
 	Realm      string `json:"realm"` // Custom claim
@@ -72,7 +72,7 @@ type Claims struct {
 	jwt.StandardClaims
 }
 
-func GenerateAccessToken(username string, userid int) (string, error) {
+func GenerateAccessToken(username string, userid int64) (string, error) {
 
 	// Create a new token with custom claims
 	claims := Claims{
@@ -93,7 +93,7 @@ func GenerateAccessToken(username string, userid int) (string, error) {
 	return token.SignedString([]byte(JWTSettings.AccessSecretKey))
 }
 
-func GenerateRefreshToken(username string, userid int) (string, error) {
+func GenerateRefreshToken(username string, userid int64) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
 		"username": username,
 		"userId":   userid,
@@ -116,7 +116,7 @@ func (h *handler) Login(c *gin.Context) {
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.Password), 10)
 
-	var id int
+	var id int64
 	var password string
 	if err := h.DB.QueryRow("SELECT id, password FROM user where username = ? limit 1;", request.Username).Scan(&id, &password); err != nil {
 		log.Panic(err)
@@ -168,13 +168,6 @@ func JWTVerifyMiddleware(c *gin.Context) {
 			return []byte(secretKey), nil
 		})
 
-	if err != nil || !token.Valid {
-		fmt.Println("Error in token")
-		fmt.Println(err)
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
-
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -200,11 +193,11 @@ func GetSessionInfo(c *gin.Context) userSession {
 	if exist == false {
 		fmt.Println("hahahhah I am going places")
 	}
-	claims := claimsStr.(jwt.MapClaims)
+	claims := claimsStr.(Claims)
 	user := userSession{
-		id:       claims["userId"].(float64),
-		username: claims["username"].(string),
-		exp:      claims["exp"].(float64),
+		id:       claims.Id,
+		username: claims.Username,
+		exp:      claims.Expiration,
 	}
 	return user
 }

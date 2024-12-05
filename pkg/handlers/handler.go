@@ -9,9 +9,9 @@ type handler struct {
 }
 
 type userSession struct {
-	id       float64
+	id       int64
 	username string
-	exp      float64
+	exp      int64
 }
 
 func New(db *sql.DB) handler {

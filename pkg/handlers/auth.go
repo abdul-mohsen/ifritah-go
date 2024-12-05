@@ -142,22 +142,8 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	tokenString := strings.Split(fullTokenString, "Bearer ")[1]
 	fmt.Println(tokenString)
 
-	token, args, nerr := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{
-		"aud": "http://0.0.0.0:4194/hello",
-		"sub": "Authentication",
-		"iss": "softwaret",
-	})
-
-	if nerr != nil {
-		fmt.Println(nerr)
-	} else {
-		fmt.Println(token.Valid)
-		fmt.Println(token)
-		fmt.Println(args)
-	}
-
 	// Define the secret key used to sign the token
-	secretKey := os.Getenv("JWT_SECRET_KEY") // Parse the JWT token
+	secretKey := []byte(JWTSettings.AccessSecretKey)
 	token, err := jwt.ParseWithClaims(tokenString, jwt.MapClaims{
 		"aud": "http://0.0.0.0:4194/hello",
 		"sub": "Authentication",
@@ -183,7 +169,6 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	// Store the decoded JWT in the context for later use
 	c.Set("decoded_jwt", token.Claims)
 
-	fmt.Println("Everything is good")
 	// Continue the request processing
 	c.Next()
 }

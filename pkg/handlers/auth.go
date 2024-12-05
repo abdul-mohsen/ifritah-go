@@ -193,7 +193,7 @@ func GetSessionInfo(c *gin.Context) userSession {
 	if exist == false {
 		fmt.Println("hahahhah I am going places")
 	}
-	claims := claimsStr.(Claims)
+	claims := claimsStr.(*Claims)
 	user := userSession{
 		id:       claims.Id,
 		username: claims.Username,

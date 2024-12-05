@@ -169,6 +169,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 		})
 
 	if err != nil {
+		fmt.Println("I am here")
 		fmt.Println(err)
 		return
 	}

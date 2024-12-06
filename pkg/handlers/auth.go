@@ -169,13 +169,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 		})
 
 	if err != nil {
-		fmt.Println("I am here")
-		if val, ok := err.(jwt.ValidationError); ok {
-			fmt.Println(val.Errors)
-			fmt.Println(val.Inner)
-		}
-		fmt.Println(err)
-		return
+		log.Panic(err)
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
@@ -188,7 +182,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 		return
 	}
 
-	fmt.Println("invalid token")
+	log.Panic("invalid token")
 
 }
 

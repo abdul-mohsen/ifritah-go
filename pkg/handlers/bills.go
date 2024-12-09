@@ -35,10 +35,10 @@ func (h *handler) GetBills(c *gin.Context) {
 	storeId := c.GetInt("sotreId")
 
 	query := ` Select * from(
-		SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, squence_number, TRUE as bill_type from bill where store_id = ? as TA
+		SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, squence_number, TRUE as bill_type from bill where store_id = ? 
 		UNION
-		SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, squence_number, FALSE as bill_type from purchase_bill_register where store_id = ? as TB
-		) LIMIT ? OFFSET ? AS T`
+		SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, squence_number, FALSE as bill_type from purchase_bill_register where store_id = ? 
+		) AS T LIMIT ? OFFSET ?`
 
 	rows, err := h.DB.Query(query, storeId, storeId, page, pageSize)
 

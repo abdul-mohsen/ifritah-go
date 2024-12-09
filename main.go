@@ -44,6 +44,7 @@ func main() {
 		authorized.GET("company/all", h.GetAllCompanies)
 		authorized.GET("vin/:vin", h.SearchByVin)
 		authorized.GET("notification", h.GetNotificationAll)
+		authorized.GET("bill/all", h.GetBills)
 		// router.GET(baseUrl + ":id", h.GetCarPartDetail)
 	}
 	router.POST(baseUrl+"register", h.Register)

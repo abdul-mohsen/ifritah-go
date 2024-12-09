@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -27,21 +29,15 @@ func (h *handler) GetBills(c *gin.Context) {
 	var id int
 	if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&id); err != nil {
 		log.Panic(err)
-
 	}
 
 	page := c.GetInt("page")
 	pageSize := c.GetInt("pageSize")
 	storeId := c.GetInt("sotreId")
 
-	query := ` Select * from(
-		SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, TRUE as bill_type from bill where store_id = ? 
-		UNION
-		SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type from purchase_bill_register where store_id = ? 
-		) AS T LIMIT ? OFFSET ?`
+	fmt.Printf("%d %d %d", page, pageSize, storeId)
 
-	rows, err := h.DB.Query(query, storeId, storeId, page, pageSize)
-
+	rows, err := h.getWithStoreId(page, pageSize, storeId)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -57,4 +53,26 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 	defer rows.Close()
 	c.IndentedJSON(http.StatusOK, bills)
+}
+
+func (h *handler) getWithStoreId(page int, pageSize int, storeId int) (*sql.Rows, error) {
+
+	query := ` Select * from(
+	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, TRUE as bill_type from bill where store_id = ? 
+	UNION
+	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type from purchase_bill_register where store_id = ? 
+	) AS T LIMIT ? OFFSET ?`
+
+	return h.DB.Query(query, storeId, storeId, page, pageSize)
+	// if storeId == nil {
+	//
+	// } else {
+	// 	query := ` Select * from(
+	// 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, TRUE as bill_type from bill
+	// 	UNION
+	// 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type from purchase_bill_register
+	// 	) AS T LIMIT ? OFFSET ?`
+	//
+	// 	return h.DB.Query(query, page, pageSize)
+	// }
 }

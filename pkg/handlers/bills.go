@@ -38,7 +38,7 @@ func (h *handler) GetBills(c *gin.Context) {
 		SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, squence_number, TRUE as bill_type from bill where store_id = ?
 		UNION
 		SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, squence_number, FALSE as bill_type from purchase_bill_register where store_id = ?
-		) LIMIT ? OFFSET ?`
+		) LIMIT ? OFFSET ? AS T`
 
 	rows, err := h.DB.Query(query, storeId, storeId, page, pageSize)
 

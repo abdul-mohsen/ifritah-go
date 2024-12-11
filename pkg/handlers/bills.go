@@ -26,8 +26,8 @@ type BillRequstFilter struct {
 	StoreId    *[]int     `json:"store_id"`
 	StartDate  *time.Time `json:"start_date"`
 	EndDate    *time.Time `json:"end_date"`
-	PageNumber int        `json:"page_number"`
-	PageSize   int        `json:"page_size"`
+	PageNumber *int       `json:"page_number"`
+	PageSize   *int       `json:"page_size"`
 }
 
 func (h *handler) GetBills(c *gin.Context) {
@@ -42,8 +42,18 @@ func (h *handler) GetBills(c *gin.Context) {
 	var request BillRequstFilter
 	c.BindJSON(&request)
 
-	page := request.PageNumber
-	pageSize := request.PageSize
+	var pageSize, page int
+	if request.PageNumber != nil {
+		page = *request.PageNumber
+	} else {
+		page = 0
+	}
+
+	if request.PageNumber == nil {
+		pageSize = 10
+	} else {
+		pageSize = *request.PageNumber
+	}
 
 	fmt.Printf("%d %d", page, pageSize)
 	fmt.Println(request)
@@ -73,9 +83,9 @@ func (h *handler) getWithStoreId(page int, pageSize int) (*sql.Rows, error) {
 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, TRUE as bill_type from bill 
 	UNION
 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type from purchase_bill_register 
-	) AS T LIMIT 10 OFFSET ?`
+	) AS T LIMIT ? OFFSET ?`
 
-	return h.DB.Query(query, page)
+	return h.DB.Query(query, pageSize, page)
 	// if storeId == nil {
 	//
 	// } else {

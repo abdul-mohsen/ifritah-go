@@ -22,6 +22,12 @@ type BillBase struct {
 	Type           bool
 }
 
+type BillRequstFilter struct {
+	StoreId   []int
+	StartDate *time.Time
+	EndDate   *time.Time
+}
+
 func (h *handler) GetBills(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
@@ -31,13 +37,18 @@ func (h *handler) GetBills(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	var request BillRequstFilter
+	if err := c.BindJSON(&request); err != nil {
+		log.Panic(err)
+	}
+
 	page := c.GetInt("page")
 	pageSize := c.GetInt("pageSize")
-	storeId := c.GetInt("sotreId")
 
-	fmt.Printf("%d %d %d", page, pageSize, storeId)
+	fmt.Printf("%d %d", page, pageSize)
+	fmt.Println(request)
 
-	rows, err := h.getWithStoreId(page, pageSize, storeId)
+	rows, err := h.getWithStoreId(page, pageSize, request)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -55,12 +66,12 @@ func (h *handler) GetBills(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, bills)
 }
 
-func (h *handler) getWithStoreId(page int, pageSize int, storeId int) (*sql.Rows, error) {
+func (h *handler) getWithStoreId(page int, pageSize int, storeId BillRequstFilter) (*sql.Rows, error) {
 
 	query := ` Select * from(
-	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, TRUE as bill_type from bill where store_id = ? 
+	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, TRUE as bill_type from bill 
 	UNION
-	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type from purchase_bill_register where store_id = ? 
+	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type from purchase_bill_register 
 	) AS T LIMIT ? OFFSET ?`
 
 	return h.DB.Query(query, storeId, storeId, page, pageSize)

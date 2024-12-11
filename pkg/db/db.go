@@ -10,38 +10,36 @@ import (
 )
 
 func Connect() *sql.DB {
-  // Capture connection properties.
-  cfg := mysql.Config{
-    User:   "root",
-    Passwd: os.Getenv("PASSWORD"),
-    Net:    "tcp",
-    Addr:   os.Getenv("HOST"),
-    DBName: os.Getenv("DBNAME"),
-    AllowNativePasswords: true,
-  }
+	// Capture connection properties.
+	cfg := mysql.Config{
+		User:                 "root",
+		Passwd:               os.Getenv("PASSWORD"),
+		Net:                  "tcp",
+		Addr:                 os.Getenv("HOST"),
+		DBName:               os.Getenv("DBNAME"),
+		AllowNativePasswords: true,
+		ParseTime:            true,
+	}
 
+	log.Print(cfg)
+	// Get a database handle.
+	var db *sql.DB
+	var err error
+	db, err = sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		log.Fatal(err)
+	}
 
-  log.Print(cfg)
-  // Get a database handle.
-  var db *sql.DB
-  var err error
-  db, err = sql.Open("mysql", cfg.FormatDSN())
-  if err != nil {
-    log.Fatal(err)
-  }
+	pingErr := db.Ping()
+	if pingErr != nil {
 
-  pingErr := db.Ping()
-  if pingErr != nil {
-    
-    
-    log.Fatal(pingErr)
-  }
-  fmt.Println("Connected!")
-  return db
+		log.Fatal(pingErr)
+	}
+	fmt.Println("Connected!")
+	return db
 
 }
 
 func CloseConnection(db *sql.DB) {
-  defer db.Close()
+	defer db.Close()
 }
-

@@ -23,7 +23,7 @@ type BillBase struct {
 }
 
 type BillRequstFilter struct {
-	StoreId   []int
+	StoreId   *[]int
 	StartDate *time.Time
 	EndDate   *time.Time
 }

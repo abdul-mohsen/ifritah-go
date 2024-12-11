@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 )
 
 type BillBase struct {
@@ -27,8 +26,8 @@ type BillRequstFilter struct {
 	StoreId   *[]int     `json:"store_id"`
 	StartDate *time.Time `json:"start_date"`
 	EndDate   *time.Time `json:"end_date"`
-	Page      int        `json:"page_number" validation:"gte=0"`
-	PageSize  int        `json:"page_size" validation:"gt=0"`
+	Page      int        `json:"page_number"`
+	PageSize  int        `json:"page_size"`
 }
 
 func (h *handler) GetBills(c *gin.Context) {
@@ -48,8 +47,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	c.BindJSON(&request)
 
 	fmt.Println(request)
-	validate := validator.New()
-	if err := validate.Struct(request); err != nil {
+	if request.Page < 0 || request.PageSize <= 0 {
 		c.Status(http.StatusBadRequest)
 	}
 

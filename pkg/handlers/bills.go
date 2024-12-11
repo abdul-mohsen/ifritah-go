@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -54,11 +55,11 @@ func (h *handler) GetBills(c *gin.Context) {
 		return
 	}
 
-	println(request.StoreIds)
+	fmt.Print(request.StoreIds)
 	for _, value := range request.StoreIds {
 		if !slices.Contains(storeIds, value) {
 			println(value)
-			println(storeIds)
+			fmt.Print(storeIds)
 			c.Status(http.StatusBadRequest)
 			return
 		}

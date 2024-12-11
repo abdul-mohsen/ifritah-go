@@ -54,6 +54,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 
 	if request.Page < 0 || request.PageSize <= 0 {
+		fmt.Println("I am here")
 		c.Status(http.StatusBadRequest)
 		return
 	}

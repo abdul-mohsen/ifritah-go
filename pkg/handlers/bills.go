@@ -55,6 +55,7 @@ func (h *handler) GetBills(c *gin.Context) {
 
 	if request.Page < 0 || request.PageSize <= 0 {
 		c.Status(http.StatusBadRequest)
+		return
 	}
 
 	var bills []BillBase

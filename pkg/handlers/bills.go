@@ -73,7 +73,7 @@ func (h *handler) getWithStoreId(page int, pageSize int) (*sql.Rows, error) {
 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, TRUE as bill_type from bill 
 	UNION
 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type from purchase_bill_register 
-	) AS T LIMIT ? OFFSET ?`
+	) AS T LIMIT ? OFFSET 10`
 
 	return h.DB.Query(query, page, pageSize)
 	// if storeId == nil {

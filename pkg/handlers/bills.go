@@ -43,7 +43,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	c.BindJSON(&request)
 	fmt.Println(request)
 
-	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds != nil || len(*request.StoreIds) == 0 {
+	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds == nil || len(*request.StoreIds) == 0 {
 		c.Status(http.StatusBadRequest)
 		return
 	}

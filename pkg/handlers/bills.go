@@ -61,6 +61,7 @@ func (h *handler) GetBills(c *gin.Context) {
 		bills = append(bills, bill)
 	}
 	defer rows.Close()
+	fmt.Println(bills)
 	c.IndentedJSON(http.StatusOK, bills)
 }
 

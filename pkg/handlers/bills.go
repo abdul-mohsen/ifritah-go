@@ -12,8 +12,8 @@ import (
 
 type BillBase struct {
 	Id             int
-	EffectiveDate  time.Time
-	PaymentDueDate *time.Time
+	EffectiveDate  []uint8
+	PaymentDueDate []uint8
 	State          int
 	SubTotal       float64
 	Discount       float64

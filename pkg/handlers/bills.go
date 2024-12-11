@@ -23,11 +23,11 @@ type BillBase struct {
 }
 
 type BillRequstFilter struct {
-	StoreId    *[]int     `json:"store_id"`
-	StartDate  *time.Time `json:"start_date"`
-	EndDate    *time.Time `json:"end_date"`
-	PageNumber *int       `json:"page_number"`
-	PageSize   *int       `json:"page_size"`
+	StoreId   *[]int     `json:"store_id"`
+	StartDate *time.Time `json:"start_date"`
+	EndDate   *time.Time `json:"end_date"`
+	Page      *int       `json:"page_number"`
+	PageSize  *int       `json:"page_size"`
 }
 
 func (h *handler) GetBills(c *gin.Context) {
@@ -43,16 +43,16 @@ func (h *handler) GetBills(c *gin.Context) {
 	c.BindJSON(&request)
 
 	var pageSize, page int
-	if request.PageNumber != nil {
-		page = *request.PageNumber
+	if request.Page != nil {
+		page = *request.Page
 	} else {
 		page = 0
 	}
 
-	if request.PageNumber == nil {
+	if request.PageSize == nil {
 		pageSize = 10
 	} else {
-		pageSize = *request.PageNumber
+		pageSize = *request.PageSize
 	}
 
 	fmt.Printf("%d %d", page, pageSize)

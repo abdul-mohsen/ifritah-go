@@ -45,18 +45,16 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 
 	c.BindJSON(&request)
-
 	fmt.Println(request)
+
+	if request.Page < 0 || request.PageSize <= 0 {
+		c.Status(http.StatusBadRequest)
+		return
+	}
 
 	rows, err := h.getWithStoreId(request.Page, request.PageSize)
 	if err != nil {
 		log.Panic(err)
-	}
-
-	if request.Page < 0 || request.PageSize <= 0 {
-		fmt.Println("I am here")
-		c.Status(http.StatusBadRequest)
-		return
 	}
 
 	var bills []BillBase

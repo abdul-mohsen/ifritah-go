@@ -47,17 +47,17 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 
 	c.BindJSON(&request)
-	fmt.Println(request)
+	fmt.Println("request:", request)
 
 	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds == nil || len(request.StoreIds) == 0 {
 		c.Status(http.StatusBadRequest)
 		return
 	}
 
-	fmt.Println(request.StoreIds)
+	fmt.Println("requertIds:", request.StoreIds)
 	for _, value := range request.StoreIds {
 		if !slices.Contains(storeIds, value) {
-			println(value)
+			println("value with issue :", value)
 			fmt.Print(storeIds)
 			c.Status(http.StatusBadRequest)
 			return

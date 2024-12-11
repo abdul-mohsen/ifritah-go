@@ -37,7 +37,7 @@ func (h *handler) GetBills(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	var request BillRequstFilter
+	var request *BillRequstFilter
 	if err := c.BindJSON(&request); err != nil {
 		log.Panic(err)
 	}
@@ -66,7 +66,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, bills)
 }
 
-func (h *handler) getWithStoreId(page int, pageSize int, storeId BillRequstFilter) (*sql.Rows, error) {
+func (h *handler) getWithStoreId(page int, pageSize int, storeId *BillRequstFilter) (*sql.Rows, error) {
 
 	query := ` Select * from(
 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, TRUE as bill_type from bill 

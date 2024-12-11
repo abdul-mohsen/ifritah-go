@@ -24,7 +24,7 @@ type BillBase struct {
 }
 
 type BillRequstFilter struct {
-	StoreIds  *[]int     `json:"store_ids"`
+	StoreIds  []int      `json:"store_ids"`
 	StartDate *time.Time `json:"start_date"`
 	EndDate   *time.Time `json:"end_date"`
 	Page      int        `json:"page_number"`
@@ -35,7 +35,13 @@ func (h *handler) GetBills(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
 
+	var storeIds []int
+	for _, value := range h.getStoresForUser(userSession) {
+		storeIds = append(storeIds, value.Id)
+	}
+
 	request := BillRequstFilter{
+		StoreIds: storeIds,
 		Page:     0,
 		PageSize: 10,
 	}
@@ -43,17 +49,13 @@ func (h *handler) GetBills(c *gin.Context) {
 	c.BindJSON(&request)
 	fmt.Println(request)
 
-	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds == nil || len(*request.StoreIds) == 0 {
+	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds == nil || len(request.StoreIds) == 0 {
 		c.Status(http.StatusBadRequest)
 		return
 	}
-	var storeIds []int
-	for _, value := range h.getStoresForUser(userSession) {
-		storeIds = append(storeIds, value.Id)
-	}
 
-	println(*request.StoreIds)
-	for _, value := range *request.StoreIds {
+	println(request.StoreIds)
+	for _, value := range request.StoreIds {
 		if !slices.Contains(storeIds, value) {
 			println(value)
 			println(storeIds)

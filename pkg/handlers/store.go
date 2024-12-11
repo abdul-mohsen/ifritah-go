@@ -4,7 +4,7 @@ import "log"
 
 type Store struct {
 	Id        int
-	AddressId int
+	AddressId *int
 }
 
 func (h *handler) getStoresForUser(user userSession) []Store {

@@ -54,7 +54,7 @@ func (h *handler) GetBills(c *gin.Context) {
 		return
 	}
 
-	fmt.Print(request.StoreIds)
+	fmt.Println(request.StoreIds)
 	for _, value := range request.StoreIds {
 		if !slices.Contains(storeIds, value) {
 			println(value)

@@ -9,6 +9,7 @@ type Store struct {
 
 func (h *handler) getStoresForUser(user userSession) []Store {
 
+	println(user.id)
 	rows, err := h.DB.Query(`select store.id, addressId from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, user.id)
 
 	if err != nil {

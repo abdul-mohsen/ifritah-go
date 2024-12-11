@@ -52,15 +52,17 @@ func (h *handler) GetBills(c *gin.Context) {
 		storeIds = append(storeIds, value.Id)
 	}
 
+	println(*request.StoreIds)
 	for _, value := range *request.StoreIds {
 		if !slices.Contains(storeIds, value) {
+			println(value)
+			println(storeIds)
 			c.Status(http.StatusBadRequest)
 			return
 		}
 	}
 
 	bills := h.getWithStoreId(request.Page, request.PageSize)
-	fmt.Println(bills)
 	c.IndentedJSON(http.StatusOK, bills)
 }
 

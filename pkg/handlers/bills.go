@@ -48,7 +48,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	c.BindJSON(&request)
 
 	fmt.Println(request)
-	validate := validator.New(validator.WithRequiredStructEnabled())
+	validate := validator.New()
 	if err := validate.Struct(request); err != nil {
 		c.Status(http.StatusBadRequest)
 	}
@@ -57,6 +57,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	if err != nil {
 		log.Panic(err)
 	}
+
 	var bills []BillBase
 	for rows.Next() {
 		var bill BillBase

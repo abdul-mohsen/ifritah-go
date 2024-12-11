@@ -37,18 +37,16 @@ func (h *handler) GetBills(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	var request *BillRequstFilter
-	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
-	}
-
 	page := c.GetInt("page")
 	pageSize := c.GetInt("pageSize")
+
+	var request BillRequstFilter
+	c.BindJSON(&request)
 
 	fmt.Printf("%d %d", page, pageSize)
 	fmt.Println(request)
 
-	rows, err := h.getWithStoreId(page, pageSize, request)
+	rows, err := h.getWithStoreId(page, pageSize)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -66,7 +64,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, bills)
 }
 
-func (h *handler) getWithStoreId(page int, pageSize int, storeId *BillRequstFilter) (*sql.Rows, error) {
+func (h *handler) getWithStoreId(page int, pageSize int) (*sql.Rows, error) {
 
 	query := ` Select * from(
 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, TRUE as bill_type from bill 
@@ -74,7 +72,7 @@ func (h *handler) getWithStoreId(page int, pageSize int, storeId *BillRequstFilt
 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type from purchase_bill_register 
 	) AS T LIMIT ? OFFSET ?`
 
-	return h.DB.Query(query, storeId, storeId, page, pageSize)
+	return h.DB.Query(query, page, pageSize)
 	// if storeId == nil {
 	//
 	// } else {

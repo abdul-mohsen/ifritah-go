@@ -182,8 +182,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 		return
 	}
 
-	log.Panic("invalid token")
-
+	c.Status(http.StatusUnauthorized)
 }
 
 func GetSessionInfo(c *gin.Context) userSession {

@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 )
 
 type BillBase struct {
 	Id             int
 	EffectiveDate  sql.NullTime
-	PaymentDueDate sql.NullTime
+	PaymentDueDate *sql.NullTime
 	State          int
 	SubTotal       float64
 	Discount       float64
@@ -26,8 +27,8 @@ type BillRequstFilter struct {
 	StoreId   *[]int     `json:"store_id"`
 	StartDate *time.Time `json:"start_date"`
 	EndDate   *time.Time `json:"end_date"`
-	Page      *int       `json:"page_number"`
-	PageSize  *int       `json:"page_size"`
+	Page      int        `json:"page_number" defualt:"0" validation:"gte=0"`
+	PageSize  int        `json:"page_size" defualt:"10" validation:"gt=0"`
 }
 
 func (h *handler) GetBills(c *gin.Context) {
@@ -42,23 +43,13 @@ func (h *handler) GetBills(c *gin.Context) {
 	var request BillRequstFilter
 	c.BindJSON(&request)
 
-	var pageSize, page int
-	if request.Page != nil {
-		page = *request.Page
-	} else {
-		page = 0
-	}
-
-	if request.PageSize == nil {
-		pageSize = 10
-	} else {
-		pageSize = *request.PageSize
-	}
-
-	fmt.Printf("%d %d", page, pageSize)
 	fmt.Println(request)
+	validate := validator.New(validator.WithRequiredStructEnabled())
+	if err := validate.Struct(request); err != nil {
+		c.Status(http.StatusBadRequest)
+	}
 
-	rows, err := h.getWithStoreId(page, pageSize)
+	rows, err := h.getWithStoreId(request.Page, request.PageSize)
 	if err != nil {
 		log.Panic(err)
 	}

@@ -23,11 +23,11 @@ type BillBase struct {
 }
 
 type BillRequstFilter struct {
-	// StoreId    *[]int     `json:"store_id"`
-	// StartDate  *time.Time `json:"start_date"`
-	// EndDate    *time.Time `json:"end_date"`
-	PageNumber int `json:"page_number"`
-	PageSize   int `json:"page_size"`
+	StoreId    *[]int     `json:"store_id"`
+	StartDate  *time.Time `json:"start_date"`
+	EndDate    *time.Time `json:"end_date"`
+	PageNumber int        `json:"page_number"`
+	PageSize   int        `json:"page_size"`
 }
 
 func (h *handler) GetBills(c *gin.Context) {

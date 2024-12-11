@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
 )
 
@@ -26,9 +25,9 @@ func (h *handler) getStoresForUser(user userSession) []Store {
 		if err := rows.Scan(&store.Id, &store.AddressId); err != nil {
 			log.Panic(err)
 		}
+		stores = append(stores, store)
 	}
 
-	fmt.Println(stores)
 	return stores
 
 }

@@ -27,8 +27,8 @@ type BillRequstFilter struct {
 	StoreId   *[]int     `json:"store_id"`
 	StartDate *time.Time `json:"start_date"`
 	EndDate   *time.Time `json:"end_date"`
-	Page      int        `json:"page_number" defualt:"0" validation:"gte=0"`
-	PageSize  int        `json:"page_size" defualt:"10" validation:"gt=0"`
+	Page      int        `json:"page_number" validation:"gte=0"`
+	PageSize  int        `json:"page_size" validation:"gt=0"`
 }
 
 func (h *handler) GetBills(c *gin.Context) {
@@ -40,7 +40,11 @@ func (h *handler) GetBills(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	var request BillRequstFilter
+	request := BillRequstFilter{
+		Page:     0,
+		PageSize: 10,
+	}
+
 	c.BindJSON(&request)
 
 	fmt.Println(request)

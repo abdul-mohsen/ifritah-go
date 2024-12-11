@@ -58,7 +58,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	for _, value := range request.StoreIds {
 		if !slices.Contains(storeIds, value) {
 			println("value with issue :", value)
-			fmt.Print(storeIds)
+			fmt.Println(storeIds)
 			c.Status(http.StatusBadRequest)
 			return
 		}

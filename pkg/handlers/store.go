@@ -1,6 +1,9 @@
 package handlers
 
-import "log"
+import (
+	"fmt"
+	"log"
+)
 
 type Store struct {
 	Id        int
@@ -24,6 +27,8 @@ func (h *handler) getStoresForUser(user userSession) []Store {
 			log.Panic(err)
 		}
 	}
+
+	fmt.Println(stores)
 	return stores
 
 }

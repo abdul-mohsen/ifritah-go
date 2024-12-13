@@ -151,12 +151,15 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 	if err := json.Unmarshal(body, &response); err != nil {
 		log.Panic(err)
 	}
-	return BaseModel{
+	model := BaseModel{
 		Vin:   response.VIN,
 		Make:  response.Make,
 		Model: response.Model,
 		Year:  response.Year,
 	}
+
+	fmt.Println("This is the model", model)
+	return model
 }
 
 func getBody(url string) ([]byte, error) {

@@ -151,6 +151,8 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 	if err := json.Unmarshal(body, &response); err != nil {
 		log.Panic(err)
 	}
+
+	fmt.Println("This is the response", response)
 	model := BaseModel{
 		Vin:   response.VIN,
 		Make:  response.Make,

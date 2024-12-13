@@ -152,6 +152,7 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 		log.Panic(err)
 	}
 
+	fmt.Println("This is the byte", body)
 	fmt.Println("This is the response", response)
 	model := BaseModel{
 		Vin:   response.VIN,

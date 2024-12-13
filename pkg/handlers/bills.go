@@ -36,7 +36,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	userSession := GetSessionInfo(c)
 
 	var storeIds []int
-	for _, value := range h.getStoresForUser(userSession) {
+	for _, value := range h.getStores(userSession) {
 		storeIds = append(storeIds, value.Id)
 	}
 
@@ -54,21 +54,18 @@ func (h *handler) GetBills(c *gin.Context) {
 		return
 	}
 
-	fmt.Println("requertIds:", request.StoreIds)
 	for _, value := range request.StoreIds {
 		if !slices.Contains(storeIds, value) {
-			println("value with issue :", value)
-			fmt.Println(storeIds)
 			c.Status(http.StatusBadRequest)
 			return
 		}
 	}
 
-	bills := h.getWithStoreId(request.Page, request.PageSize)
-	c.IndentedJSON(http.StatusOK, bills)
+	bills := h.getBaseBills(request.Page, request.PageSize)
+	c.JSON(http.StatusOK, bills)
 }
 
-func (h *handler) getWithStoreId(page int, pageSize int) []BillBase {
+func (h *handler) getBaseBills(page int, pageSize int) []BillBase {
 
 	query := ` Select * from(
 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, TRUE as bill_type from bill 

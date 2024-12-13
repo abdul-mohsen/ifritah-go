@@ -42,9 +42,11 @@ func main() {
 		authorized.PUT("supplier/:id", h.EditSupplier)
 		authorized.DELETE("supplier/:id", h.DeleteSupplier)
 		authorized.GET("company/all", h.GetAllCompanies)
+		authorized.GET("vin/car/:vin", h.GetCarsByVin)
 		authorized.GET("vin/:vin", h.SearchByVin)
 		authorized.GET("notification", h.GetNotificationAll)
 		authorized.POST("bill/all", h.GetBills)
+		authorized.GET("stores/all", h.GetStores)
 		// router.GET(baseUrl + ":id", h.GetCarPartDetail)
 	}
 	router.POST(baseUrl+"register", h.Register)

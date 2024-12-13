@@ -2,6 +2,9 @@ package handlers
 
 import (
 	"log"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Store struct {
@@ -9,7 +12,7 @@ type Store struct {
 	AddressId *int
 }
 
-func (h *handler) getStoresForUser(user userSession) []Store {
+func (h *handler) getStores(user userSession) []Store {
 
 	println("user_id", user.id)
 	rows, err := h.DB.Query(`select store.id, addressId from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, user.id)
@@ -30,4 +33,8 @@ func (h *handler) getStoresForUser(user userSession) []Store {
 
 	return stores
 
+}
+
+func (h *handler) GetStores(c *gin.Context) {
+	c.JSON(http.StatusOK, h.getStores(GetSessionInfo(c)))
 }

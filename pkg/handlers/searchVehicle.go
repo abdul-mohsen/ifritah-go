@@ -39,8 +39,7 @@ func (h *handler) GetCarsByVin(c *gin.Context) {
 	select distinct linkageTargetId, linkageTargetType, vehicleModelSeriesName
 	from manufacturers m join
 	modelseries s on manuName like ? and m.manuId=s.manuId like '%?%' and (yearOfConstrTo is Null or yearOfConstrTo <= ?) and yearOfConstrFrom >= ? join
-	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' join
-	`
+	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
 	rows, err := h.DB.Query(query, manu, modelName, madeYear*100+12, madeYear*100, request.PageSize, request.Page)
 	if err != nil {
 		log.Panic(err)

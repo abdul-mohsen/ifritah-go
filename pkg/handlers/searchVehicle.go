@@ -28,10 +28,6 @@ type CarModel struct {
 }
 
 func (h *handler) GetCarsByVin(c *gin.Context) {
-	request := PartByVin{
-		Page:     0,
-		PageSize: 100,
-	}
 	manu := "Honda"
 	modelName := "Accord"
 	madeYear := 1998

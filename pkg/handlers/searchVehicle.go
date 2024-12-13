@@ -91,27 +91,47 @@ func (h *handler) GetCarsByVin(c *gin.Context) {
 // }
 
 type VehicleResponse struct {
-	Status            string `json:"status"`
-	VIN               string `json:"data.intro.vin"`
-	Make              string `json:"data.basic.make"`
-	Model             string `json:"data.basic.model"`
-	Year              string `json:"data.basic.year"`
-	Trim              string `json:"data.basic.trim"`
-	BodyType          string `json:"data.basic.body_type"`
-	VehicleType       string `json:"data.basic.vehicle_type"`
-	VehicleSize       string `json:"data.basic.vehicle_size"`
-	EngineSize        string `json:"data.engine.engine_size"`
-	EngineDescription string `json:"data.engine.engine_description"`
-	EngineCapacity    string `json:"data.engine.engine_capacity"`
-	Manufacturer      string `json:"data.manufacturer.manufacturer"`
-	Region            string `json:"data.manufacturer.region"`
-	Country           string `json:"data.manufacturer.country"`
-	PlantCity         string `json:"data.manufacturer.plant_city"`
-	TransmissionStyle string `json:"data.transmission.transmission_style"`
-	RestraintOthers   string `json:"data.restraint.others"`
-	GVWR              string `json:"data.dimensions.gvwr"`
-	DriveType         string `json:"data.drivetrain.drive_type"`
-	FuelType          string `json:"data.fuel.fuel_type"`
+	Status string `json:"status"`
+	Data   struct {
+		Intro struct {
+			VIN string `json:"vin"`
+		} `json:"intro"`
+		Basic struct {
+			Make        string `json:"make"`
+			Model       string `json:"model"`
+			Year        string `json:"year"`
+			Trim        string `json:"trim"`
+			BodyType    string `json:"body_type"`
+			VehicleType string `json:"vehicle_type"`
+			VehicleSize string `json:"vehicle_size"`
+		} `json:"basic"`
+		Engine struct {
+			EngineSize        string `json:"engine_size"`
+			EngineDescription string `json:"engine_description"`
+			EngineCapacity    string `json:"engine_capacity"`
+		} `json:"engine"`
+		Manufacturer struct {
+			Manufacturer string `json:"manufacturer"`
+			Region       string `json:"region"`
+			Country      string `json:"country"`
+			PlantCity    string `json:"plant_city"`
+		} `json:"manufacturer"`
+		Transmission struct {
+			TransmissionStyle string `json:"transmission_style"`
+		} `json:"transmission"`
+		Restraint struct {
+			Others string `json:"others"`
+		} `json:"restraint"`
+		Dimensions struct {
+			GVWR string `json:"gvwr"`
+		} `json:"dimensions"`
+		Drivetrain struct {
+			DriveType string `json:"drive_type"`
+		} `json:"drivetrain"`
+		Fuel struct {
+			FuelType string `json:"fuel_type"`
+		} `json:"fuel"`
+	} `json:"data"`
 }
 
 func (h *handler) searchByVinRaw(c *gin.Context) []byte {
@@ -153,13 +173,11 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 	}
 
 	fmt.Println("This is the response", response)
-	fmt.Println("This is the response", response.VIN)
-	fmt.Println("This is the response", response.Status)
 	model := BaseModel{
-		Vin:   response.VIN,
-		Make:  response.Make,
-		Model: response.Model,
-		Year:  response.Year,
+		Vin:   response.Data.Intro.VIN,
+		Make:  response.Data.Basic.Make,
+		Model: response.Data.Basic.Model,
+		Year:  response.Data.Basic.Year,
 	}
 
 	fmt.Println("This is the model", model)

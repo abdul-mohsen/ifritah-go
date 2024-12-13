@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -11,7 +12,7 @@ import (
 )
 
 func (h *handler) SearchByVin(c *gin.Context) {
-	body := h.searchByVin(c)
+	body := h.searchByVinRaw(c)
 	fmt.Println(body)
 	c.Data(200, "json", body)
 }
@@ -21,6 +22,13 @@ type PartByVin struct {
 	PageSize int `json:"page_size"`
 }
 
+type BaseModel struct {
+	Vin   string
+	Make  string
+	Model string
+	Year  string
+}
+
 type CarModel struct {
 	Id   int    `json:"id"`
 	Name string `json:"name"`
@@ -28,15 +36,13 @@ type CarModel struct {
 }
 
 func (h *handler) GetCarsByVin(c *gin.Context) {
-	manu := "Honda"
-	modelName := "Accord"
-	madeYear := 1998
+	model := h.searchByVin(c)
 	query := `
 	select distinct linkageTargetId, linkageTargetType, vehicleModelSeriesName
 	from manufacturers m join
 	modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (yearOfConstrTo is Null or yearOfConstrTo <= ?) and yearOfConstrFrom >= ? join
 	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
-	rows, err := h.DB.Query(query, manu, "%"+modelName+"%", madeYear*100+12, madeYear*100)
+	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", model.Year+"12", model.Year+"00")
 	if err != nil {
 		log.Panic(err)
 	}
@@ -84,7 +90,31 @@ func (h *handler) GetCarsByVin(c *gin.Context) {
 //
 // }
 
-func (h *handler) searchByVin(c *gin.Context) []byte {
+type VehicleResponse struct {
+	Status            string `json:"status"`
+	VIN               string `json:"data.intro.vin"`
+	Make              string `json:"data.basic.make"`
+	Model             string `json:"data.basic.model"`
+	Year              string `json:"data.basic.year"`
+	Trim              string `json:"data.basic.trim"`
+	BodyType          string `json:"data.basic.body_type"`
+	VehicleType       string `json:"data.basic.vehicle_type"`
+	VehicleSize       string `json:"data.basic.vehicle_size"`
+	EngineSize        string `json:"data.engine.engine_size"`
+	EngineDescription string `json:"data.engine.engine_description"`
+	EngineCapacity    string `json:"data.engine.engine_capacity"`
+	Manufacturer      string `json:"data.manufacturer.manufacturer"`
+	Region            string `json:"data.manufacturer.region"`
+	Country           string `json:"data.manufacturer.country"`
+	PlantCity         string `json:"data.manufacturer.plant_city"`
+	TransmissionStyle string `json:"data.transmission.transmission_style"`
+	RestraintOthers   string `json:"data.restraint.others"`
+	GVWR              string `json:"data.dimensions.gvwr"`
+	DriveType         string `json:"data.drivetrain.drive_type"`
+	FuelType          string `json:"data.fuel.fuel_type"`
+}
+
+func (h *handler) searchByVinRaw(c *gin.Context) []byte {
 	baseurl := os.Getenv("VEHICLE_DATABASES")
 	europe := "/europe-vin-decode/"
 	global := "/vin-decode/"
@@ -94,11 +124,39 @@ func (h *handler) searchByVin(c *gin.Context) []byte {
 		fmt.Println("Error: received non-200 response status:", err)
 		body, err := getBody(baseurl + europe + vin)
 		if err != nil {
-			fmt.Println("Error: received non-200 response status:", err)
+			log.Panic("Error: received non-200 response status:", err)
 		}
-		c.Data(200, "json", body)
+		return body
 	}
+
 	return body
+}
+
+func (h *handler) searchByVin(c *gin.Context) BaseModel {
+	baseurl := os.Getenv("VEHICLE_DATABASES")
+	// europe := "/europe-vin-decode/"
+	global := "/vin-decode/"
+	var vin string = c.Param("vin")
+	body, err := getBody(baseurl + global + vin)
+	if err != nil {
+		log.Panic("Error: received non-200 response status:", err)
+		// body, err := getBody(baseurl + europe + vin)
+		// if err != nil {
+		// 	log.Panic("Error: received non-200 response status:", err)
+		// }
+	}
+
+	var response VehicleResponse
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		log.Panic(err)
+	}
+	return BaseModel{
+		Vin:   response.VIN,
+		Make:  response.Make,
+		Model: response.Model,
+		Year:  response.Year,
+	}
 }
 
 func getBody(url string) ([]byte, error) {

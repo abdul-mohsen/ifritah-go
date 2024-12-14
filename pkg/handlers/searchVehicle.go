@@ -139,32 +139,44 @@ func (h *handler) searchByVinRaw(c *gin.Context) []byte {
 	europe := "/europe-vin-decode/"
 	global := "/vin-decode/"
 	var vin string = c.Param("vin")
+
+	query := `select data from vin_cache where vin like ? limit 1`
+	row := h.DB.QueryRow(query, vin+"%")
+	var data string
+	err := row.Scan(&data)
+
+	if err == nil {
+		return []byte(data)
+	}
+	fmt.Println("Cache miss", err)
+
 	body, err := getBody(baseurl + global + vin)
-	if err != nil {
-		fmt.Println("Error: received non-200 response status:", err)
-		body, err := getBody(baseurl + europe + vin)
-		if err != nil {
-			log.Panic("Error: received non-200 response status:", err)
-		}
+	if err == nil {
+		h.saveRequest(vin, body)
 		return body
 	}
 
-	return body
+	fmt.Println("Error: received non-200 response status:", err)
+
+	body, err = getBody(baseurl + europe + vin)
+	if err == nil {
+		h.saveRequest(vin, body)
+		return body
+	}
+
+	log.Panic("Error: received non-200 response status:", err)
+	return nil
+}
+
+func (h *handler) saveRequest(vin string, body []byte) {
+	query := `INSERT INTO vin_cache (vin, data) values (?, ?)`
+	if _, err := h.DB.Exec(query, vin, string(body)); err != nil {
+		log.Panic(err)
+	}
 }
 
 func (h *handler) searchByVin(c *gin.Context) BaseModel {
-	baseurl := os.Getenv("VEHICLE_DATABASES")
-	// europe := "/europe-vin-decode/"
-	global := "/vin-decode/"
-	var vin string = c.Param("vin")
-	body, err := getBody(baseurl + global + vin)
-	if err != nil {
-		log.Panic("Error: received non-200 response status:", err)
-		// body, err := getBody(baseurl + europe + vin)
-		// if err != nil {
-		// 	log.Panic("Error: received non-200 response status:", err)
-		// }
-	}
+	body := h.searchByVinRaw(c)
 
 	var response VehicleResponse
 
@@ -219,4 +231,26 @@ func getBody(url string) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+func (h *handler) GetAllCachedVin(c *gin.Context) {
+	query := `select vin from vin_caceh`
+	var vins []string
+	rows, err := h.DB.Query(query)
+	if err != nil {
+		log.Panic(err)
+	}
+	for rows.Next() {
+
+		var vin string
+		err = rows.Scan(&vin)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		vins = append(vins, vin)
+	}
+
+	c.JSON(http.StatusOK, vins)
+
 }

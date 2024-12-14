@@ -150,14 +150,17 @@ func (h *handler) searchByVinRaw(c *gin.Context) []byte {
 	}
 	fmt.Println("Cache miss", err)
 
+	fmt.Println("Try global first")
 	body, err := getBody(baseurl + global + vin)
 	if err == nil {
+
 		h.saveRequest(vin, body)
 		return body
 	}
 
 	fmt.Println("Error: received non-200 response status:", err)
 
+	fmt.Println("Try europe first")
 	body, err = getBody(baseurl + europe + vin)
 	if err == nil {
 		h.saveRequest(vin, body)

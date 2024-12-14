@@ -205,36 +205,49 @@ func (h *handler) GetAllCachedVin(c *gin.Context) {
 
 }
 
-// TODO
-// func (h *handler) GetPartByVin(c *gin.Context) {
-// 	request := PartByVin {
-// 		Page: 0,
-// 		PageSize: 100,
-// 	}
-// 	manu := "Honda"
-// 	modelName := "Accord"
-// 	madeYear := 1998
-// 	query := `
-// 	select
-// 	from manufacturers m join
-// 	modelseries s on manuName like ? and m.manuId=s.manuId like '%?%' and (yearOfConstrTo is Null or yearOfConstrTo <= ?12) and yearOfConstrFrom >= ?00 join
-// 	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' join
-// 	articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId join
-// 	articles on articles.legacyArticleId = a.legacyArticleId
-// 	limit ? offset ?
-// 	`
-// 	rows, err := h.DB.Query(query, manu, modelName, madeYear, madeYear, request.PageSize, request.Page)
-// 	if ; err != nil {
-// 		log.Panic(err)
-// 	}
-//
-//
-// 	for rows.Next()
-//
-//
-//
-//
-// }
+type Part struct {
+	Id        int    `json:"id"`
+	OemNumber string `json:"oem_number"`
+	Type      string `json:"type"`
+}
+
+func (h *handler) GetPartByVin(c *gin.Context) {
+	request := PartByVin{
+		Page:     0,
+		PageSize: 100,
+	}
+	model := h.searchByVin(c)
+	query := `
+	select distinct articles.legacyArticleId, o.number articles.genericArticleDescription
+	from manufacturers m join
+	modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?) join
+	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' join
+	articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId join
+	articles on articles.legacyArticleId = a.legacyArticleId left join
+	oem_number o on o.articleId = articles.legacyArticleId
+	limit ? offset ?
+	`
+	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", request.PageSize, request.Page)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	var parts []Part
+	for rows.Next() {
+
+		var part Part
+		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		parts = append(parts, part)
+	}
+
+	defer rows.Close()
+	c.JSON(http.StatusOK, parts)
+
+}
 
 type VehicleResponse struct {
 	Status string `json:"status"`

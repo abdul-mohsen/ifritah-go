@@ -148,7 +148,7 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 		Vin:   europeVehicle.VIN,
 		Make:  europeVehicle.Data.GeneralInformation.Make,
 		Model: europeVehicle.Data.GeneralInformation.Model,
-		Year:  &europeVehicle.Data.GeneralInformation.ModelYear,
+		Year:  europeVehicle.Data.GeneralInformation.ModelYear,
 	}
 
 	fmt.Println("This is the model", model)

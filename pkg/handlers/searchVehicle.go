@@ -234,7 +234,7 @@ func getBody(url string) ([]byte, error) {
 }
 
 func (h *handler) GetAllCachedVin(c *gin.Context) {
-	query := `select vin from vin_caceh`
+	query := `select vin from vin_cache`
 	var vins []string
 	rows, err := h.DB.Query(query)
 	if err != nil {

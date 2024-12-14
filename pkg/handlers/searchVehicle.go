@@ -227,7 +227,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	oem_number o on o.articleId = articles.legacyArticleId
 	limit ? offset ?
 	`
-	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", request.PageSize, request.Page)
+	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", request.PageSize, request.Page)
 	if err != nil {
 		log.Panic(err)
 	}

@@ -209,6 +209,7 @@ type Part struct {
 	Id        int    `json:"id"`
 	OemNumber string `json:"oem_number"`
 	Type      string `json:"type"`
+	Url       string `json:"url"`
 }
 
 func (h *handler) GetPartByVin(c *gin.Context) {
@@ -218,13 +219,13 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	}
 	model := h.searchByVin(c)
 	query := `
-	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription
+	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription, al.url
 	from manufacturers m join
 	modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?) join
 	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' join
 	articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId join
 	articles on articles.legacyArticleId = a.legacyArticleId left join
-	oem_number o on o.articleId = articles.legacyArticleId left jion
+	oem_number o on o.articleId = articles.legacyArticleId left join 
 	articlelinks al on al.legacyArticleId = articles.legacyArticleId 
 	limit ? offset ?
 	`
@@ -237,7 +238,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	for rows.Next() {
 
 		var part Part
-		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type)
+		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type, &part.Url)
 		if err != nil {
 			log.Panic(err)
 		}

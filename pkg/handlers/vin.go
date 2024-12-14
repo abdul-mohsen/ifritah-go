@@ -214,9 +214,14 @@ type Part struct {
 }
 
 func (h *handler) GetPartByVin(c *gin.Context) {
+
 	request := PartByVin{
 		Page:     0,
 		PageSize: 100,
+	}
+
+	if err := c.BindJSON(&request); err != nil {
+		log.Panic(err)
 	}
 	model := h.searchByVin(c)
 	query := `

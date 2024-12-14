@@ -46,7 +46,10 @@ func (h *handler) GetBills(c *gin.Context) {
 		PageSize: 10,
 	}
 
-	c.BindJSON(&request)
+	if err := c.BindJSON(&request); err != nil {
+		log.Panic(err)
+	}
+
 	fmt.Println("request:", request)
 
 	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds == nil || len(request.StoreIds) == 0 {

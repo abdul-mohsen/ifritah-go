@@ -122,7 +122,7 @@ func (h *handler) Login(c *gin.Context) {
 
 	err := checkPassword([]byte(hashedPassword), request.Password)
 	if err != nil {
-		log.Println("Invalid password", err)
+		log.Panic("Invalid password", err)
 	}
 
 	accessToken, err := GenerateAccessToken(request.Username, id)

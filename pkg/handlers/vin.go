@@ -221,17 +221,18 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	model := h.searchByVin(c)
 	query := `
 	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription, al.url as link, p.url, 
-	from manufacturers m join
-	modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?) join
-	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' join
+	from manufacturers m 
+	join modelseries s on  m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
+	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' 
 	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
 	join articles on articles.legacyArticleId = a.legacyArticleId 
 	left join oem_number o on o.articleId = articles.legacyArticleId 
 	left jion articlelinks al on al.legacyArticleId = articles.legacyArticleId 
 	left join articlepdfs p on p.legacyArticleId = articles.legacyArticleId 
+	where manuName like ?
 	limit ? offset ?
 	`
-	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", request.PageSize, request.Page)
+	rows, err := h.DB.Query(query, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.PageSize, request.Page)
 	if err != nil {
 		log.Panic(err)
 	}

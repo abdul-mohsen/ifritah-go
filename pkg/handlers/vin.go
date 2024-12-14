@@ -210,6 +210,7 @@ type Part struct {
 	OemNumber string  `json:"oem_number"`
 	Type      string  `json:"type"`
 	Url       *string `json:"url"`
+	Link      *string `json:"link"`
 }
 
 func (h *handler) GetPartByVin(c *gin.Context) {
@@ -219,14 +220,15 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	}
 	model := h.searchByVin(c)
 	query := `
-	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription, al.url
+	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription, al.url as link, p.url, 
 	from manufacturers m join
 	modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?) join
 	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' join
-	articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId join
-	articles on articles.legacyArticleId = a.legacyArticleId left join
-	oem_number o on o.articleId = articles.legacyArticleId left join 
-	articlelinks al on al.legacyArticleId = articles.legacyArticleId 
+	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
+	join articles on articles.legacyArticleId = a.legacyArticleId 
+	left join oem_number o on o.articleId = articles.legacyArticleId 
+	left jion articlelinks al on al.legacyArticleId = articles.legacyArticleId 
+	left join articlepdfs p on p.legacyArticleId = articles.legacyArticleId 
 	limit ? offset ?
 	`
 	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", request.PageSize, request.Page)
@@ -238,7 +240,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	for rows.Next() {
 
 		var part Part
-		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type, &part.Url)
+		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type, &part.Link, &part.Url)
 		if err != nil {
 			log.Panic(err)
 		}

@@ -54,7 +54,7 @@ func main() {
 		authorized.GET("notification", h.GetNotificationAll)
 		authorized.POST("bill/all", h.GetBills)
 		authorized.GET("stores/all", h.GetStores)
-		authorized.GET("part/type", cache.CachePage(store, time.Minute, h.GetPartType))
+		authorized.GET("part/type", cache.CachePage(store, time.Duration(time.Friday), h.GetPartType))
 		// router.GET(baseUrl + ":id", h.GetCarPartDetail)
 	}
 	router.POST(baseUrl+"register", h.Register)

@@ -1,32 +1,28 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
-	"net/http"
-
-	"ifritah/web-service-gin/pkg/model"
 
 	"github.com/gin-gonic/gin"
 )
 
-func (h * handler) GetCarPartDetail(c *gin.Context) {
-  id := c.Param("id") 
-  rows, err := h.DB.Query("SELECT * FROM articles where id = ?", id)
+func (h *handler) GetPartType(c *gin.Context) {
 
-  if err != nil {
-    log.Fatal(err)
-  }
-  var articales []model.ArticleTable
-  for rows.Next() {
-    var articale model.ArticleTable
-    if err := rows.Scan(&articale.ID, &articale.DataSupplierId, &articale.ArticleNumber, &articale.MfrId, &articale.AdditionalDescription, &articale.ArticleStatusId, &articale.ArticleStatusDescription, &articale.ArticleStatusValidFromDate, &articale.QuantityPerPackage, &articale.QuantityPerPartPerPackage, &articale.IsSelfServicePacking, &articale.HasMandatoryMaterialCertification, &articale.IsRemanufacturedPart, &articale.IsAccessory, &articale.GenericArticleDescription, &articale.LegacyArticleId, &articale.AssemblyGroupNodeId); err != nil {
-      log.Fatal(err)
-    }
-    fmt.Println(articale);
-    articales = append(articales, articale)
-  }
-  defer rows.Close()
-  c.IndentedJSON(http.StatusOK, articales)
+	query := `select distinct genericArticleDescription from articles`
+	rows, err := h.DB.Query(query)
 
+	if err != nil {
+		log.Panic(err)
+	}
+
+	var response []string
+	for rows.Next() {
+		var text string
+		if err := rows.Scan(&text); err != nil {
+			log.Panic(err)
+		}
+
+		response = append(response, text)
+
+	}
 }

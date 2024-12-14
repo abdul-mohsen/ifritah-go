@@ -114,19 +114,13 @@ func (h *handler) Login(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.Password), 10)
-
 	var id int64
-	var password string
-	if err := h.DB.QueryRow("SELECT id, password FROM user where username = ? limit 1;", request.Username).Scan(&id, &password); err != nil {
+	var hashedPassword string
+	if err := h.DB.QueryRow("SELECT id, password FROM user where username = ? limit 1;", request.Username).Scan(&id, &hashedPassword); err != nil {
 		log.Panic(err)
 	}
 
-	if err != nil {
-		log.Fatalf("Error hashing password: %v", err)
-	}
-
-	err = checkPassword(hashedPassword, password)
+	err := checkPassword([]byte(hashedPassword), request.Password)
 	if err != nil {
 		log.Println("Invalid password", err)
 	}

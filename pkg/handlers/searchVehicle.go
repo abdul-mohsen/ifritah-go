@@ -59,81 +59,6 @@ func (h *handler) GetCarsByVin(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, response)
 }
 
-// TODO
-// func (h *handler) GetPartByVin(c *gin.Context) {
-// 	request := PartByVin {
-// 		Page: 0,
-// 		PageSize: 100,
-// 	}
-// 	manu := "Honda"
-// 	modelName := "Accord"
-// 	madeYear := 1998
-// 	query := `
-// 	select
-// 	from manufacturers m join
-// 	modelseries s on manuName like ? and m.manuId=s.manuId like '%?%' and (yearOfConstrTo is Null or yearOfConstrTo <= ?12) and yearOfConstrFrom >= ?00 join
-// 	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' join
-// 	articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId join
-// 	articles on articles.legacyArticleId = a.legacyArticleId
-// 	limit ? offset ?
-// 	`
-// 	rows, err := h.DB.Query(query, manu, modelName, madeYear, madeYear, request.PageSize, request.Page)
-// 	if ; err != nil {
-// 		log.Panic(err)
-// 	}
-//
-//
-// 	for rows.Next()
-//
-//
-//
-//
-// }
-
-type VehicleResponse struct {
-	Status string `json:"status"`
-	Data   struct {
-		Intro struct {
-			VIN string `json:"vin"`
-		} `json:"intro"`
-		Basic struct {
-			Make        string `json:"make"`
-			Model       string `json:"model"`
-			Year        string `json:"year"`
-			Trim        string `json:"trim"`
-			BodyType    string `json:"body_type"`
-			VehicleType string `json:"vehicle_type"`
-			VehicleSize string `json:"vehicle_size"`
-		} `json:"basic"`
-		Engine struct {
-			EngineSize        string `json:"engine_size"`
-			EngineDescription string `json:"engine_description"`
-			EngineCapacity    string `json:"engine_capacity"`
-		} `json:"engine"`
-		Manufacturer struct {
-			Manufacturer string `json:"manufacturer"`
-			Region       string `json:"region"`
-			Country      string `json:"country"`
-			PlantCity    string `json:"plant_city"`
-		} `json:"manufacturer"`
-		Transmission struct {
-			TransmissionStyle string `json:"transmission_style"`
-		} `json:"transmission"`
-		Restraint struct {
-			Others string `json:"others"`
-		} `json:"restraint"`
-		Dimensions struct {
-			GVWR string `json:"gvwr"`
-		} `json:"dimensions"`
-		Drivetrain struct {
-			DriveType string `json:"drive_type"`
-		} `json:"drivetrain"`
-		Fuel struct {
-			FuelType string `json:"fuel_type"`
-		} `json:"fuel"`
-	} `json:"data"`
-}
-
 func (h *handler) searchByVinRaw(c *gin.Context) []byte {
 	baseurl := os.Getenv("VEHICLE_DATABASES")
 	europe := "/europe-vin-decode/"
@@ -172,7 +97,6 @@ func (h *handler) searchByVinRaw(c *gin.Context) []byte {
 
 func (h *handler) saveRequest(vin string, body []byte) {
 	query := `INSERT INTO vin_cache (vin, data) values (?, ?)`
-	fmt.Println(string(body))
 	if _, err := h.DB.Exec(query, vin, string(body)); err != nil {
 		log.Panic(err)
 	}
@@ -187,16 +111,35 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 		log.Panic(err)
 	}
 
-	fmt.Println("This is the response", response)
+	if response.Data.Intro.VIN == nil {
+		fmt.Println("This is the response", response)
+		model := BaseModel{
+			Vin:   *response.Data.Intro.VIN,
+			Make:  response.Data.Basic.Make,
+			Model: response.Data.Basic.Model,
+			Year:  response.Data.Basic.Year,
+		}
+
+		fmt.Println("This is the model", model)
+		return model
+	}
+
+	var europeVehicle EuropeVehicle
+
+	if err := json.Unmarshal(body, &europeVehicle); err != nil {
+		log.Panic(err)
+	}
+	fmt.Println("This is the response", europeVehicle)
 	model := BaseModel{
-		Vin:   response.Data.Intro.VIN,
-		Make:  response.Data.Basic.Make,
-		Model: response.Data.Basic.Model,
-		Year:  response.Data.Basic.Year,
+		Vin:   europeVehicle.VIN,
+		Make:  europeVehicle.Data.GeneralInformation.Make,
+		Model: europeVehicle.Data.GeneralInformation.Model,
+		Year:  europeVehicle.Data.VinNumberAnalyze.YearIdentifier,
 	}
 
 	fmt.Println("This is the model", model)
 	return model
+
 }
 
 func getBody(url string) ([]byte, error) {
@@ -256,4 +199,135 @@ func (h *handler) GetAllCachedVin(c *gin.Context) {
 
 	c.JSON(http.StatusOK, vins)
 
+}
+
+// TODO
+// func (h *handler) GetPartByVin(c *gin.Context) {
+// 	request := PartByVin {
+// 		Page: 0,
+// 		PageSize: 100,
+// 	}
+// 	manu := "Honda"
+// 	modelName := "Accord"
+// 	madeYear := 1998
+// 	query := `
+// 	select
+// 	from manufacturers m join
+// 	modelseries s on manuName like ? and m.manuId=s.manuId like '%?%' and (yearOfConstrTo is Null or yearOfConstrTo <= ?12) and yearOfConstrFrom >= ?00 join
+// 	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' join
+// 	articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId join
+// 	articles on articles.legacyArticleId = a.legacyArticleId
+// 	limit ? offset ?
+// 	`
+// 	rows, err := h.DB.Query(query, manu, modelName, madeYear, madeYear, request.PageSize, request.Page)
+// 	if ; err != nil {
+// 		log.Panic(err)
+// 	}
+//
+//
+// 	for rows.Next()
+//
+//
+//
+//
+// }
+
+type VehicleResponse struct {
+	Status string `json:"status"`
+	Data   struct {
+		Intro struct {
+			VIN *string `json:"vin"`
+		} `json:"intro"`
+		Basic struct {
+			Make        string `json:"make"`
+			Model       string `json:"model"`
+			Year        string `json:"year"`
+			Trim        string `json:"trim"`
+			BodyType    string `json:"body_type"`
+			VehicleType string `json:"vehicle_type"`
+			VehicleSize string `json:"vehicle_size"`
+		} `json:"basic"`
+		Engine struct {
+			EngineSize        string `json:"engine_size"`
+			EngineDescription string `json:"engine_description"`
+			EngineCapacity    string `json:"engine_capacity"`
+		} `json:"engine"`
+		Manufacturer struct {
+			Manufacturer string `json:"manufacturer"`
+			Region       string `json:"region"`
+			Country      string `json:"country"`
+			PlantCity    string `json:"plant_city"`
+		} `json:"manufacturer"`
+		Transmission struct {
+			TransmissionStyle string `json:"transmission_style"`
+		} `json:"transmission"`
+		Restraint struct {
+			Others string `json:"others"`
+		} `json:"restraint"`
+		Dimensions struct {
+			GVWR string `json:"gvwr"`
+		} `json:"dimensions"`
+		Drivetrain struct {
+			DriveType string `json:"drive_type"`
+		} `json:"drivetrain"`
+		Fuel struct {
+			FuelType string `json:"fuel_type"`
+		} `json:"fuel"`
+	} `json:"data"`
+}
+
+type EuropeVehicle struct {
+	VIN  string `json:"vin"`
+	Data struct {
+		Manufacturer struct {
+			Note         string `json:"Note"`
+			Region       string `json:"Region"`
+			Country      string `json:"Country"`
+			Manufacturer string `json:"Manufacturer"`
+			AddressLine1 string `json:"Adress line 1"`
+			AddressLine2 string `json:"Adress line 2"`
+		} `json:"Manufacturer"`
+		OptionalEquipment []string `json:"Optional equipment"`
+		StandardEquipment []string `json:"Standard equipment"`
+		VinNumberAnalyze  struct {
+			VDS            string `json:"VDS"`
+			WMI            string `json:"WMI"`
+			VINType        string `json:"VIN type"`
+			SquishVIN      string `json:"Squish VIN"`
+			CheckDigit     string `json:"Check digit"`
+			EnteredVIN     string `json:"Entered VIN"`
+			CorrectedVIN   string `json:"Corrected VIN"`
+			SerialNumber   string `json:"Serial number"`
+			VISIdentifier  string `json:"VIS identifier"`
+			YearIdentifier string `json:"Year identifier"`
+		} `json:"Vin number analize"`
+		GeneralInformation struct {
+			Make           string `json:"Make"`
+			Model          string `json:"Model"`
+			BodyStyle      string `json:"Body style"`
+			ModelYear      string `json:"Model year"`
+			Transmission   string `json:"Transmission"`
+			VehicleType    string `json:"Vehicle type"`
+			VehicleClass   string `json:"Vehicle class"`
+			ManufacturedIn string `json:"Manufactured in"`
+		} `json:"General Information"`
+		VehicleSpecification struct {
+			BodyType            string `json:"Body type"`
+			Driveline           string `json:"Driveline"`
+			FuelType            string `json:"Fuel type"`
+			GVWRRange           string `json:"GVWR range"`
+			EngineType          string `json:"Engine type"`
+			EngineValves        string `json:"Engine valves"`
+			DisplacementSI      string `json:"Displacement SI"`
+			NumberOfDoors       string `json:"Number of doors"`
+			NumberOfSeats       string `json:"Number of seats"`
+			DisplacementCID     string `json:"Displacement CID"`
+			EngineKiloWatts     string `json:"Engine KiloWatts"`
+			EngineCylinders     string `json:"Engine cylinders"`
+			AntiBrakeSystem     string `json:"Anti-Brake System"`
+			EngineHorsePower    string `json:"Engine HorsePower"`
+			DisplacementNominal string `json:"Displacement Nominal"`
+		} `json:"Vehicle specification"`
+	} `json:"data"`
+	Status string `json:"status"`
 }

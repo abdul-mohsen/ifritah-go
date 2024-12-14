@@ -3,8 +3,12 @@ package main
 import (
 	"ifritah/web-service-gin/pkg/db"
 	"ifritah/web-service-gin/pkg/handlers"
+
+	"github.com/gin-contrib/cache"
+	"github.com/gin-contrib/cache/persistence"
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -21,7 +25,7 @@ func main() {
 	h := handlers.New(DB)
 	router := gin.Default()
 	baseUrl := os.Getenv("BASEURL")
-
+	store := persistence.NewInMemoryStore(time.Second)
 	// Recovery middleware recovers from any panics and writes a 500 if there was one.
 	router.Use(gin.Recovery())
 
@@ -50,7 +54,7 @@ func main() {
 		authorized.GET("notification", h.GetNotificationAll)
 		authorized.POST("bill/all", h.GetBills)
 		authorized.GET("stores/all", h.GetStores)
-		authorized.GET("part/type", h.GetPartType)
+		authorized.GET("part/type", cache.CachePage(store, time.Minute, h.GetPartType))
 		// router.GET(baseUrl + ":id", h.GetCarPartDetail)
 	}
 	router.POST(baseUrl+"register", h.Register)

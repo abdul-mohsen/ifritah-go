@@ -170,6 +170,7 @@ func (h *handler) searchByVinRaw(c *gin.Context) []byte {
 
 func (h *handler) saveRequest(vin string, body []byte) {
 	query := `INSERT INTO vin_cache (vin, data) values (?, ?)`
+	fmt.Println(string(body))
 	if _, err := h.DB.Exec(query, vin, string(body)); err != nil {
 		log.Panic(err)
 	}

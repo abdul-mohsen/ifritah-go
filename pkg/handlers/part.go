@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"log"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,4 +26,6 @@ func (h *handler) GetPartType(c *gin.Context) {
 		response = append(response, text)
 
 	}
+
+	c.JSON(http.StatusOK, response)
 }

@@ -30,15 +30,16 @@ type BaseModel struct {
 }
 
 type CarModel struct {
-	Id   int    `json:"id"`
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Id           int    `json:"id"`
+	Name         string `json:"name"`
+	Manufacturer string `json:"manufacturer_name"`
+	Type         string `json:"type"`
 }
 
 func (h *handler) GetCarsByVin(c *gin.Context) {
 	model := h.searchByVin(c)
 	query := `
-	select distinct linkageTargetId, linkageTargetType, vehicleModelSeriesName
+	select distinct linkageTargetId,vehicleModelSeriesName, m.manuName, linkageTargetType, 
 	from manufacturers m join
 	modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?) join
 	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
@@ -51,7 +52,7 @@ func (h *handler) GetCarsByVin(c *gin.Context) {
 	var response []CarModel
 	for rows.Next() {
 		var model CarModel
-		if err := rows.Scan(&model.Id, &model.Name, &model.Type); err != nil {
+		if err := rows.Scan(&model.Id, &model.Name, &model.Manufacturer, &model.Type); err != nil {
 			log.Panic(err)
 		}
 

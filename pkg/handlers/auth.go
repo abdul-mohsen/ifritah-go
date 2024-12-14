@@ -173,7 +173,6 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
-		fmt.Println("valid token")
 		// Store the decoded JWT in the context for later use
 		c.Set("decoded_jwt", claims)
 

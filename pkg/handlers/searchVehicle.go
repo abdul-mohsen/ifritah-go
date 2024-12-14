@@ -111,7 +111,7 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 		log.Panic(err)
 	}
 
-	if response.Data.Intro.VIN == nil {
+	if response.Data.Intro.VIN != nil {
 		fmt.Println("This is the response", response)
 		model := BaseModel{
 			Vin:   *response.Data.Intro.VIN,

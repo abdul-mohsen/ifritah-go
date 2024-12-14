@@ -206,10 +206,10 @@ func (h *handler) GetAllCachedVin(c *gin.Context) {
 }
 
 type Part struct {
-	Id        int    `json:"id"`
-	OemNumber string `json:"oem_number"`
-	Type      string `json:"type"`
-	Url       string `json:"url"`
+	Id        int     `json:"id"`
+	OemNumber string  `json:"oem_number"`
+	Type      string  `json:"type"`
+	Url       *string `json:"url"`
 }
 
 func (h *handler) GetPartByVin(c *gin.Context) {

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,7 +27,7 @@ type BaseModel struct {
 	Vin   string
 	Make  string
 	Model string
-	Year  string
+	Year  *string
 }
 
 type CarModel struct {
@@ -37,12 +38,24 @@ type CarModel struct {
 
 func (h *handler) GetCarsByVin(c *gin.Context) {
 	model := h.searchByVin(c)
-	query := `
-	select distinct linkageTargetId, linkageTargetType, vehicleModelSeriesName
-	from manufacturers m join
-	modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (yearOfConstrTo is Null or yearOfConstrTo <= ?) and yearOfConstrFrom >= ? join
-	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
-	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", model.Year+"12", model.Year+"00")
+	var rows *sql.Rows
+	var err error
+	if model.Year != nil {
+		query := `
+		select distinct linkageTargetId, linkageTargetType, vehicleModelSeriesName
+		from manufacturers m join
+		modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (yearOfConstrTo is Null or yearOfConstrTo <= ?) and yearOfConstrFrom >= ? join
+		linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
+		rows, err = h.DB.Query(query, model.Make, "%"+model.Model+"%", *model.Year+"12", *model.Year+"00")
+	} else {
+		query := `
+		select distinct linkageTargetId, linkageTargetType, vehicleModelSeriesName
+		from manufacturers m join
+		modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? join
+		linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
+		rows, err = h.DB.Query(query, model.Make, "%"+model.Model+"%")
+	}
+
 	if err != nil {
 		log.Panic(err)
 	}
@@ -56,6 +69,7 @@ func (h *handler) GetCarsByVin(c *gin.Context) {
 
 		response = append(response, model)
 	}
+	defer rows.Close()
 	c.IndentedJSON(http.StatusOK, response)
 }
 
@@ -134,7 +148,7 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 		Vin:   europeVehicle.VIN,
 		Make:  europeVehicle.Data.GeneralInformation.Make,
 		Model: europeVehicle.Data.GeneralInformation.Model,
-		Year:  europeVehicle.Data.VinNumberAnalyze.YearIdentifier,
+		Year:  &europeVehicle.Data.GeneralInformation.ModelYear,
 	}
 
 	fmt.Println("This is the model", model)
@@ -197,6 +211,7 @@ func (h *handler) GetAllCachedVin(c *gin.Context) {
 		vins = append(vins, vin)
 	}
 
+	defer rows.Close()
 	c.JSON(http.StatusOK, vins)
 
 }
@@ -239,13 +254,13 @@ type VehicleResponse struct {
 			VIN *string `json:"vin"`
 		} `json:"intro"`
 		Basic struct {
-			Make        string `json:"make"`
-			Model       string `json:"model"`
-			Year        string `json:"year"`
-			Trim        string `json:"trim"`
-			BodyType    string `json:"body_type"`
-			VehicleType string `json:"vehicle_type"`
-			VehicleSize string `json:"vehicle_size"`
+			Make        string  `json:"make"`
+			Model       string  `json:"model"`
+			Year        *string `json:"year"`
+			Trim        string  `json:"trim"`
+			BodyType    string  `json:"body_type"`
+			VehicleType string  `json:"vehicle_type"`
+			VehicleSize string  `json:"vehicle_size"`
 		} `json:"basic"`
 		Engine struct {
 			EngineSize        string `json:"engine_size"`
@@ -302,14 +317,14 @@ type EuropeVehicle struct {
 			YearIdentifier string `json:"Year identifier"`
 		} `json:"Vin number analize"`
 		GeneralInformation struct {
-			Make           string `json:"Make"`
-			Model          string `json:"Model"`
-			BodyStyle      string `json:"Body style"`
-			ModelYear      string `json:"Model year"`
-			Transmission   string `json:"Transmission"`
-			VehicleType    string `json:"Vehicle type"`
-			VehicleClass   string `json:"Vehicle class"`
-			ManufacturedIn string `json:"Manufactured in"`
+			Make           string  `json:"Make"`
+			Model          string  `json:"Model"`
+			BodyStyle      string  `json:"Body style"`
+			ModelYear      *string `json:"Model year"`
+			Transmission   string  `json:"Transmission"`
+			VehicleType    string  `json:"Vehicle type"`
+			VehicleClass   string  `json:"Vehicle class"`
+			ManufacturedIn string  `json:"Manufactured in"`
 		} `json:"General Information"`
 		VehicleSpecification struct {
 			BodyType            string `json:"Body type"`

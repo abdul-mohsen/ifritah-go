@@ -220,7 +220,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	}
 	model := h.searchByVin(c)
 	query := `
-	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription, al.url as link, p.url, 
+	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription, al.url as link, p.url 
 	from manufacturers m 
 	join modelseries s on  m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' 

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,7 +26,7 @@ type BaseModel struct {
 	Vin   string
 	Make  string
 	Model string
-	Year  *string
+	Year  string
 }
 
 type CarModel struct {
@@ -38,23 +37,12 @@ type CarModel struct {
 
 func (h *handler) GetCarsByVin(c *gin.Context) {
 	model := h.searchByVin(c)
-	var rows *sql.Rows
-	var err error
-	if model.Year != nil {
-		query := `
-		select distinct linkageTargetId, linkageTargetType, vehicleModelSeriesName
-		from manufacturers m join
-		modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (yearOfConstrTo is Null or yearOfConstrTo <= ?) and yearOfConstrFrom >= ? join
-		linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
-		rows, err = h.DB.Query(query, model.Make, "%"+model.Model+"%", *model.Year+"12", *model.Year+"00")
-	} else {
-		query := `
-		select distinct linkageTargetId, linkageTargetType, vehicleModelSeriesName
-		from manufacturers m join
-		modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? join
-		linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
-		rows, err = h.DB.Query(query, model.Make, "%"+model.Model+"%")
-	}
+	query := `
+	select distinct linkageTargetId, linkageTargetType, vehicleModelSeriesName
+	from manufacturers m join
+	modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?) join
+	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
+	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00")
 
 	if err != nil {
 		log.Panic(err)
@@ -254,13 +242,13 @@ type VehicleResponse struct {
 			VIN *string `json:"vin"`
 		} `json:"intro"`
 		Basic struct {
-			Make        string  `json:"make"`
-			Model       string  `json:"model"`
-			Year        *string `json:"year"`
-			Trim        string  `json:"trim"`
-			BodyType    string  `json:"body_type"`
-			VehicleType string  `json:"vehicle_type"`
-			VehicleSize string  `json:"vehicle_size"`
+			Make        string `json:"make"`
+			Model       string `json:"model"`
+			Year        string `json:"year"`
+			Trim        string `json:"trim"`
+			BodyType    string `json:"body_type"`
+			VehicleType string `json:"vehicle_type"`
+			VehicleSize string `json:"vehicle_size"`
 		} `json:"basic"`
 		Engine struct {
 			EngineSize        string `json:"engine_size"`
@@ -317,14 +305,14 @@ type EuropeVehicle struct {
 			YearIdentifier string `json:"Year identifier"`
 		} `json:"Vin number analize"`
 		GeneralInformation struct {
-			Make           string  `json:"Make"`
-			Model          string  `json:"Model"`
-			BodyStyle      string  `json:"Body style"`
-			ModelYear      *string `json:"Model year"`
-			Transmission   string  `json:"Transmission"`
-			VehicleType    string  `json:"Vehicle type"`
-			VehicleClass   string  `json:"Vehicle class"`
-			ManufacturedIn string  `json:"Manufactured in"`
+			Make           string `json:"Make"`
+			Model          string `json:"Model"`
+			BodyStyle      string `json:"Body style"`
+			ModelYear      string `json:"Model year"`
+			Transmission   string `json:"Transmission"`
+			VehicleType    string `json:"Vehicle type"`
+			VehicleClass   string `json:"Vehicle class"`
+			ManufacturedIn string `json:"Manufactured in"`
 		} `json:"General Information"`
 		VehicleSpecification struct {
 			BodyType            string `json:"Body type"`

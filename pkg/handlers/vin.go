@@ -227,7 +227,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
 	join articles on articles.legacyArticleId = a.legacyArticleId 
 	left join oem_number o on o.articleId = articles.legacyArticleId 
-	left jion articlelinks al on al.legacyArticleId = articles.legacyArticleId 
+	left join articlelinks al on al.legacyArticleId = articles.legacyArticleId 
 	left join articlepdfs p on p.legacyArticleId = articles.legacyArticleId 
 	where manuName like ?
 	limit ? offset ?

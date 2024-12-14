@@ -153,7 +153,7 @@ func (h *handler) searchByVinRaw(c *gin.Context) []byte {
 	fmt.Println("Try global first")
 	body, err := getBody(baseurl + global + vin)
 	if err == nil {
-
+		fmt.Println("Try to save global ")
 		h.saveRequest(vin, body)
 		return body
 	}
@@ -163,6 +163,7 @@ func (h *handler) searchByVinRaw(c *gin.Context) []byte {
 	fmt.Println("Try europe first")
 	body, err = getBody(baseurl + europe + vin)
 	if err == nil {
+		fmt.Println("Try to europe global ")
 		h.saveRequest(vin, body)
 		return body
 	}

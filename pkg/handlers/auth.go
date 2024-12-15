@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -65,11 +65,7 @@ type Claims struct {
 	Id         int64  `json:"userId"`
 	Username   string `json:"username"`
 	Expiration int64  `json:"exp"`
-	Realm      string `json:"realm"` // Custom claim
-	Issue      string `json:"iss"`
-	Sub        string `json:"sub"`
-	Aud        string `json:"aud"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 func GenerateAccessToken(username string, userid int64) (string, error) {
@@ -78,13 +74,13 @@ func GenerateAccessToken(username string, userid int64) (string, error) {
 	claims := Claims{
 		Id:         userid,
 		Username:   username,
-		Realm:      "Access to 'hello'",
 		Expiration: time.Now().Add(JWTSettings.AccessExpiration).Unix(), // Token expiration
-		Aud:        "http://0.0.0.0:4194/hello",
-		Sub:        "Authentication",
-		Issue:      "softwaret",
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(JWTSettings.AccessExpiration).Unix(), // Token expiration
+		RegisteredClaims: jwt.RegisteredClaims{
+			// Realm:      "Access to 'hello'",
+			Audience:  []string{"http://0.0.0.0:4194/hello"},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(JWTSettings.AccessExpiration)), // Token expiration
+			Issuer:    "softwaret",
+			Subject:   "Authentication",
 		},
 	}
 
@@ -163,9 +159,13 @@ func JWTVerifyMiddleware(c *gin.Context) {
 		})
 
 	if err != nil {
-		log.Panic(err)
+		if err == jwt.ErrSignatureInvalid {
+			c.Status(http.StatusUnauthorized)
+			return
+		}
+		c.Status(http.StatusBadRequest)
+		return
 	}
-
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		// Store the decoded JWT in the context for later use
 		c.Set("decoded_jwt", claims)

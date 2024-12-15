@@ -97,3 +97,7 @@ func (h *handler) getBaseBills(page int, pageSize int) []BillBase {
 
 	return bills
 }
+
+func (h *handler) AddBill(c *gin.Context) {
+
+}

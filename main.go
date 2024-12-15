@@ -22,6 +22,7 @@ func main() {
 		log.Fatalf("unable to load .env file: %e", err)
 	}
 	DB := db.Connect()
+	handlers.EnvSetup()
 	h := handlers.New(DB)
 	router := gin.Default()
 	baseUrl := os.Getenv("BASEURL")

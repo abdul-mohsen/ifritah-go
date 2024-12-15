@@ -84,6 +84,7 @@ func GenerateAccessToken(username string, userid int64) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
 
+	fmt.Println("secert", JWTSettings.JWTSecertKey)
 	return token.SignedString([]byte(JWTSettings.JWTSecertKey))
 }
 

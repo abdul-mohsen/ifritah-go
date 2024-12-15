@@ -47,12 +47,7 @@ type JWTConfig struct {
 	RefreshExpiration time.Duration
 }
 
-var JWTSettings = JWTConfig{
-	JWTSecertKey:      os.Getenv("JWT_SECERT_KEY"),
-	SigningMethod:     "HS512",
-	AccessExpiration:  time.Minute * 15,   // Access token expires in 15 minutes
-	RefreshExpiration: time.Hour * 24 * 7, // Refresh token expires in 7 days
-}
+var JWTSettings JWTConfig
 
 type LoginRequest struct {
 	Username string `json:"username"`
@@ -85,8 +80,6 @@ func GenerateAccessToken(username string, userid int64) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
 
 	fmt.Println("secert", JWTSettings.JWTSecertKey)
-	fmt.Println("all ", JWTSettings)
-	fmt.Println(os.Getenv("JWT_SECERT_KEY"))
 	return token.SignedString([]byte(JWTSettings.JWTSecertKey))
 }
 

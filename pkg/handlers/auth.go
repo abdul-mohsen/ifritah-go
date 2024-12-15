@@ -41,16 +41,14 @@ func (h *handler) Register(c *gin.Context) {
 }
 
 type JWTConfig struct {
-	AccessSecretKey   string
-	RefreshSecretKey  string
+	JWTSecertKey      string
 	SigningMethod     string
 	AccessExpiration  time.Duration
 	RefreshExpiration time.Duration
 }
 
 var JWTSettings = JWTConfig{
-	AccessSecretKey:   os.Getenv("ACCESS_SECRET_KEY"),
-	RefreshSecretKey:  os.Getenv("REFRESH_SECRET_KEY"),
+	JWTSecertKey:      os.Getenv("JWT_SECERT_KEY"),
 	SigningMethod:     "HS512",
 	AccessExpiration:  time.Minute * 15,   // Access token expires in 15 minutes
 	RefreshExpiration: time.Hour * 24 * 7, // Refresh token expires in 7 days
@@ -86,7 +84,7 @@ func GenerateAccessToken(username string, userid int64) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
 
-	return token.SignedString([]byte(JWTSettings.AccessSecretKey))
+	return token.SignedString([]byte(JWTSettings.JWTSecertKey))
 }
 
 func GenerateRefreshToken(username string, userid int64) (string, error) {
@@ -96,7 +94,7 @@ func GenerateRefreshToken(username string, userid int64) (string, error) {
 		"exp":      time.Now().Add(JWTSettings.RefreshExpiration).Unix(),
 	})
 
-	return token.SignedString([]byte(JWTSettings.RefreshSecretKey))
+	return token.SignedString([]byte(JWTSettings.JWTSecertKey))
 }
 
 func checkPassword(hashedPassword []byte, password string) error {
@@ -146,7 +144,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	fmt.Println(tokenString)
 
 	// Define the secret key used to sign the token
-	secretKey := []byte(JWTSettings.AccessSecretKey)
+	secretKey := []byte(JWTSettings.JWTSecertKey)
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{},
 		func(token *jwt.Token) (interface{}, error) {
 			// Verify the signing method

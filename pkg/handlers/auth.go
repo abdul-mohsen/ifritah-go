@@ -72,9 +72,8 @@ func GenerateAccessToken(username string, userid int64) (string, error) {
 
 	// Create a new token with custom claims
 	claims := Claims{
-		Id:         userid,
-		Username:   username,
-		Expiration: time.Now().Add(JWTSettings.AccessExpiration).Unix(), // Token expiration
+		Id:       userid,
+		Username: username,
 		RegisteredClaims: jwt.RegisteredClaims{
 			// Realm:      "Access to 'hello'",
 			Audience:  []string{"http://0.0.0.0:4194/hello"},

@@ -72,8 +72,9 @@ func GenerateAccessToken(username string, userid int64) (string, error) {
 
 	// Create a new token with custom claims
 	claims := Claims{
-		Id:       userid,
-		Username: username,
+		Id:         userid,
+		Username:   username,
+		Expiration: time.Now().Add(JWTSettings.AccessExpiration).Unix(), // Token expiration
 		RegisteredClaims: jwt.RegisteredClaims{
 			// Realm:      "Access to 'hello'",
 			Audience:  []string{"http://0.0.0.0:4194/hello"},
@@ -166,12 +167,15 @@ func JWTVerifyMiddleware(c *gin.Context) {
 		return
 	}
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
-		// Store the decoded JWT in the context for later use
-		c.Set("decoded_jwt", claims)
 
-		// Continue the request processing
-		c.Next()
-		return
+		if !claims.ExpiresAt.Time.Before(time.Now()) {
+			// Store the decoded JWT in the context for later use
+			c.Set("decoded_jwt", claims)
+
+			// Continue the request processing
+			c.Next()
+			return
+		}
 	}
 
 	c.Status(http.StatusUnauthorized)

@@ -86,6 +86,7 @@ func GenerateAccessToken(username string, userid int64) (string, error) {
 
 	fmt.Println("secert", JWTSettings.JWTSecertKey)
 	fmt.Println("all ", JWTSettings)
+	fmt.Println(os.Getenv("JWT_SECERT_KEY"))
 	return token.SignedString([]byte(JWTSettings.JWTSecertKey))
 }
 

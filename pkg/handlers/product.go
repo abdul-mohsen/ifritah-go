@@ -49,6 +49,10 @@ func (h *handler) AddQuentity(c *gin.Context) {
 	`
 
 	for _, value := range *request.Products {
+		if value.Quantity <= 0 {
+			log.Panic("ERR: quantity can't be 0 or less")
+			c.Status(http.StatusBadRequest)
+		}
 		if _, err := h.DB.Exec(query, value.Quantity, value.Id, request.StoreId); err != nil {
 			log.Panic(err)
 		}

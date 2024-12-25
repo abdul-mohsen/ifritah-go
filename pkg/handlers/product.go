@@ -10,8 +10,8 @@ import (
 )
 
 type AddQuentityRequest struct {
-	StoreId  int       `json:"store_id"`
-	Products []Product `json:"products"`
+	StoreId  *int       `json:"store_id"`
+	Products *[]Product `json:"products"`
 }
 
 type Product struct {
@@ -33,7 +33,11 @@ func (h *handler) AddQuentity(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 	}
 
-	if !slices.Contains(storeIds, request.StoreId) {
+	if request.StoreId == nil || request.Products == nil {
+		c.Status(http.StatusBadRequest)
+	}
+
+	if !slices.Contains(storeIds, *request.StoreId) {
 		fmt.Println("ERR: store id does not match")
 		c.Status(http.StatusBadRequest)
 	}
@@ -44,7 +48,7 @@ func (h *handler) AddQuentity(c *gin.Context) {
 	where id = ? and store_id = ?
 	`
 
-	for _, value := range request.Products {
+	for _, value := range *request.Products {
 		if _, err := h.DB.Exec(query, value.Quentity, value.Id, request.StoreId); err != nil {
 			log.Panic(err)
 		}

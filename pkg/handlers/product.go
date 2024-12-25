@@ -66,6 +66,6 @@ func (h *handler) AddQuentity(c *gin.Context) {
 		}
 	}
 
-	c.Status(http.StatusCreated)
+	c.Status(http.StatusOK)
 
 }

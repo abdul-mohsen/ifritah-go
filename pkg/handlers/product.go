@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"slices"
@@ -29,17 +28,18 @@ func (h *handler) AddQuentity(c *gin.Context) {
 
 	var request AddQuentityRequest
 	if err := c.BindJSON(&request); err != nil {
-		fmt.Println(err)
 		c.Status(http.StatusBadRequest)
+		log.Panic(err)
 	}
 
 	if request.StoreId == nil || request.Products == nil {
 		c.Status(http.StatusBadRequest)
+		log.Panic("ERR: missing required value")
 	}
 
 	if !slices.Contains(storeIds, *request.StoreId) {
-		fmt.Println("ERR: store id does not match")
 		c.Status(http.StatusBadRequest)
+		log.Panic("ERR: store id does not match")
 	}
 
 	query := `

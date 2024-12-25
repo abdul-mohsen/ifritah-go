@@ -32,7 +32,7 @@ func (h *handler) AddQuentity(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	if request.StoreId == nil || request.Products == nil {
+	if request.StoreId == nil || request.Products == nil || len(*request.Products) == 0 {
 		c.Status(http.StatusBadRequest)
 		log.Panic("ERR: missing required value")
 	}

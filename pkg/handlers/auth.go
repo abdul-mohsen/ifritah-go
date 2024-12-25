@@ -161,7 +161,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	}
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 
-		if !claims.ExpiresAt.Time.Before(time.Now()) {
+		if !time.Unix(claims.Expiration, 0).Before(time.Now()) {
 			// Store the decoded JWT in the context for later use
 			c.Set("decoded_jwt", claims)
 

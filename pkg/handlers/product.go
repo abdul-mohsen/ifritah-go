@@ -14,8 +14,8 @@ type AddQuentityRequest struct {
 }
 
 type Product struct {
-	Id       int `json:"product_id"`
-	Quantity int `json:"quantity"`
+	Id       *int `json:"product_id"`
+	Quantity *int `json:"quantity"`
 }
 
 func (h *handler) AddQuentity(c *gin.Context) {
@@ -37,6 +37,18 @@ func (h *handler) AddQuentity(c *gin.Context) {
 		log.Panic("ERR: missing required value")
 	}
 
+	for _, value := range *request.Products {
+		if value.Quantity == nil || value.Id == nil {
+			c.Status(http.StatusBadRequest)
+			log.Panic("ERR: missing required value")
+		}
+
+		if *value.Quantity <= 0 {
+			log.Panic("ERR: quantity can't be 0 or less")
+			c.Status(http.StatusBadRequest)
+		}
+	}
+
 	if !slices.Contains(storeIds, *request.StoreId) {
 		c.Status(http.StatusBadRequest)
 		log.Panic("ERR: store id does not match")
@@ -49,10 +61,6 @@ func (h *handler) AddQuentity(c *gin.Context) {
 	`
 
 	for _, value := range *request.Products {
-		if value.Quantity <= 0 {
-			log.Panic("ERR: quantity can't be 0 or less")
-			c.Status(http.StatusBadRequest)
-		}
 		if _, err := h.DB.Exec(query, value.Quantity, value.Id, request.StoreId); err != nil {
 			log.Panic(err)
 		}

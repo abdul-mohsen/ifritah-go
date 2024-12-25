@@ -78,7 +78,6 @@ func GenerateAccessToken(username string, userid int64) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
 
-	fmt.Println("secert", JWTSettings.JWTSecertKey)
 	return token.SignedString([]byte(JWTSettings.JWTSecertKey))
 }
 
@@ -136,7 +135,6 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	// Get the JWT token from the Authorization header
 	fullTokenString := c.GetHeader("Authorization")
 	tokenString := strings.Split(fullTokenString, "Bearer ")[1]
-	fmt.Println(tokenString)
 
 	// Define the secret key used to sign the token
 	secretKey := []byte(JWTSettings.JWTSecertKey)
@@ -178,7 +176,7 @@ func GetSessionInfo(c *gin.Context) userSession {
 
 	claimsStr, exist := c.Get("decoded_jwt")
 	if exist == false {
-		fmt.Println("hahahhah I am going places")
+		log.Panic("hahahhah I am going places")
 	}
 	claims := claimsStr.(*Claims)
 	user := userSession{

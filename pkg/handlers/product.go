@@ -15,7 +15,7 @@ type AddQuentityRequest struct {
 
 type Product struct {
 	Id       int `json:"product_id"`
-	Quentity int `json:"quentity"`
+	Quantity int `json:"quantity"`
 }
 
 func (h *handler) AddQuentity(c *gin.Context) {
@@ -49,7 +49,7 @@ func (h *handler) AddQuentity(c *gin.Context) {
 	`
 
 	for _, value := range *request.Products {
-		if _, err := h.DB.Exec(query, value.Quentity, value.Id, request.StoreId); err != nil {
+		if _, err := h.DB.Exec(query, value.Quantity, value.Id, request.StoreId); err != nil {
 			log.Panic(err)
 		}
 	}

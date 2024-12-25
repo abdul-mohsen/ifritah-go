@@ -47,7 +47,8 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+		log.Fatal(err)
+		c.Status(http.StatusBadRequest)
 	}
 
 	fmt.Println("request:", request)

@@ -9,8 +9,8 @@ import (
 )
 
 type AddQuentityRequest struct {
-	StoreId  *int          `json:"store_id"`
-	Products *[]AddProduct `json:"products" binding:"required"`
+	StoreId  *int         `json:"store_id"`
+	Products []AddProduct `json:"products" binding:"required"`
 }
 
 type AddProduct struct {
@@ -32,12 +32,12 @@ func (h *handler) AddQuentity(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	if request.StoreId == nil || request.Products == nil || len(*request.Products) == 0 {
+	if request.StoreId == nil || request.Products == nil || len(request.Products) == 0 {
 		c.Status(http.StatusBadRequest)
 		log.Panic("ERR: missing required value")
 	}
 
-	for _, value := range *request.Products {
+	for _, value := range request.Products {
 		if value.Quantity == nil || value.Id == nil {
 			c.Status(http.StatusBadRequest)
 			log.Panic("ERR: missing required value")
@@ -60,7 +60,7 @@ func (h *handler) AddQuentity(c *gin.Context) {
 	where id = ? and store_id = ?
 	`
 
-	for _, value := range *request.Products {
+	for _, value := range request.Products {
 		if _, err := h.DB.Exec(query, value.Quantity, value.Id, request.StoreId); err != nil {
 			log.Panic(err)
 		}

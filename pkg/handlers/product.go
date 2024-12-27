@@ -27,7 +27,7 @@ func (h *handler) AddQuentity(c *gin.Context) {
 	}
 
 	var request AddQuentityRequest
-	if err := c.ShouldBindBodyWithJSON(&request); err != nil {
+	if err := c.BindJSON(&request); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}

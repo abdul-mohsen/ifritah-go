@@ -10,7 +10,7 @@ import (
 
 type AddQuentityRequest struct {
 	StoreId  int          `json:"store_id" binding:"required"`
-	Products []AddProduct `json:"products" binding:"required"`
+	Products []AddProduct `json:"products" binding:"required,dive"`
 }
 
 type AddProduct struct {

@@ -9,13 +9,13 @@ import (
 )
 
 type AddQuentityRequest struct {
-	StoreId  *int         `json:"store_id"`
+	StoreId  int          `json:"store_id" binding:"required"`
 	Products []AddProduct `json:"products" binding:"required"`
 }
 
 type AddProduct struct {
-	Id       *int `json:"product_id"`
-	Quantity *int `json:"quantity"`
+	Id       int `json:"product_id" binding:"required"`
+	Quantity int `json:"quantity" binding:"required"`
 }
 
 func (h *handler) AddQuentity(c *gin.Context) {
@@ -32,24 +32,19 @@ func (h *handler) AddQuentity(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	if request.StoreId == nil || request.Products == nil || len(request.Products) == 0 {
+	if len(request.Products) == 0 {
 		c.Status(http.StatusBadRequest)
 		log.Panic("ERR: missing required value")
 	}
 
 	for _, value := range request.Products {
-		if value.Quantity == nil || value.Id == nil {
-			c.Status(http.StatusBadRequest)
-			log.Panic("ERR: missing required value")
-		}
-
-		if *value.Quantity <= 0 {
+		if value.Quantity <= 0 {
 			log.Panic("ERR: quantity can't be 0 or less")
 			c.Status(http.StatusBadRequest)
 		}
 	}
 
-	if !slices.Contains(storeIds, *request.StoreId) {
+	if !slices.Contains(storeIds, request.StoreId) {
 		c.Status(http.StatusBadRequest)
 		log.Panic("ERR: store id does not match")
 	}

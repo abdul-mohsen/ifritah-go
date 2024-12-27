@@ -9,11 +9,11 @@ import (
 )
 
 type AddQuentityRequest struct {
-	StoreId  *int       `json:"store_id"`
-	Products *[]Product `json:"products"`
+	StoreId  *int          `json:"store_id"`
+	Products *[]AddProduct `json:"products"`
 }
 
-type Product struct {
+type AddProduct struct {
 	Id       *int `json:"product_id"`
 	Quantity *int `json:"quantity"`
 }
@@ -27,7 +27,7 @@ func (h *handler) AddQuentity(c *gin.Context) {
 	}
 
 	var request AddQuentityRequest
-	if err := c.BindJSON(&request); err != nil {
+	if err := c.ShouldBindBodyWithJSON(&request); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/text/date"
 )
 
 type BillBase struct {
@@ -99,6 +100,45 @@ func (h *handler) getBaseBills(page int, pageSize int) []BillBase {
 	return bills
 }
 
+type AddBillRequest struct {
+	StoreId         *int       `json:"store_id"`
+	State           int8       `json:"state"`
+	Discount        *float64   `json:"discount"`
+	PaymentDueDate  *time.Time `json:"paymentDueDate"`
+	PaymentDate     *time.Time `json:"paymentDate"`
+	PaidAmount      *float64   `json:"PaidAmount"`
+	MaintenanceCost *float64   `json:"maintenanceCost"`
+	PaymentMethod   *float64   `json:"paymentMethod"`
+	UserName        *string    `json:"user_name"`
+	UserPhoneNumber *string    `json:"user_phone_number"`
+	Note            *string    `json:"note"`
+	Products        []Product  `json:"products"`
+}
+
+type Product struct {
+	Id       *int     `json:"id"`
+	Price    *float64 `json:"price"`
+	Quantity *int     `json:"quantity"`
+}
+
 func (h *handler) AddBill(c *gin.Context) {
+
+	request := AddBillRequest{
+		State: 1,
+	}
+
+	if err := c.BindJSON(&request); err != nil {
+		c.Status(http.StatusBadRequest)
+		log.Panic(err)
+	}
+
+	storeIds := h.getStoreIds(c)
+
+	if !slices.Contains(storeIds, *request.StoreId) {
+		c.Status(http.StatusBadRequest)
+		log.Panic("invalid store id")
+	}
+
+	c.Status(http.StatusOK)
 
 }

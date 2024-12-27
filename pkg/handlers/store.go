@@ -14,7 +14,6 @@ type Store struct {
 
 func (h *handler) getStores(user userSession) []Store {
 
-	println("user_id", user.id)
 	rows, err := h.DB.Query(`select store.id, addressId from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, user.id)
 
 	if err != nil {
@@ -33,6 +32,28 @@ func (h *handler) getStores(user userSession) []Store {
 
 	return stores
 
+}
+
+func (h *handler) getStoreIds(c *gin.Context) []int {
+
+	userSession := GetSessionInfo(c)
+	rows, err := h.DB.Query(`select store.id from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, userSession.id)
+
+	if err != nil {
+		log.Panic(err)
+	}
+
+	var ids []int
+
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			log.Panic(err)
+		}
+		ids = append(ids, id)
+	}
+
+	return ids
 }
 
 func (h *handler) GetStores(c *gin.Context) {

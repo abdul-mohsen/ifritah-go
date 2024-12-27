@@ -20,17 +20,13 @@ type AddProduct struct {
 
 func (h *handler) AddQuentity(c *gin.Context) {
 
-	userSession := GetSessionInfo(c)
-	var storeIds []int
-	for _, value := range h.getStores(userSession) {
-		storeIds = append(storeIds, value.Id)
-	}
-
 	var request AddQuentityRequest
 	if err := c.BindJSON(&request); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}
+
+	storeIds := h.getStoreIds(c)
 
 	if len(request.Products) == 0 {
 		c.Status(http.StatusBadRequest)

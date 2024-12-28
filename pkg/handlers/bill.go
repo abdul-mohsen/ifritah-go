@@ -104,7 +104,7 @@ type AddBillRequest struct {
 	StoreId         int       `json:"store_id" binding:"required"`
 	State           int8      `json:"state"`
 	PaymentDueDate  *string   `json:"payment_due_date" `
-	PaymentDate     string    `json:"payment_date" binding:"required"`
+	PaymentDate     *string   `json:"payment_date" `
 	Discount        string    `json:"discount" binding:"required"`
 	PaidAmount      string    `json:"paidAmount" binding:"required"`
 	MaintenanceCost string    `json:"maintenance_cost" binding:"required"`

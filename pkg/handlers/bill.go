@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"slices"
 	"time"
@@ -100,30 +101,31 @@ func (h *handler) getBaseBills(page int, pageSize int) []BillBase {
 }
 
 type AddBillRequest struct {
-	StoreId         *int       `json:"store_id"`
-	State           int8       `json:"state"`
-	Discount        *float64   `json:"discount"`
-	PaymentDueDate  *time.Time `json:"paymentDueDate"`
-	PaymentDate     *time.Time `json:"paymentDate"`
-	PaidAmount      *float64   `json:"PaidAmount"`
-	MaintenanceCost *float64   `json:"maintenanceCost"`
-	PaymentMethod   *float64   `json:"paymentMethod"`
-	UserName        *string    `json:"user_name"`
-	UserPhoneNumber *string    `json:"user_phone_number"`
-	Note            *string    `json:"note"`
-	Products        []Product  `json:"products"`
+	StoreId         int       `json:"store_id" binding:"required"`
+	State           int8      `json:"state"`
+	PaymentDueDate  *string   `json:"payment_due_date" `
+	PaymentDate     string    `json:"payment_date" binding:"required"`
+	Discount        string    `json:"discount" binding:"required"`
+	PaidAmount      string    `json:"paidAmount" binding:"required"`
+	MaintenanceCost string    `json:"maintenance_cost" binding:"required"`
+	PaymentMethod   int8      `json:"payment_method"`
+	UserName        *string   `json:"user_name"`
+	UserPhoneNumber *string   `json:"user_phone_number"`
+	Note            *string   `json:"note" binding:"required"`
+	Products        []Product `json:"products" binding:"required,dive"`
 }
 
 type Product struct {
-	Id       *int     `json:"id"`
-	Price    *float64 `json:"price"`
-	Quantity *int     `json:"quantity"`
+	Id       int    `json:"id" binding:"required"`
+	Price    string `json:"price" binding:"required"`
+	Quantity int64  `json:"quantity" binding:"required"`
 }
 
 func (h *handler) AddBill(c *gin.Context) {
 
 	request := AddBillRequest{
-		State: 1,
+		State:         1,
+		PaymentMethod: 1,
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -131,13 +133,93 @@ func (h *handler) AddBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	userSession := GetSessionInfo(c)
+
 	storeIds := h.getStoreIds(c)
 
-	if !slices.Contains(storeIds, *request.StoreId) {
+	if !slices.Contains(storeIds, request.StoreId) {
 		c.Status(http.StatusBadRequest)
 		log.Panic("invalid store id")
 	}
 
+	var paymentDueDate *time.Time
+	if request.PaymentDueDate != nil {
+
+		parsedTime, err := time.Parse(time.RFC3339, *request.PaymentDueDate)
+		paymentDueDate = &parsedTime
+		if err != nil {
+			log.Panic("Error parsing date:", err)
+		}
+	}
+	discount, success1 := stringToBigFloat(request.Discount)
+	paidAmount, success2 := stringToBigFloat(request.PaidAmount)
+	maintenanceCost, success3 := stringToBigFloat(request.MaintenanceCost)
+
+	if !(success1 && success2 && success3) {
+		c.Status(http.StatusBadRequest)
+		log.Panic("big float are bad")
+	}
+
+	subTotal := zeroBigFloat()
+	for _, product := range request.Products {
+		price, success := stringToBigFloat(product.Price)
+		if !success || product.Quantity <= 0 {
+			c.Status(http.StatusBadRequest)
+			log.Panic("invalid product")
+		}
+		quantity := big.NewFloat(float64(product.Quantity))
+		cost := new(big.Float).Mul(price, quantity)
+		subTotal = new(big.Float).Add(cost, subTotal)
+	}
+	totalWithOutVat := new(big.Float).Sub(new(big.Float).Add(subTotal, maintenanceCost), discount)
+	vatTotal := new(big.Float).Mul(totalWithOutVat, big.NewFloat(.15))
+	total := new(big.Float).Add(totalWithOutVat, vatTotal)
+
+	if paidAmount.Cmp(total) == 1 {
+		c.Status(http.StatusBadRequest)
+		log.Panic("invalid paid ammount")
+	}
+
+	squenceNumber := h.getNextSquenceNumber(userSession.id)
+
+	query := `
+	insert into bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, squence_number, merchent_id, maintenance_cost, note, userName, buyer_id, user_phone_number
+	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)        
+	`
+
+	if _, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal, discount, vatTotal, request.StoreId, squenceNumber, userSession.id,
+		maintenanceCost, request.Note, request.UserName, nil, request.UserPhoneNumber); err != nil {
+		log.Panic(err)
+	}
+
+	var id int
+	h.DB.QueryRow(`select id from bill where store_id = ? and squence_number = ?`, request.StoreId, squenceNumber).Scan(&id)
+
+	h.addProductToBill(request.Products, id)
+
 	c.Status(http.StatusOK)
 
+}
+
+func (h *handler) addProductToBill(products []Product, billId int) {
+
+	query := `insert into bill_produect (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
+	for _, product := range products {
+		h.DB.Exec(query, product.Id, product.Price, product.Quantity, billId)
+	}
+
+}
+
+func (h *handler) getNextSquenceNumber(id int64) int {
+
+	query := `
+	select max(sequence_number) from bill
+	join store on store.id == bill.store.id
+	join compnay where store.company_id == company.id
+	join user where user.company_id == company.id and user.id == ?
+	`
+	var maxSequenceNumber int
+	h.DB.QueryRow(query, id).Scan(&maxSequenceNumber)
+
+	return maxSequenceNumber + 1
 }

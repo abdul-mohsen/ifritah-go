@@ -54,9 +54,11 @@ func main() {
 		authorized.GET("vin/:vin", h.SearchByVin)
 		authorized.GET("notification", h.GetNotificationAll)
 		authorized.POST("bill/all", h.GetBills)
+		authorized.POST("bill", h.AddBill)
 		authorized.GET("stores/all", h.GetStores)
 		authorized.POST("product", h.AddQuentity)
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))
+
 		// router.GET(baseUrl + ":id", h.GetCarPartDetail)
 	}
 	router.POST(baseUrl+"register", h.Register)

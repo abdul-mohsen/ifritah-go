@@ -106,7 +106,7 @@ type AddBillRequest struct {
 	PaymentDueDate  *string   `json:"payment_due_date" `
 	PaymentDate     *string   `json:"payment_date" `
 	Discount        string    `json:"discount" binding:"required"`
-	PaidAmount      string    `json:"paidAmount" binding:"required"`
+	PaidAmount      string    `json:"paidAmount" `
 	MaintenanceCost string    `json:"maintenance_cost" binding:"required"`
 	PaymentMethod   int8      `json:"payment_method"`
 	UserName        *string   `json:"user_name"`
@@ -126,6 +126,7 @@ func (h *handler) AddBill(c *gin.Context) {
 	request := AddBillRequest{
 		State:         1,
 		PaymentMethod: 1,
+		PaidAmount:    "0.0",
 	}
 
 	if err := c.BindJSON(&request); err != nil {

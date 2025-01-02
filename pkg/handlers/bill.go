@@ -111,7 +111,7 @@ type AddBillRequest struct {
 	PaymentMethod   int8      `json:"payment_method"`
 	UserName        *string   `json:"user_name"`
 	UserPhoneNumber *string   `json:"user_phone_number"`
-	Note            *string   `json:"note" binding:"required"`
+	Note            *string   `json:"note"`
 	Products        []Product `json:"products" binding:"required,dive"`
 }
 

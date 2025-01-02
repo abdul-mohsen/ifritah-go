@@ -188,8 +188,8 @@ func (h *handler) AddBill(c *gin.Context) {
 	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)        
 	`
 
-	if _, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal, discount, vatTotal, request.StoreId, squenceNumber, userSession.id,
-		maintenanceCost, request.Note, request.UserName, nil, request.UserPhoneNumber); err != nil {
+	if _, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10), request.StoreId, squenceNumber, userSession.id,
+		maintenanceCost.Text('f', 10), request.Note, request.UserName, nil, request.UserPhoneNumber); err != nil {
 		log.Panic(err)
 	}
 

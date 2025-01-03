@@ -220,7 +220,9 @@ func (h *handler) getNextSquenceNumber(id int64) int {
 	join user on user.company_id = company.id and user.id = ?
 	`
 	var maxSequenceNumber int
-	h.DB.QueryRow(query, id).Scan(&maxSequenceNumber)
+	if err := h.DB.QueryRow(query, id).Scan(&maxSequenceNumber); err != nil {
+		log.Panic(err)
+	}
 
 	println("seq", maxSequenceNumber)
 

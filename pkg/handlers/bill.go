@@ -216,7 +216,7 @@ func (h *handler) getNextSquenceNumber(id int64) int {
 	query := `
 	select max(sequence_number) from bill
 	join store on store.id = bill.store_id
-	join compnay on store.company_id = company.id
+	join company on store.company_id = company.id
 	join user on user.company_id = company.id and user.id = ?
 	`
 	var maxSequenceNumber int

@@ -184,8 +184,8 @@ func (h *handler) AddBill(c *gin.Context) {
 	squenceNumber := h.getNextSquenceNumber(userSession.id)
 
 	query := `
-	insert into bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, squence_number, merchent_id, maintenance_cost, note, userName, buyer_id, user_phone_number
-	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)        
+	insert into bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, squence_number, merchent_id, maintenance_cost, note, userName, buyer_id, user_phone_number)
+	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 	`
 
 	if _, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10), request.StoreId, squenceNumber, userSession.id,

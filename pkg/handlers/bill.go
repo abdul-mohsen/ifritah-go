@@ -222,5 +222,7 @@ func (h *handler) getNextSquenceNumber(id int64) int {
 	var maxSequenceNumber int
 	h.DB.QueryRow(query, id).Scan(&maxSequenceNumber)
 
+	println("seq", maxSequenceNumber)
+
 	return maxSequenceNumber + 1
 }

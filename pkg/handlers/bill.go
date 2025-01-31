@@ -88,7 +88,7 @@ func (h *handler) getBaseBills(page int, pageSize int) []BillBase {
 	for rows.Next() {
 		var bill BillBase
 
-		if err := rows.Scan(&bill.Id, &bill.EffectiveDate, &bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.SquenceNumber, &bill.Type); err != nil {
+		if err := rows.Scan(&bill.Id, &bill.EffectiveDate, &bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.SequenceNumber, &bill.Type); err != nil {
 			log.Panic(err)
 		}
 

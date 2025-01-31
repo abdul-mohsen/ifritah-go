@@ -55,6 +55,13 @@ func main() {
 		authorized.GET("notification", h.GetNotificationAll)
 		authorized.POST("bill/all", h.GetBills)
 		authorized.POST("bill", h.AddBill)
+		authorized.GET("bill/:id", h.GetBillDetail)
+		authorized.DELETE("bill/:id", h.DeleteBillDetail)
+
+		authorized.POST("purchase_bill", h.AddPurchaseBill)
+		authorized.GET("purchase_bill/:id", h.GetPurchaseBillDetail)
+		authorized.DELETE("purchase_bill/:id", h.DeletePurchaseBillDetail)
+
 		authorized.GET("stores/all", h.GetStores)
 		authorized.POST("product", h.AddQuentity)
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))

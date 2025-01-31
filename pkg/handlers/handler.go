@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"math/big"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -65,4 +66,15 @@ func stringToBigInt(s string) (*big.Int, bool) {
 	// Convert the string to a big.Int
 	_, success := money.SetString(s, 10) // Base 10
 	return money, success
+}
+
+// joinInts converts a slice of ints to a joined string without explicit loops
+func joinInts(nums []int, sep string) string {
+	if len(nums) == 0 {
+		return ""
+	}
+	if len(nums) == 1 {
+		return strconv.Itoa(nums[0])
+	}
+	return strconv.Itoa(nums[0]) + sep + joinInts(nums[1:], sep)
 }

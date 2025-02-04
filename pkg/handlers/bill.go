@@ -444,15 +444,17 @@ func (h *handler) addProductToBillPurchase(products []Product, billId int64) {
 
 func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
-	storeIds := h.getStoreIds(c)
+	userSession := GetSessionInfo(c)
 
 	var id string = c.Param("id")
 
 	query := `select effective_date, payment_due_date, state, sub_total, discount, vat, store_id, sequence_number, merchant_id, maintenance_cost,
-	note, userName, user_phone_number from purchase_bill as bill join store on store.id = ? where bill.id = ? limit 1`
+	note, userName, user_phone_number from purchase_bill as bill join store on store.id = bill.id 
+	join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id
+	where bill.id = ? limit 1`
 	var bill Bill
 
-	if err := h.DB.QueryRow(query, joinInts(storeIds, ","), id).Scan(&bill.EffectiveDate,
+	if err := h.DB.QueryRow(query, userSession, id).Scan(&bill.EffectiveDate,
 		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
 		&bill.Note, &bill.UserName, &bill.UserPhoneNumber); err != nil {
 		c.Status(http.StatusBadRequest)

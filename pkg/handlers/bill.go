@@ -449,7 +449,7 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 	var id string = c.Param("id")
 
 	query := `select effective_date, payment_due_date, state, sub_total, discount, vat, store_id, sequence_number, merchant_id, maintenance_cost,
-	note, userName, user_phone_number from purchase_bill as bill join store on store.id in ? where bill.id = ? limit 1`
+	note, userName, user_phone_number from purchase_bill as bill join store on store.id = ? where bill.id = ? limit 1`
 	var bill Bill
 
 	if err := h.DB.QueryRow(query, joinInts(storeIds, ","), id).Scan(&bill.EffectiveDate,

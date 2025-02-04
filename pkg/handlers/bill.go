@@ -442,6 +442,21 @@ func (h *handler) addProductToBillPurchase(products []Product, billId int64) {
 	}
 }
 
+type PurchaseBill struct {
+	Id             int              `json:"id"`
+	EffectiveDate  sql.NullTime     `json:"effective_date"`
+	PaymentDueDate *sql.NullTime    `json:"payment_due_date"`
+	State          int              `json:"state"`
+	SubTotal       float64          `json:"subtotal"`
+	Discount       float64          `json:"discount"`
+	Vat            float64          `json:"vat"`
+	SequenceNumber int              `json:"sequence_number"`
+	Type           bool             `json:"type"`
+	StoreId        int              `json:"store_id"`
+	MerchantId     int              `json:"merchant_id"`
+	Products       []ProductDetails `json:"products"`
+}
+
 func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
@@ -449,14 +464,13 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 	var id string = c.Param("id")
 
 	query := `select effective_date, payment_due_date, bill.state, sub_total, discount, vat, store_id, sequence_number, merchant_id,
-	note, userName, user_phone_number from purchase_bill as bill join store on store.id = bill.id 
+	from purchase_bill as bill join store on store.id = bill.id 
 	join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id
 	where bill.id = ? limit 1`
-	var bill Bill
+	var bill PurchaseBill
 
 	if err := h.DB.QueryRow(query, userSession.id, id).Scan(&bill.EffectiveDate,
-		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
-		&bill.Note, &bill.UserName, &bill.UserPhoneNumber); err != nil {
+		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}

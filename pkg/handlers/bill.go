@@ -448,7 +448,7 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
 	var id string = c.Param("id")
 
-	query := `select effective_date, payment_due_date, bill.state, sub_total, discount, vat, store_id, sequence_number, merchant_id, maintenance_cost,
+	query := `select effective_date, payment_due_date, bill.state, sub_total, discount, vat, store_id, sequence_number, merchant_id,
 	note, userName, user_phone_number from purchase_bill as bill join store on store.id = bill.id 
 	join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id
 	where bill.id = ? limit 1`

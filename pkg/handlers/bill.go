@@ -275,7 +275,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 	var bill Bill
 
-	if err := h.DB.QueryRow(query, userSession, id).Scan(&bill.EffectiveDate,
+	if err := h.DB.QueryRow(query, userSession.id, id).Scan(&bill.EffectiveDate,
 		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
 		&bill.Note, &bill.UserName, &bill.UserPhoneNumber); err != nil {
 		c.Status(http.StatusBadRequest)

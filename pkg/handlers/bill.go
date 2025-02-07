@@ -350,7 +350,7 @@ type AddPurchaseBillRequest struct {
 	PaymentMethod          int8      `json:"payment_method"`
 	Products               []Product `json:"products" binding:"required,dive"`
 	SupplierId             int       `json:"supplier_id" binding:"required"`
-	SupplierSequenceNumber int       `json:"supplier_sequenve_number" binding:"required"`
+	SupplierSequenceNumber int       `json:"supplier_sequence_number" binding:"required"`
 }
 
 func (h *handler) AddPurchaseBill(c *gin.Context) {
@@ -415,11 +415,11 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	}
 
 	query := `
-	insert into purchase_bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, sequence_number, merchant_id, supplier_id, sequence_number)
+	insert into purchase_bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, merchant_id, supplier_id, sequence_number)
 	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
 	`
 	res, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
-		request.StoreId, userSession.id, request.SupplierSequenceNumber, request.SupplierSequenceNumber)
+		request.StoreId, userSession.id, request.SupplierId, request.SupplierSequenceNumber)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)

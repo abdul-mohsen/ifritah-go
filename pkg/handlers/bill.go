@@ -227,8 +227,6 @@ func (h *handler) getNextSquenceNumber(id int64) int {
 		log.Panic(err)
 	}
 
-	println("seq", maxSequenceNumber)
-
 	return maxSequenceNumber + 1
 }
 

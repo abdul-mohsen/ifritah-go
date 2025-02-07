@@ -416,7 +416,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	query := `
 	insert into purchase_bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, merchant_id, supplier_id, sequence_number)
-	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
 	`
 	res, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
 		request.StoreId, userSession.id, request.SupplierId, request.SupplierSequenceNumber)

@@ -254,9 +254,9 @@ type Bill struct {
 	StoreId         int              `json:"store_id"`
 	MerchantId      int              `json:"merchant_id"`
 	MaintenanceCost string           `json:"maintenance_cost"`
-	Note            string           `json:"note"`
-	UserName        string           `json:"user_name"`
-	UserPhoneNumber string           `json:"user_phone_number"`
+	Note            *string          `json:"note"`
+	UserName        *string          `json:"user_name"`
+	UserPhoneNumber *string          `json:"user_phone_number"`
 	Products        []ProductDetails `json:"products"`
 }
 

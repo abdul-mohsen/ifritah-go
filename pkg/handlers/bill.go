@@ -284,8 +284,8 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 func (h *handler) getProducts(billId int) []ProductDetails {
 	query := `
-	select product_id, price, quantity , articles.id articles.articleNumber, articles.genericArticleDescription from bill_product where bill_id = ?
-	left join articles on articles.id = product_id
+	select product_id, price, quantity , articles.id, articles.articleNumber, articles.genericArticleDescription from bill_product 
+	left join articles on articles.id = product_id where bill_id = ?
 	`
 
 	rows, err := h.DB.Query(query, billId)

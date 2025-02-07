@@ -316,7 +316,7 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	var id string = c.Param("id")
 
 	// TODO check if the user has right to delete and is the owner of the bill
-	query := `DELETE bill where id = ?`
+	query := `DELETE FROM bill where id = ?`
 
 	res, err := h.DB.Exec(query, id)
 	if err != nil {
@@ -491,7 +491,7 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 	var id string = c.Param("id")
 
 	// TODO check if the user has right to delete and is the owner of the bill
-	query := `DELETE purchase_bill where id = ?`
+	query := `DELETE FROM purchase_bill where id = ?`
 
 	res, err := h.DB.Exec(query, id)
 	if err != nil {

@@ -317,13 +317,10 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 
 	var id string = c.Param("id")
 
-	query := `DELETE bill as b
-	join store on store.id = b.store_id 
-	join company on company.id = store.company_id
-	join user on user.id= ? and company.id=user.company_id
-	where b.id = ? limit 1`
+	// TODO check if the user has right to delete and is the owner of the bill
+	query := `DELETE bill where b.id = ?`
 
-	res, err := h.DB.Exec(query, userSession.id, id)
+	res, err := h.DB.Exec(query, id)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
@@ -497,11 +494,8 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 
 	var id string = c.Param("id")
 
-	query := `DELETE purchase_bill  as b
-	join store on store.id = b.store_id 
-	join company on company.id = store.company_id
-	join user on user.id= ? and company.id=user.company_id
-	where b.id = ? limit 1`
+	// TODO check if the user has right to delete and is the owner of the bill
+	query := `DELETE purchase_bill where b.id = ?`
 
 	res, err := h.DB.Exec(query, userSession.id, id)
 	if err != nil {

@@ -313,13 +313,17 @@ func (h *handler) getProducts(billId int) []ProductDetails {
 
 func (h *handler) DeleteBillDetail(c *gin.Context) {
 
-	storeIds := h.getStoreIds(c)
+	userSession := GetSessionInfo(c)
 
 	var id string = c.Param("id")
 
-	query := `DELETE bill where bill.id = ? join store on store.id in (?)`
+	query := `DELETE bill as b
+	join store on store.id = b.store_id 
+	join company on company.id = store.company_id
+	join user on user.id= ? and company.id=user.company_id
+	where b.id = ? limit 1`
 
-	res, err := h.DB.Exec(query, id, joinInts(storeIds, ","))
+	res, err := h.DB.Exec(query, userSession.id, id)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
@@ -489,13 +493,17 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
 func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 
-	storeIds := h.getStoreIds(c)
+	userSession := GetSessionInfo(c)
 
 	var id string = c.Param("id")
 
-	query := `DELETE purchase_bill where bill.id = ? join store on store.id in (?)`
+	query := `DELETE purchase_bill  as b
+	join store on store.id = b.store_id 
+	join company on company.id = store.company_id
+	join user on user.id= ? and company.id=user.company_id
+	where b.id = ? limit 1`
 
-	res, err := h.DB.Exec(query, id, joinInts(storeIds, ","))
+	res, err := h.DB.Exec(query, userSession.id id)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)

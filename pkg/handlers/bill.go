@@ -503,7 +503,7 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 	join user on user.id= ? and company.id=user.company_id
 	where b.id = ? limit 1`
 
-	res, err := h.DB.Exec(query, userSession.id id)
+	res, err := h.DB.Exec(query, userSession.id, id)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)

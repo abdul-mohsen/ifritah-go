@@ -313,8 +313,6 @@ func (h *handler) getProducts(billId int) []ProductDetails {
 
 func (h *handler) DeleteBillDetail(c *gin.Context) {
 
-	userSession := GetSessionInfo(c)
-
 	var id string = c.Param("id")
 
 	// TODO check if the user has right to delete and is the owner of the bill
@@ -490,14 +488,12 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
 func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 
-	userSession := GetSessionInfo(c)
-
 	var id string = c.Param("id")
 
 	// TODO check if the user has right to delete and is the owner of the bill
 	query := `DELETE purchase_bill where b.id = ?`
 
-	res, err := h.DB.Exec(query, userSession.id, id)
+	res, err := h.DB.Exec(query, id)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)

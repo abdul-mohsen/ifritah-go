@@ -48,7 +48,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 		c.Status(http.StatusBadRequest)
 	}
 
@@ -325,12 +325,12 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	affectedRows, err := res.RowsAffected()
 
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
 	if affectedRows == 0 {
 		c.Status(http.StatusBadRequest)
-		log.Fatal("no recored has been deleted")
+		log.Panic("no recored has been deleted")
 	}
 
 	h.DB.Exec("DELETE bill_product where bill_id = ?")
@@ -500,12 +500,12 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 	affectedRows, err := res.RowsAffected()
 
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
 	if affectedRows == 0 {
 		c.Status(http.StatusBadRequest)
-		log.Fatal("no recored has been deleted")
+		log.Panic("no recored has been deleted")
 	}
 
 	h.DB.Exec("DELETE purchase_bill_product where bill_id = ?")

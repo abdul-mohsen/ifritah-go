@@ -176,6 +176,7 @@ func GetSessionInfo(c *gin.Context) userSession {
 
 	claimsStr, exist := c.Get("decoded_jwt")
 	if exist == false {
+		c.Status(http.StatusUnauthorized)
 		log.Panic("hahahhah I am going places")
 	}
 	claims := claimsStr.(*Claims)

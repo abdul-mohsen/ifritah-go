@@ -169,15 +169,16 @@ func JWTVerifyMiddleware(c *gin.Context) {
 		}
 	}
 
-	c.Status(http.StatusUnauthorized)
+	log.Println("Token is invalid")
+	c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("Token is invalid"))
 }
 
 func GetSessionInfo(c *gin.Context) userSession {
 
 	claimsStr, exist := c.Get("decoded_jwt")
 	if !exist {
-		c.Status(http.StatusUnauthorized)
-		log.Panic("Token is invalid")
+		log.Println("Token is invalid, but how I am here")
+		c.AbortWithStatus(http.StatusUnauthorized)
 	}
 	claims := claimsStr.(*Claims)
 	user := userSession{

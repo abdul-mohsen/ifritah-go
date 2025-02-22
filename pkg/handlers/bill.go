@@ -167,6 +167,7 @@ func (h *handler) AddBill(c *gin.Context) {
 		if !success || product.Quantity <= 0 {
 			c.Status(http.StatusBadRequest)
 			log.Panic("invalid product")
+			return
 		}
 		quantity := big.NewFloat(float64(product.Quantity))
 		cost := new(big.Float).Mul(price, quantity)

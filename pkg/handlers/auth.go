@@ -175,9 +175,9 @@ func JWTVerifyMiddleware(c *gin.Context) {
 func GetSessionInfo(c *gin.Context) userSession {
 
 	claimsStr, exist := c.Get("decoded_jwt")
-	if exist == false {
+	if !exist {
 		c.Status(http.StatusUnauthorized)
-		log.Panic("hahahhah I am going places")
+		log.Panic("Token is invalid")
 	}
 	claims := claimsStr.(*Claims)
 	user := userSession{

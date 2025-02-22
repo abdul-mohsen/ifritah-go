@@ -134,7 +134,6 @@ func (h *handler) Login(c *gin.Context) {
 func JWTVerifyMiddleware(c *gin.Context) {
 	// Get the JWT token from the Authorization header
 	fullTokenString := c.GetHeader("Authorization")
-	fmt.Println(fullTokenString)
 	tokenString := strings.Split(fullTokenString, "Bearer ")[1]
 
 	// Define the secret key used to sign the token

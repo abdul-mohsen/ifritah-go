@@ -75,7 +75,7 @@ func (h *handler) getBaseBills(page int, pageSize int) []BillBase {
 	query := ` Select * from(
 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, TRUE as bill_type from bill 
 	UNION
-	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type from purchase_bill_register 
+	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type from purchase_bill
 	) AS T ORDER BY effective_date DESC LIMIT ? OFFSET ?`
 
 	rows, err := h.DB.Query(query, pageSize, page)

@@ -8,8 +8,8 @@ import (
 )
 
 type Store struct {
-	Id        int
-	AddressId *int
+	Id        int  `json:"id"`
+	AddressId *int `json:"address_id"`
 }
 
 func (h *handler) getStores(user userSession) []Store {

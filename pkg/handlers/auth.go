@@ -105,7 +105,8 @@ func (h *handler) Login(c *gin.Context) {
 	var id int64
 	var hashedPassword string
 	if err := h.DB.QueryRow("SELECT id, password FROM user where username = ? limit 1;", request.Username).Scan(&id, &hashedPassword); err != nil {
-		log.Panic(err)
+		log.Println(request)
+		c.AbortWithError(http.StatusBadRequest, err)
 	}
 
 	err := checkPassword([]byte(hashedPassword), request.Password)

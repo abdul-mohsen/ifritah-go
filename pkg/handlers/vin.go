@@ -18,8 +18,9 @@ func (h *handler) SearchByVin(c *gin.Context) {
 }
 
 type PartByVin struct {
-	Page     int `json:"page_number"`
-	PageSize int `json:"page_size"`
+	Query    string `json:"query"`
+	Page     int    `json:"page_number"`
+	PageSize int    `json:"page_size"`
 }
 
 type BaseModel struct {
@@ -234,7 +235,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	left join oem_number o on o.articleId = articles.legacyArticleId 
 	left join articlelinks al on al.legacyArticleId = articles.legacyArticleId 
 	left join articlepdfs p on p.legacyArticleId = articles.legacyArticleId 
-	where manuName like ?
+	where manuName like ? and (? = NULL or ? like %o.number%)
 	limit ? offset ?
 	`
 	rows, err := h.DB.Query(query, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.PageSize, request.Page)

@@ -238,6 +238,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	where manuName like ? and (? = NULL or o.number like ?)
 	limit ? offset ?
 	`
+	log.Println(query, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.Query, request.Query+"%", request.PageSize, request.Page)
 	rows, err := h.DB.Query(query, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.Query, request.Query+"%", request.PageSize, request.Page)
 	if err != nil {
 		log.Panic(err)

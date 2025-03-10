@@ -214,7 +214,7 @@ type Part struct {
 	Link      *string `json:"link"`
 }
 
-func (h *handler) GetPartByVin(c *gin.Context) {
+func (h *handler) GetPartByVinDetails(c *gin.Context) {
 
 	request := PartByVin{
 		Page:     0,
@@ -238,7 +238,6 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	where manuName like ? and (? = NULL or o.number like ?)
 	limit ? offset ?
 	`
-	log.Println(query, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.Query, request.Query+"%", request.PageSize, request.Page)
 	rows, err := h.DB.Query(query, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.Query, request.Query+"%", request.PageSize, request.Page)
 	if err != nil {
 		log.Panic(err)
@@ -249,6 +248,51 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 
 		var part Part
 		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type, &part.Link, &part.Url)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		parts = append(parts, part)
+	}
+
+	defer rows.Close()
+	c.JSON(http.StatusOK, parts)
+
+}
+
+func (h *handler) GetPartByVin(c *gin.Context) {
+
+	request := PartByVin{
+		Page:     0,
+		PageSize: 100,
+	}
+
+	if err := c.BindJSON(&request); err != nil {
+		log.Panic(err)
+	}
+	model := h.searchByVin(c)
+	query := `
+	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription
+	from manufacturers m 
+	join modelseries s on  m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
+	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' 
+	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
+	join articles on articles.legacyArticleId = a.legacyArticleId 
+	left join oem_number o on o.articleId = articles.legacyArticleId 
+	where manuName like ? and (? = NULL or o.number like ?)
+	limit ? offset ?
+	`
+	log.Println(query, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.Query, request.Query+"%", request.PageSize, request.Page)
+	rows, err := h.DB.Query(query, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.Query, request.Query+"%", request.PageSize, request.Page)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	var parts []Part
+	for rows.Next() {
+
+		var part Part
+		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type)
 		if err != nil {
 			log.Panic(err)
 		}

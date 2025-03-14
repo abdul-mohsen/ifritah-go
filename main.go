@@ -63,7 +63,7 @@ func main() {
 		authorized.GET("purchase_bill/:id", h.GetPurchaseBillDetail)
 		authorized.DELETE("purchase_bill/:id", h.DeletePurchaseBillDetail)
 
-		authorized.GET("stores/all", h.GetStores)
+		authorized.GET("stores/all", cache.CachePage(store, time.Minute*60*24, h.GetStores))
 		authorized.POST("product", h.AddQuentity)
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))
 

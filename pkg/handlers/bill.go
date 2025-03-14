@@ -203,7 +203,7 @@ func (h *handler) AddBill(c *gin.Context) {
 
 	h.addProductToBill(request.Products, id)
 
-	c.Status(http.StatusOK)
+	c.Status(http.StatusCreated)
 
 }
 

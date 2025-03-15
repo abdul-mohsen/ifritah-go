@@ -66,6 +66,7 @@ func main() {
 		authorized.GET("stores/all", h.GetStores)
 		authorized.POST("product", h.AddQuentity)
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))
+		authorized.POST("part/:type", h.GetPartByType)
 
 		// router.GET(baseUrl + ":id", h.GetCarPartDetail)
 	}

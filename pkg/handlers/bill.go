@@ -344,7 +344,7 @@ type AddPurchaseBillRequest struct {
 	State                  int8      `json:"state"`
 	PaymentDueDate         *string   `json:"payment_due_date" `
 	PaymentDate            *string   `json:"payment_date" `
-	Discount               string    `json:"discount" binding:"required"`
+	Discount               string    `json:"discount"`
 	PaidAmount             string    `json:"paidAmount" `
 	PaymentMethod          int8      `json:"payment_method"`
 	Products               []Product `json:"products" binding:"required,dive"`

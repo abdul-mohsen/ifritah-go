@@ -21,7 +21,6 @@ func Connect() *sql.DB {
 		ParseTime:            true,
 	}
 
-	log.Print(cfg)
 	// Get a database handle.
 	var db *sql.DB
 	var err error

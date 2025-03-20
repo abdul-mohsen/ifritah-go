@@ -243,7 +243,7 @@ func (h *handler) GetPartByVinDetails(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	var parts []Part
+	var parts []Part = make([]Part, 0)
 	for rows.Next() {
 
 		var part Part

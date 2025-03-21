@@ -46,17 +46,15 @@ func (h *handler) GetPartByType(c *gin.Context) {
 	if err := c.BindJSON(&request); err != nil {
 		log.Panic(err)
 	}
-	var partType string = c.Param("type")
 	query := `
 	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription, al.url as link, p.url 
-	join articles on genericArticleDescription = ?
 	left join oem_number o on o.articleId = articles.legacyArticleId 
 	left join articlelinks al on al.legacyArticleId = articles.legacyArticleId 
 	left join articlepdfs p on p.legacyArticleId = articles.legacyArticleId 
 	where (? = NULL or o.number like ?)
 	limit ? offset ?
 	`
-	rows, err := h.DB.Query(query, partType, request.Query, request.Query+"%", request.PageSize, request.Page)
+	rows, err := h.DB.Query(query, request.Query, request.Query+"%", request.PageSize, request.Page)
 	if err != nil {
 		log.Panic(err)
 	}

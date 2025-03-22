@@ -36,7 +36,7 @@ type PartByType struct {
 	PageSize int    `json:"page_size"`
 }
 
-func (h *handler) GetPartByType(c *gin.Context) {
+func (h *handler) GetPart(c *gin.Context) {
 
 	request := PartByType{
 		Page:     0,

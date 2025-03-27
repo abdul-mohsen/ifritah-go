@@ -48,8 +48,8 @@ func (h *handler) GetPart(c *gin.Context) {
 	}
 	query := `
 	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription, al.url as link, p.url 
-	from articles
-	left join oem_number o on o.articleId = articles.legacyArticleId 
+	from oem_number o
+	left articles join  on o.articleId = articles.legacyArticleId 
 	left join articlelinks al on al.legacyArticleId = articles.legacyArticleId 
 	left join articlepdfs p on p.legacyArticleId = articles.legacyArticleId 
 	where (? = NULL or o.number like ?)

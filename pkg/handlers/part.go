@@ -53,7 +53,7 @@ func (h *handler) GetPart(c *gin.Context) {
 	left join articles on o.articleId = articles.legacyArticleId 
 	left join articlelinks al on al.legacyArticleId = articles.legacyArticleId 
 	left join articlepdfs p on p.legacyArticleId = articles.legacyArticleId 
-	where ? != NULL and o.number like ?
+	where o.number like ?
 	limit ? offset ?
 	`
 

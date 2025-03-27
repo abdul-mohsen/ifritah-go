@@ -40,7 +40,7 @@ func (h *handler) GetPart(c *gin.Context) {
 
 	request := PartByType{
 		Page:     0,
-		PageSize: 100,
+		PageSize: 10,
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -49,7 +49,7 @@ func (h *handler) GetPart(c *gin.Context) {
 	query := `
 	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription, al.url as link, p.url 
 	from oem_number o
-	left join articles  on o.articleId = articles.legacyArticleId 
+	left join articles on o.articleId = articles.legacyArticleId 
 	left join articlelinks al on al.legacyArticleId = articles.legacyArticleId 
 	left join articlepdfs p on p.legacyArticleId = articles.legacyArticleId 
 	where ? != NULL and o.number like ?

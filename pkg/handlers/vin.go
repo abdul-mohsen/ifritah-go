@@ -270,9 +270,8 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription
 	from manufacturers m 
 	join modelseries s on  m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
-	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' 
+	join linkagetargets l on vehicleModelSeriesId = s.modelId 
 	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
-	join articles on articles.legacyArticleId = a.legacyArticleId 
 	join oem_number o on o.articleId = articles.legacyArticleId and o.number like ?
 	where manuName like ?
 	limit ? offset ?

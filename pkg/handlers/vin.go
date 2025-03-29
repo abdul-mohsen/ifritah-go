@@ -226,6 +226,7 @@ func (h *handler) GetPartByVinDetails(c *gin.Context) {
 	join modelseries s on  m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join linkagetargets l on vehicleModelSeriesId = s.modelId 
 	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
+	join articles on a.legacyArticleId = a.legacyArticleId 
 	left join oem_number o on o.articleId = a.legacyArticleId 
 	left join articlelinks al on al.legacyArticleId = a.legacyArticleId 
 	left join articlepdfs p on p.legacyArticleId = a.legacyArticleId 
@@ -272,6 +273,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	join modelseries s on  m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' 
 	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
+	join articles on a.legacyArticleId = a.legacyArticleId 
 	join oem_number o on o.articleId = a.legacyArticleId and o.number like ?
 	where manuName like ?
 	limit ? offset ?

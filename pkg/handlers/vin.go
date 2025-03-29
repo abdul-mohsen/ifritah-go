@@ -7,13 +7,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
 func (h *handler) SearchByVin(c *gin.Context) {
 	body := h.searchByVinRaw(c)
-	fmt.Println(body)
 	c.Data(200, "json", body)
 }
 
@@ -115,7 +115,6 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 	}
 
 	if response.Data.Intro.VIN != nil {
-		fmt.Println("This is the response", response)
 		model := BaseModel{
 			Vin:   *response.Data.Intro.VIN,
 			Make:  response.Data.Basic.Make,
@@ -123,7 +122,6 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 			Year:  response.Data.Basic.Year,
 		}
 
-		fmt.Println("This is the model", model)
 		return model
 	}
 
@@ -132,7 +130,6 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 	if err := json.Unmarshal(body, &europeVehicle); err != nil {
 		log.Panic(err)
 	}
-	fmt.Println("This is the response", europeVehicle)
 	model := BaseModel{
 		Vin:   europeVehicle.VIN,
 		Make:  europeVehicle.Data.GeneralInformation.Make,
@@ -140,7 +137,6 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 		Year:  europeVehicle.Data.GeneralInformation.ModelYear,
 	}
 
-	fmt.Println("This is the model", model)
 	return model
 
 }
@@ -225,15 +221,14 @@ func (h *handler) GetPartByVinDetails(c *gin.Context) {
 	}
 	model := h.searchByVin(c)
 	query := `
-	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription, al.url as link, p.url 
+	select distinct a.legacyArticleId, o.number, articles.genericArticleDescription, al.url as link, p.url 
 	from manufacturers m 
 	join modelseries s on  m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
-	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' 
+	join linkagetargets l on vehicleModelSeriesId = s.modelId 
 	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
-	join articles on articles.legacyArticleId = a.legacyArticleId 
-	left join oem_number o on o.articleId = articles.legacyArticleId 
-	left join articlelinks al on al.legacyArticleId = articles.legacyArticleId 
-	left join articlepdfs p on p.legacyArticleId = articles.legacyArticleId 
+	left join oem_number o on o.articleId = a.legacyArticleId 
+	left join articlelinks al on al.legacyArticleId = a.legacyArticleId 
+	left join articlepdfs p on p.legacyArticleId = a.legacyArticleId 
 	where manuName like ? and (? = NULL or o.number like ?)
 	limit ? offset ?
 	`
@@ -270,6 +265,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 		log.Panic(err)
 	}
 	model := h.searchByVin(c)
+	year, _ := strconv.Atoi(model.Year)
 	query := `
 	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription
 	from manufacturers m 
@@ -277,12 +273,11 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' 
 	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
 	join articles on articles.legacyArticleId = a.legacyArticleId 
-	left join oem_number o on o.articleId = articles.legacyArticleId 
-	where manuName like ? and (? = NULL or o.number like ?)
+	left join oem_number o on o.articleId = articles.legacyArticleId and o.number like ?
+	where manuName like ? and 
 	limit ? offset ?
 	`
-	log.Println(query, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.Query, request.Query+"%", request.PageSize, request.Page)
-	rows, err := h.DB.Query(query, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.Query, request.Query+"%", request.PageSize, request.Page)
+	rows, err := h.DB.Query(query, "%"+model.Model+"%", year, year, year, year, request.Query+"%", model.Make, request.PageSize, request.Page)
 	if err != nil {
 		log.Panic(err)
 	}

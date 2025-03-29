@@ -37,6 +37,11 @@ type CarModel struct {
 	Type         string `json:"type"`
 }
 
+func (h *handler) GetCarInfoByVin(c *gin.Context) {
+	model := h.searchByVin(c)
+	c.JSON(http.StatusOK, model)
+}
+
 func (h *handler) GetCarsByVin(c *gin.Context) {
 	model := h.searchByVin(c)
 	query := `
@@ -77,25 +82,19 @@ func (h *handler) searchByVinRaw(c *gin.Context) []byte {
 	if err == nil {
 		return []byte(data)
 	}
-	fmt.Println("Cache miss", err)
 
-	fmt.Println("Try global first")
 	body, err := getBody(baseurl + global + vin)
 	if body != nil {
-		fmt.Println("Try to save global ")
 		h.saveRequest(vin, body)
 		return body
 	}
 
-	fmt.Println("Try europe first")
 	body, err = getBody(baseurl + europe + vin)
 	if body != nil {
-		fmt.Println("Try to europe global ")
 		h.saveRequest(vin, body)
 		return body
 	}
 
-	log.Panic("Failed to find data", err)
 	return nil
 }
 

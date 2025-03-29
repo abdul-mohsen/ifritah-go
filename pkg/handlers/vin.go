@@ -46,9 +46,9 @@ func (h *handler) GetCarsByVin(c *gin.Context) {
 	model := h.searchByVin(c)
 	query := `
 	select distinct linkageTargetId, vehicleModelSeriesName, m.manuName, linkageTargetType 
-	from manufacturers m join
-	modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (? = '' or end_year is Null or end_year <= ?) and (? = '' or start_year is Null or start_year>= ?) join
-	linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
+	from manufacturers m 
+	join modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (? = '' or end_year is Null or end_year >= ?) and (? = '' or start_year is Null or start_year<= ?) 
+	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
 	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00")
 
 	if err != nil {

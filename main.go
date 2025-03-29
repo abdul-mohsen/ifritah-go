@@ -47,6 +47,7 @@ func main() {
 		authorized.PUT("supplier/:id", h.EditSupplier)
 		authorized.DELETE("supplier/:id", h.DeleteSupplier)
 		authorized.GET("company/all", h.GetAllCompanies)
+		authorized.GET("vin/car/info/:vin", h.GetCarInfoByVin)
 		authorized.GET("vin/car/:vin", h.GetCarsByVin)
 		authorized.POST("vin/part/details/:vin", h.GetPartByVinDetails)
 		authorized.POST("vin/part/:vin", h.GetPartByVin)

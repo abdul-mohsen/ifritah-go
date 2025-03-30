@@ -15,7 +15,7 @@ type Store struct {
 
 func (h *handler) getStores(user userSession) []Store {
 
-	rows, err := h.DB.Query(`select store.id, addressId, store.namefrom store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, user.id)
+	rows, err := h.DB.Query(`select store.id, addressId, store.name from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, user.id)
 
 	if err != nil {
 		log.Panic(err)

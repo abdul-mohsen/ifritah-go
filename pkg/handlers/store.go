@@ -8,13 +8,14 @@ import (
 )
 
 type Store struct {
-	Id        int  `json:"id"`
-	AddressId *int `json:"address_id"`
+	Id        int     `json:"id"`
+	AddressId *int    `json:"address_id"`
+	Name      *string `json:"name"`
 }
 
 func (h *handler) getStores(user userSession) []Store {
 
-	rows, err := h.DB.Query(`select store.id, addressId from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, user.id)
+	rows, err := h.DB.Query(`select store.id, addressId, store.namefrom store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, user.id)
 
 	if err != nil {
 		log.Panic(err)
@@ -24,7 +25,7 @@ func (h *handler) getStores(user userSession) []Store {
 
 	for rows.Next() {
 		var store Store
-		if err := rows.Scan(&store.Id, &store.AddressId); err != nil {
+		if err := rows.Scan(&store.Id, &store.AddressId, &store.Name); err != nil {
 			log.Panic(err)
 		}
 		stores = append(stores, store)

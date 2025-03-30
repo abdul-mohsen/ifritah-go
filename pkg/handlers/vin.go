@@ -223,7 +223,7 @@ func (h *handler) GetPartByVinDetails(c *gin.Context) {
 	query := `
 	select distinct a.legacyArticleId, o.number, articles.genericArticleDescription, al.url as link, p.url 
 	from manufacturers m 
-	join modelseries s on  m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
+	join modelseries s on  m.manuId=s.manuId and match(modelname) against(?) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join linkagetargets l on vehicleModelSeriesId = s.modelId 
 	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
 	join articles on a.legacyArticleId = a.legacyArticleId 
@@ -233,7 +233,7 @@ func (h *handler) GetPartByVinDetails(c *gin.Context) {
 	where manuName like ? and (? = NULL or o.number like ?)
 	limit ? offset ?
 	`
-	rows, err := h.DB.Query(query, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.Query, request.Query+"%", request.PageSize, request.Page)
+	rows, err := h.DB.Query(query, model.Model, model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.Query, request.Query+"%", request.PageSize, request.Page)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -270,15 +270,15 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	query := `
 	select distinct a.legacyArticleId, o.number, articles.genericArticleDescription
 	from manufacturers m 
-	join modelseries s on  m.manuId=s.manuId and modelname like ? and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
+	join modelseries s on  m.manuId=s.manuId and match(modelname) against (?) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' 
 	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
 	join articles on a.legacyArticleId = a.legacyArticleId 
-	join oem_number o on o.articleId = a.legacyArticleId and o.number like ?
-	where manuName like ?
+	join oem_number o on o.articleId = a.legacyArticleId and match(o.number) against(?, in boolean mode)
+	where match(manuName) against(?)
 	limit ? offset ?
 	`
-	rows, err := h.DB.Query(query, "%"+model.Model+"%", year, year, year, year, request.Query+"%", model.Make, request.PageSize, request.Page)
+	rows, err := h.DB.Query(query, model.Model, year, year, year, year, request.Query, model.Make, request.PageSize, request.Page)
 	if err != nil {
 		log.Panic(err)
 	}

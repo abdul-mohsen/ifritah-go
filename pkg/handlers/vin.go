@@ -274,7 +274,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en' 
 	join articlesvehicletrees a on a.linkingTargetId=l.linkageTargetId 
 	join articles on a.legacyArticleId = a.legacyArticleId 
-	join oem_number o on o.articleId = a.legacyArticleId and match(o.number) against(?* in boolean mode)
+	join oem_number o on o.articleId = a.legacyArticleId and match(o.number) against("?*" in boolean mode)
 	where match(manuName) against(?)
 	limit ? offset ?
 	`

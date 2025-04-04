@@ -117,7 +117,7 @@ func (h *handler) searchByVinRawSkipCache(c *gin.Context) []byte {
 func (h *handler) saveRequest(vin string, body []byte) {
 	query := `INSERT INTO vin_cache (vin, data) values (?, ?)`
 	if _, err := h.DB.Exec(query, vin, string(body)); err != nil {
-		log.Panic(err)
+		fmt.Println(err)
 	}
 }
 

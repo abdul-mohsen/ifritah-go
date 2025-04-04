@@ -95,7 +95,7 @@ func (h *handler) searchByVinRawSkipCache(c *gin.Context) []byte {
 
 	body, err := getBody(baseurl + global + vin)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 	if body != nil {
 		h.saveRequest(vin, body)
@@ -104,7 +104,7 @@ func (h *handler) searchByVinRawSkipCache(c *gin.Context) []byte {
 
 	body, err = getBody(baseurl + europe + vin)
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 	if body != nil {
 		h.saveRequest(vin, body)

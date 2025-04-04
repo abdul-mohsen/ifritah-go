@@ -17,6 +17,11 @@ func (h *handler) SearchByVin(c *gin.Context) {
 	c.Data(200, "json", body)
 }
 
+func (h *handler) SearchByVinSkipCache(c *gin.Context) {
+	body := h.searchByVinRawSkipCache(c)
+	c.Data(200, "json", body)
+}
+
 type PartByVin struct {
 	Query    string `json:"query"`
 	Page     int    `json:"page_number"`
@@ -69,9 +74,6 @@ func (h *handler) GetCarsByVin(c *gin.Context) {
 }
 
 func (h *handler) searchByVinRaw(c *gin.Context) []byte {
-	baseurl := os.Getenv("VEHICLE_DATABASES")
-	europe := "/europe-vin-decode/"
-	global := "/vin-decode/"
 	var vin string = c.Param("vin")
 
 	query := `select data from vin_cache where vin like ? limit 1`
@@ -82,14 +84,28 @@ func (h *handler) searchByVinRaw(c *gin.Context) []byte {
 	if err == nil {
 		return []byte(data)
 	}
+	return h.searchByVinRawSkipCache(c)
+}
+
+func (h *handler) searchByVinRawSkipCache(c *gin.Context) []byte {
+	baseurl := os.Getenv("VEHICLE_DATABASES")
+	europe := "/europe-vin-decode/"
+	global := "/vin-decode/"
+	var vin string = c.Param("vin")
 
 	body, err := getBody(baseurl + global + vin)
+	if err != nil {
+		log.Fatal(err)
+	}
 	if body != nil {
 		h.saveRequest(vin, body)
 		return body
 	}
 
 	body, err = getBody(baseurl + europe + vin)
+	if err != nil {
+		log.Fatal(err)
+	}
 	if body != nil {
 		h.saveRequest(vin, body)
 		return body

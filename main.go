@@ -54,6 +54,7 @@ func main() {
 		authorized.GET("vin/all", h.GetAllCachedVin)
 		authorized.GET("car_part/:id", h.GetAllCachedVin)
 		authorized.GET("vin/:vin", h.SearchByVin)
+		authorized.GET("vin/no_cache:vin", h.SearchByVinSkipCache)
 		authorized.GET("notification", h.GetNotificationAll)
 		authorized.POST("bill/all", h.GetBills)
 		authorized.POST("bill", h.AddBill)

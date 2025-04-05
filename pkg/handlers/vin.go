@@ -19,7 +19,11 @@ func (h *handler) SearchByVin(c *gin.Context) {
 
 func (h *handler) SearchByVinSkipCache(c *gin.Context) {
 	body := h.searchByVinRawSkipCache(c)
-	c.Data(200, "json", body)
+	if body == nil {
+		c.Status(http.StatusBadRequest)
+	} else {
+		c.Data(200, "json", body)
+	}
 }
 
 type PartByVin struct {
@@ -294,7 +298,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	where match(manuName) against(?)
 	limit ? offset ?
 	`
-	rows, err := h.DB.Query(query, model.Model, year, year, year, year, request.Query+"*", model.Make, request.PageSize, request.Page)
+	rows, err := h.DB.Query(query, "+"+model.Model, year, year, year, year, request.Query+"*", model.Make, request.PageSize, request.Page)
 	if err != nil {
 		log.Panic(err)
 	}

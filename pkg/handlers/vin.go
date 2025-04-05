@@ -19,10 +19,10 @@ func (h *handler) SearchByVin(c *gin.Context) {
 
 func (h *handler) SearchByVinSkipCache(c *gin.Context) {
 	body := h.searchByVinRawSkipCache(c)
-	if body == nil {
+	if body == nil || len(body) == 0 {
 		c.Status(http.StatusBadRequest)
 	} else {
-		c.Data(200, "json", body)
+		c.JSON(200, body)
 	}
 }
 

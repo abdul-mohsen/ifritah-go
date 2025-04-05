@@ -14,7 +14,11 @@ import (
 
 func (h *handler) SearchByVin(c *gin.Context) {
 	body := h.searchByVinRaw(c)
-	c.Data(200, "json", body)
+	if body == nil || len(body) == 0 {
+		c.Status(http.StatusBadRequest)
+	} else {
+		c.JSON(http.StatusOK, body)
+	}
 }
 
 func (h *handler) SearchByVinSkipCache(c *gin.Context) {

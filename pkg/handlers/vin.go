@@ -13,7 +13,7 @@ import (
 )
 
 func (h *handler) SearchByVin(c *gin.Context) {
-	body := h.searchByVinRaw(c)
+	body := h.searchByVin(c)
 	if body == nil || len(body) == 0 {
 		c.Status(http.StatusBadRequest)
 	} else {

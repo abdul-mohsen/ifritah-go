@@ -245,11 +245,11 @@ func (h *handler) GetPartByVinDetails(c *gin.Context) {
 	}
 	model := h.searchByVin(c)
 	query := `
-	select distinct a.legacyArticleId, o.number, articles.genericArticleDescription, al.url as link, p.url 
+	select distinct a.legacyArticleId, o.number, a.genericArticleDescription, al.url as link, p.url 
 	from manufacturers m 
 	join modelseries s on  m.manuId=s.manuId and match(modelname) against(?) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join article_car t on vehicleModelSeriesId = s.modelId 
-	join articles on articles.legacyArticleId = a.legacyArticleId 
+	join articles a on a.legacyArticleId = t.legacyArticleId 
 	left join oem_number o on o.articleId = a.legacyArticleId 
 	where manuName like ? and (? = NULL or o.number like ?)
 	limit ? offset ?
@@ -289,11 +289,11 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	model := h.searchByVin(c)
 	year, _ := strconv.Atoi(model.Year)
 	query := `
-	select distinct a.legacyArticleId, o.number, articles.genericArticleDescription
+	select distinct a.legacyArticleId, o.number, a.genericArticleDescription
 	from manufacturers m 
 	join modelseries s on  m.manuId=s.manuId and match(modelname) against (?) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join article_car t on vehicleModelSeriesId = s.modelId 
-	join articles on articles.legacyArticleId = a.legacyArticleId 
+	join articles a on a.legacyArticleId = t.legacyArticleId 
 	join oem_number o on o.articleId = a.legacyArticleId and match(o.number) against(? in boolean mode)
 	where match(manuName) against(?)
 	limit ? offset ?

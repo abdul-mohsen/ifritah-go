@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -240,6 +241,13 @@ func (h *handler) GetPartByVinDetails(c *gin.Context) {
 		log.Panic(err)
 	}
 	model := h.searchByVin(c)
+	parts := h.getPartDetailsByVinQuery(model, request.Query, request.PageSize, request.Page)
+	c.JSON(http.StatusOK, parts)
+
+}
+
+func (h *handler) getPartDetailsByVinQuery(model BaseModel, q string, page, pageSize int) []Part {
+
 	query := `
 	select distinct a.legacyArticleId, o.number, a.genericArticleDescription, al.url as link, p.url 
 	from manufacturers m 
@@ -250,7 +258,7 @@ func (h *handler) GetPartByVinDetails(c *gin.Context) {
 	where manuName like ? and (? = NULL or o.number like ?)
 	limit ? offset ?
 	`
-	rows, err := h.DB.Query(query, model.Model, model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, request.Query, request.Query+"%", request.PageSize, request.Page)
+	rows, err := h.DB.Query(query, model.Model, model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, q, q+"%", pageSize, page)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -268,8 +276,7 @@ func (h *handler) GetPartByVinDetails(c *gin.Context) {
 	}
 
 	defer rows.Close()
-	c.JSON(http.StatusOK, parts)
-
+	return parts
 }
 
 func (h *handler) GetPartByVin(c *gin.Context) {
@@ -283,6 +290,13 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 		log.Panic(err)
 	}
 	model := h.searchByVin(c)
+	parts := h.getPartByVinQuery(model, request.Query, request.PageSize, request.Page)
+	c.JSON(http.StatusOK, parts)
+
+}
+
+func (h *handler) getPartByVinQuery(model BaseModel, q string, page, pageSize int) []Part {
+
 	year, _ := strconv.Atoi(model.Year)
 	query := `
 	select distinct a.legacyArticleId, o.number, a.genericArticleDescription
@@ -294,7 +308,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	where match(manuName) against(?)
 	limit ? offset ?
 	`
-	rows, err := h.DB.Query(query, "+"+model.Model, year, year, year, year, request.Query+"*", model.Make, request.PageSize, request.Page)
+	rows, err := h.DB.Query(query, "+"+model.Model, year, year, year, year, q+"*", model.Make, pageSize, page)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -312,8 +326,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	}
 
 	defer rows.Close()
-	c.JSON(http.StatusOK, parts)
-
+	return parts
 }
 
 type VehicleResponse struct {
@@ -414,4 +427,62 @@ type EuropeVehicle struct {
 		} `json:"Vehicle specification"`
 	} `json:"data"`
 	Status string `json:"status"`
+}
+
+func (h *handler) DownloadAllVinPartCSV(c *gin.Context) {
+	model := h.searchByVin(c)
+	parts := h.getAllPartByVinQuery(model)
+	c.Writer.Header().Set("Content-Type", "text/csv")
+	c.Writer.Header().Set("Content-Disposition", "attachment;filename=example.csv")
+
+	writer := csv.NewWriter(c.Writer)
+	defer writer.Flush()
+
+	if err := writer.Write([]string{"legacyArticleId", "number", "type"}); err != nil {
+		c.String(http.StatusInternalServerError, "Error writing CSV header")
+		return
+	}
+
+	for _, item := range parts {
+		row := []string{strconv.Itoa(*item.Id), item.OemNumber, *item.Type}
+		if err := writer.Write(row); err != nil {
+			c.String(http.StatusInternalServerError, "Error writing CSV data")
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, parts)
+}
+
+func (h *handler) getAllPartByVinQuery(model BaseModel) []Part {
+
+	year, _ := strconv.Atoi(model.Year)
+	query := `
+	select distinct a.legacyArticleId, o.number, a.genericArticleDescription
+	from manufacturers m 
+	join modelseries s on  m.manuId=s.manuId and match(modelname) against (?) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
+	join article_car t on vehicleModelSeriesId = s.modelId 
+	join articles a on a.legacyArticleId = t.legacyArticleId 
+	join oem_number o on o.articleId = a.legacyArticleId
+	where match(manuName) against(?)
+	`
+	rows, err := h.DB.Query(query, "+"+model.Model, year, year, year, year, model.Make)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	var parts []Part
+	for rows.Next() {
+
+		var part Part
+		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		parts = append(parts, part)
+	}
+
+	defer rows.Close()
+	return parts
 }

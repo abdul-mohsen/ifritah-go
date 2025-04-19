@@ -301,14 +301,14 @@ func (h *handler) getPartByVinQuery(model BaseModel, q string, page, pageSize in
 	query := `
 	select distinct a.legacyArticleId, o.number, a.genericArticleDescription
 	from manufacturers m 
-	join modelseries s on  m.manuId=s.manuId and match(modelname) against (? in boolean mode) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
+	join modelseries s on  m.manuId=s.manuId and match(modelname) against (? in boolean mode) 
 	join article_car t on vehicleModelSeriesId = s.modelId 
+	join oem_number o on o.articleId = t.legacyArticleId and match(o.number) against(? in boolean mode)
 	join articles a on a.legacyArticleId = t.legacyArticleId 
-	join oem_number o on o.articleId = a.legacyArticleId and match(o.number) against(? in boolean mode)
 	where match(manuName) against(? in boolean mode)
 	limit ? offset ?
 	`
-	rows, err := h.DB.Query(query, "+"+model.Model, year, year, year, year, q+"*", "*"+model.Make+"*", pageSize, page)
+	rows, err := h.DB.Query(query, "+"+model.Model, q+"*", "*"+model.Make+"*", pageSize, page)
 	fmt.Println(query, "+"+model.Model, year, year, year, year, q+"*", model.Make, pageSize, page)
 	if err != nil {
 		log.Panic(err)

@@ -295,7 +295,7 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 
 }
 
-func (h *handler) getPartByVinQuery(model BaseModel, q string, pageSize,  page, int) []Part {
+func (h *handler) getPartByVinQuery(model BaseModel, q string, pageSize, page int) []Part {
 
 	year, _ := strconv.Atoi(model.Year)
 	query := `

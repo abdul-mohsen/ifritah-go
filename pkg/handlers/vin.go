@@ -325,6 +325,7 @@ func (h *handler) getPartByVinQuery(model BaseModel, q string, page, pageSize in
 
 		parts = append(parts, part)
 	}
+	fmt.Println(len(parts))
 
 	defer rows.Close()
 	return parts

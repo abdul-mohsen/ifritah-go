@@ -166,73 +166,34 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 	return model
 
 }
-
-func getYear(c string) string {
-	switch c[9] {
-	case '1':
-		return "2001"
-	case '2':
-		return "2002"
-	case '3':
-		return "2003"
-	case '4':
-		return "2004"
-	case '5':
-		return "2005"
-	case '6':
-		return "2006"
-	case '7':
-		return "2007"
-	case '8':
-		return "2008"
-	case '9':
-		return "2009"
-	case 'A':
-		return "2010"
-	case 'B':
-		return "2011"
-	case 'C':
-		return "2012"
-	case 'D':
-		return "2013"
-	case 'E':
-		return "2014"
-	case 'F':
-		return "2015"
-	case 'G':
-		return "2016"
-	case 'H':
-		return "2017"
-	case 'J':
-		return "2018"
-	case 'K':
-		return "2019"
-	case 'L':
-		return "2020"
-	case 'M':
-		return "2021"
-	case 'N':
-		return "2022"
-	case 'P':
-		return "2023"
-	case 'R':
-		return "2024"
-	case 'S':
-		return "2025"
-	case 'T':
-		return "2026"
-	case 'V':
-		return "2027"
-	case 'W':
-		return "2028"
-	case 'X':
-		return "2029"
-	case 'Y':
-		return "2030"
-	default:
-		return "error"
-		// ch:eck how to handle this case
+func getYear(vin string) string {
+	yearMap := map[byte]string{
+		'A': "2010", 'B': "2011", 'C': "2012", 'D': "2013", 'E': "2014",
+		'F': "2015", 'G': "2016", 'H': "2017", 'J': "2018", 'K': "2019",
+		'L': "2020", 'M': "2021", 'N': "2022", 'P': "2023", 'R': "2024",
+		'S': "2025", 'T': "2026", 'V': "2027", 'W': "2028",
+		'X': "2029", 'Y': "2030", '1': "2001", '2': "2002", '3': "2003",
+		'4': "2004", '5': "2005", '6': "2006", '7': "2007", '8': "2008",
+		'9': "2009",
 	}
+
+	if year, exists := yearMap[vin[9]]; exists {
+		return year
+	}
+	return "" // Unknown yearr
+}
+
+// decodeEngineType is a placeholder function to decode engine type from VDS.
+func decodeEngineType(vds string) string {
+	// This is a simplified example. You would need a real mapping for engine types.
+	if vds[0] == '1' {
+		return "Gasoline"
+	} else if vds[0] == '2' {
+		return "Diesel"
+	} else if vds[0] == '3' {
+		return "Electric"
+	}
+	return "Unknown"
 }
 
 func getBody(url string) ([]byte, error) {

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"slices"
@@ -58,5 +59,37 @@ func (h *handler) AddQuentity(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+
+}
+
+func (h *handler) GetAllProducts(c *gin.Context) {
+	user := GetSessionInfo(c)
+	query := `
+	select  p.article_id, p.price, p.quantity
+	from user
+	join store s on s.company_id = user.company_id
+	join product p on p.store_id = s.id
+	where user.id = ?
+	`
+
+	rows, err := h.DB.Query(query, user.id)
+	if err != nil {
+		fmt.Println("Error in query", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	var products []Product
+	for rows.Next() {
+		var product Product
+		if rows.Scan(&product.Id, &product.Price, &product.Quantity); err != nil {
+			fmt.Println("Error in query", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+	}
+	defer rows.Close()
+
+	c.JSON(http.StatusOK, products)
 
 }

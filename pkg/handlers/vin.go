@@ -168,66 +168,66 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 }
 
 func getYear(c string) string {
-	switch c {
-	case "1":
+	switch c[9] {
+	case '1':
 		return "2001"
-	case "2":
+	case '2':
 		return "2002"
-	case "3":
+	case '3':
 		return "2003"
-	case "4":
+	case '4':
 		return "2004"
-	case "5":
+	case '5':
 		return "2005"
-	case "6":
+	case '6':
 		return "2006"
-	case "7":
+	case '7':
 		return "2007"
-	case "8":
+	case '8':
 		return "2008"
-	case "9":
+	case '9':
 		return "2009"
-	case "A":
+	case 'A':
 		return "2010"
-	case "B":
+	case 'B':
 		return "2011"
-	case "C":
+	case 'C':
 		return "2012"
-	case "D":
+	case 'D':
 		return "2013"
-	case "E":
+	case 'E':
 		return "2014"
-	case "F":
+	case 'F':
 		return "2015"
-	case "G":
+	case 'G':
 		return "2016"
-	case "H":
+	case 'H':
 		return "2017"
-	case "J":
+	case 'J':
 		return "2018"
-	case "K":
+	case 'K':
 		return "2019"
-	case "L":
+	case 'L':
 		return "2020"
-	case "M":
+	case 'M':
 		return "2021"
-	case "N":
+	case 'N':
 		return "2022"
-	case "P":
+	case 'P':
 		return "2023"
-	case "R":
+	case 'R':
 		return "2024"
-	case "S":
+	case 'S':
 		return "2025"
-	case "T":
+	case 'T':
 		return "2026"
-	case "V":
+	case 'V':
 		return "2027"
-	case "W":
+	case 'W':
 		return "2028"
-	case "X":
+	case 'X':
 		return "2029"
-	case "Y":
+	case 'Y':
 		return "2030"
 	default:
 		return "error"

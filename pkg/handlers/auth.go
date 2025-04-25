@@ -49,8 +49,8 @@ type JWTConfig struct {
 var JWTSettings JWTConfig
 
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
 }
 
 type Claims struct {
@@ -136,7 +136,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	// Get the JWT token from the Authorization header
 	fullTokenString := c.GetHeader("Authorization")
 	split := strings.Split(fullTokenString, "Bearer ")
-	if len(split) < 2 {
+	if len(split) <= 2 {
 		c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("no access token found"))
 	}
 

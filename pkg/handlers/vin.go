@@ -131,6 +131,8 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 	body := h.searchByVinRaw(c)
 
 	var vin string = strings.ToUpper(c.Param("vin"))
+
+	fmt.Println(getYear(vin))
 	var response VehicleResponse
 
 	if err := json.Unmarshal(body, &response); err != nil {

@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/text/cases"
 )
 
 func (h *handler) SearchByVin(c *gin.Context) {

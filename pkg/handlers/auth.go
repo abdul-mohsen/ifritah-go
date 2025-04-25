@@ -136,7 +136,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	// Get the JWT token from the Authorization header
 	fullTokenString := c.GetHeader("Authorization")
 	split := strings.Split(fullTokenString, "Bearer ")
-	if len(split) <= 2 {
+	if len(split) != 2 {
 		c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("no access token found"))
 	}
 
@@ -145,7 +145,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	// Define the secret key used to sign the token
 	secretKey := []byte(JWTSettings.JWTSecertKey)
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{},
-		func(token *jwt.Token) (interface{}, error) {
+		func(token *jwt.Token) (any, error) {
 			// Verify the signing method
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])

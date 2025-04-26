@@ -87,6 +87,8 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
+
+		products = append(products, product)
 	}
 	defer rows.Close()
 

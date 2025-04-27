@@ -41,7 +41,7 @@ func (h *handler) GetPart(c *gin.Context) {
 
 	request := PartByType{
 		Page:     0,
-		PageSize: 10,
+		PageSize: 1000,
 	}
 
 	if err := c.BindJSON(&request); err != nil {

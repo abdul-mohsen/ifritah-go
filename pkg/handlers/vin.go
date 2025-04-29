@@ -561,5 +561,5 @@ func (h *handler) getAllPartByVinQuery(model BaseModel) []Part {
 }
 
 func withQute(s string) string {
-	return '"' + s + '"'
+	return "\"" + s + "\""
 }

@@ -381,7 +381,8 @@ func (h *handler) getPartByVinQuery(model BaseModel, q string, pageSize, page in
 	where match(manuName) against(? in boolean mode)
 	limit ? offset ?
 	`
-	fmt.Println(query)
+	fmt.Println(withQute(q))
+	fmt.Println(withQute(q) + "*")
 	rows, err := h.DB.Query(query, "+"+withQute(model.Model), year, year, year, year, withQute(q)+"*", "*"+withQute(model.Make)+"*", pageSize, page)
 	if err != nil {
 		log.Panic(err)

@@ -34,22 +34,14 @@ func main() {
 
 	// Configure CORS
 	router.Use(cors.New(cors.Config{
-		AllowAllOrigins: true,                               // Allow all origins (adjust as needed)
-		AllowMethods:    []string{"GET", "POST", "OPTIONS"}, // Allow specific methods
+		AllowAllOrigins: true,                                                // Allow all origins (adjust as needed)
+		AllowMethods:    []string{"GET", "POST", "OPTIONS", "DELETE", "PUT"}, // Allow specific methods
 		AllowHeaders:    []string{"Content-Type", "Authorization"},
 		ExposeHeaders:   []string{"Content-Length"},
 		MaxAge:          12 * 3600, // Cache preflight response for 12 hours
 	}))
 
-	// Per route middleware, you can add as many as you desire.
-	// router.GET("/benchmark", MyBenchLogger(), benchEndpoint)
-
-	// Authorization group
-	// authorized := r.Group("/", AuthRequired())
-	// exactly the same as:
 	authorized := router.Group(baseUrl)
-	// per group middleware! in this case we use the custom created
-	// AuthRequired() middleware just in the "authorized" group.
 	authorized.Use(handlers.JWTVerifyMiddleware)
 	{
 

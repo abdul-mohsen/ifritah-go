@@ -331,7 +331,7 @@ func (h *handler) getPartDetailsByVinQuery(model BaseModel, q string, page, page
 	where manuName like ? and (? = NULL or o.number like ?)
 	limit ? offset ?
 	`
-	rows, err := h.DB.Query(query, withQute(model.Model), model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, q, q+"%", pageSize, page)
+	rows, err := h.DB.Query(query, model.Model, model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, q, q+"%", pageSize, page)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -374,16 +374,14 @@ func (h *handler) getPartByVinQuery(model BaseModel, q string, pageSize, page in
 	query := `
 	select distinct a.legacyArticleId, o.number, a.genericArticleDescription
 	from manufacturers m 
-	join modelseries s on  m.manuId=s.manuId and match(modelname) against (?) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
+	join modelseries s on  m.manuId=s.manuId and match(modelname) against (? in boolean mode) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join article_car t on vehicleModelSeriesId = s.modelId 
 	join oem_number o on o.articleId = t.legacyArticleId and match(o.number) against(? in boolean mode)
 	join articles a on a.legacyArticleId = t.legacyArticleId 
 	where match(manuName) against(? in boolean mode)
 	limit ? offset ?
 	`
-	fmt.Println(withQute(q))
-	fmt.Println(withQute(q) + "*")
-	rows, err := h.DB.Query(query, "+"+withQute(model.Model), year, year, year, year, "+"+q+"*", withQute(model.Make), pageSize, page)
+	rows, err := h.DB.Query(query, "+"+model.Model, year, year, year, year, q+"*", "*"+model.Make+"*", pageSize, page)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -541,7 +539,7 @@ func (h *handler) getAllPartByVinQuery(model BaseModel) []Part {
 	join oem_number o on o.articleId = a.legacyArticleId
 	where match(manuName) against(?)
 	`
-	rows, err := h.DB.Query(query, "+"+withQute(model.Model), year, year, year, year, withQute(model.Make))
+	rows, err := h.DB.Query(query, "+"+model.Model, year, year, year, year, model.Make)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -560,8 +558,4 @@ func (h *handler) getAllPartByVinQuery(model BaseModel) []Part {
 
 	defer rows.Close()
 	return parts
-}
-
-func withQute(s string) string {
-	return fmt.Sprintf("\"%s\"", s)
 }

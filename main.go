@@ -34,12 +34,10 @@ func main() {
 
 	// Configure CORS
 	router.Use(cors.New(cors.Config{
-		AllowAllOrigins: true,                                                // Allow all origins (adjust as needed)
-		AllowMethods:    []string{"GET", "POST", "OPTIONS", "DELETE", "PUT"}, // Allow specific methods
-		AllowHeaders:    []string{"Content-Type", "Authorization"},
-		ExposeHeaders:   []string{"Content-Length"},
-		MaxAge:          12 * 3600,     // Cache preflight response for 12 hours
-		AllowOrigins:    []string{"*"}, // Adjust to your frontend URL
+		AllowMethods:  []string{"GET", "POST", "DELETE", "PUT"}, // Allow specific methods
+		AllowHeaders:  []string{"Content-Type", "Authorization"},
+		ExposeHeaders: []string{"Content-Length"},
+		MaxAge:        12 * 3600, // Cache preflight response for 12 hours
 	}))
 
 	authorized := router.Group(baseUrl)

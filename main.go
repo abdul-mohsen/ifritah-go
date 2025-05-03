@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-contrib/cache"
 	"github.com/gin-contrib/cache/persistence"
-	"github.com/gin-contrib/cors"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -31,14 +30,6 @@ func main() {
 	store := persistence.NewInMemoryStore(time.Second)
 	// Recovery middleware recovers from any panics and writes a 500 if there was one.
 	router.Use(gin.Recovery())
-
-	// Configure CORS
-	router.Use(cors.New(cors.Config{
-		AllowMethods:  []string{"GET", "POST", "DELETE", "PUT"}, // Allow specific methods
-		AllowHeaders:  []string{"Content-Type", "Authorization"},
-		ExposeHeaders: []string{"Content-Length"},
-		MaxAge:        12 * 3600, // Cache preflight response for 12 hours
-	}))
 
 	authorized := router.Group(baseUrl)
 	authorized.Use(handlers.JWTVerifyMiddleware)

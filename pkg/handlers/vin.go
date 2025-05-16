@@ -58,7 +58,7 @@ func (h *handler) GetCarsByVin(c *gin.Context) {
 	query := `
 	select distinct linkageTargetId, vehicleModelSeriesName, m.manuName, linkageTargetType 
 	from manufacturers m 
-	join modelseries s on manuName like ? and m.manuId=s.manuId and modelname like ? and (? = '' or end_year is Null or end_year >= ?) and (? = '' or start_year is Null or start_year<= ?) 
+	join modelseries s on manuName like ? and m.manuId=s.manuId and model_name like ? and (? = '' or end_year is Null or end_year >= ?) and (? = '' or start_year is Null or start_year<= ?) 
 	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
 	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00")
 
@@ -324,7 +324,7 @@ func (h *handler) getPartDetailsByVinQuery(model BaseModel, q string, page, page
 	query := `
 	select distinct a.legacyArticleId, o.number, a.genericArticleDescription, al.url as link, p.url 
 	from manufacturers m 
-	join modelseries s on  m.manuId=s.manuId and match(modelname) against(?) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
+	join modelseries s on  m.manuId=s.manuId and match(model_name) against(?) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join article_car t on vehicleModelSeriesId = s.modelId 
 	join articles a on a.legacyArticleId = t.legacyArticleId 
 	left join oem_number o on o.articleId = a.legacyArticleId 
@@ -374,7 +374,7 @@ func (h *handler) getPartByVinQuery(model BaseModel, q string, pageSize, page in
 	query := `
 	select distinct a.legacyArticleId, o.number, a.genericArticleDescription
 	from manufacturers m 
-	join modelseries s on  m.manuId=s.manuId and match(modelname) against (? in boolean mode) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
+	join modelseries s on  m.manuId=s.manuId and match(model_name) against (? in boolean mode) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join article_car t on vehicleModelSeriesId = s.modelId 
 	join oem_number o on o.articleId = t.legacyArticleId and match(o.number) against(? in boolean mode)
 	join articles a on a.legacyArticleId = t.legacyArticleId 
@@ -533,7 +533,7 @@ func (h *handler) getAllPartByVinQuery(model BaseModel) []Part {
 	query := `
 	select distinct a.legacyArticleId, o.number, a.genericArticleDescription
 	from manufacturers m 
-	join modelseries s on  m.manuId=s.manuId and match(modelname) against (?) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
+	join modelseries s on  m.manuId=s.manuId and match(model_name) against (?) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join article_car t on vehicleModelSeriesId = s.modelId 
 	join articles a on a.legacyArticleId = t.legacyArticleId 
 	join oem_number o on o.articleId = a.legacyArticleId

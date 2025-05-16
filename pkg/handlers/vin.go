@@ -143,7 +143,7 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 		model := BaseModel{
 			Vin:   *response.Data.Intro.VIN,
 			Make:  response.Data.Basic.Make,
-			Model: response.Data.Basic.Model,
+			Model: strings.ReplaceAll(response.Data.Basic.Model, "-", " "),
 			Year:  getYear(vin),
 		}
 

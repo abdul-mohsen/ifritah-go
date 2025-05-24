@@ -328,7 +328,7 @@ func (h *handler) getPartDetailsByVinQuery(model BaseModel, q string, page, page
 	join article_car t on vehicleModelSeriesId = s.modelId 
 	join articles a on a.legacyArticleId = t.legacyArticleId 
 	left join oem_number o on o.articleId = a.legacyArticleId 
-	where manuName like ? and (? = NULL or o.number like ?)
+	where manuName like ? and (? = NULL or o.clean_number like ?)
 	limit ? offset ?
 	`
 	rows, err := h.DB.Query(query, model.Model, model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, q, q+"%", pageSize, page)
@@ -376,7 +376,7 @@ func (h *handler) getPartByVinQuery(model BaseModel, q string, pageSize, page in
 	from manufacturers m 
 	join modelseries s on  m.manuId=s.manuId and match(model_name) against (? in boolean mode) and (? = '' or yearOfConstrTo is Null or yearOfConstrTo <= ?) and (? = '' or yearOfConstrFrom >= ?)
 	join article_car t on vehicleModelSeriesId = s.modelId 
-	join oem_number o on o.articleId = t.legacyArticleId and match(o.number) against(? in boolean mode)
+	join oem_number o on o.articleId = t.legacyArticleId and match(o.clean_number) against(? in boolean mode)
 	join articles a on a.legacyArticleId = t.legacyArticleId 
 	where match(manuName) against(? in boolean mode)
 	limit ? offset ?

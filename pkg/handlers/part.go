@@ -67,7 +67,7 @@ func (h *handler) GetPart(c *gin.Context) {
 	for rows.Next() {
 
 		var part Part
-		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type, &part.Link, &part.Url)
+		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type)
 		if err != nil {
 			log.Panic(err)
 		}

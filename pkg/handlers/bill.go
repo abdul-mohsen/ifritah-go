@@ -101,22 +101,29 @@ func (h *handler) getBaseBills(page int, pageSize int) []BillBase {
 }
 
 type AddBillRequest struct {
-	StoreId         int       `json:"store_id" binding:"required"`
-	State           int8      `json:"state"`
-	PaymentDueDate  *string   `json:"payment_due_date" `
-	PaymentDate     *string   `json:"payment_date" `
-	Discount        string    `json:"discount" binding:"required"`
-	PaidAmount      string    `json:"paidAmount" `
-	MaintenanceCost string    `json:"maintenance_cost" binding:"required"`
-	PaymentMethod   int8      `json:"payment_method"`
-	UserName        *string   `json:"user_name"`
-	UserPhoneNumber *string   `json:"user_phone_number"`
-	Note            *string   `json:"note"`
-	Products        []Product `json:"products" binding:"required,dive"`
+	StoreId         int             `json:"store_id" binding:"required"`
+	State           int8            `json:"state"`
+	PaymentDueDate  *string         `json:"payment_due_date" `
+	PaymentDate     *string         `json:"payment_date" `
+	Discount        string          `json:"discount" binding:"required"`
+	PaidAmount      string          `json:"paidAmount" `
+	MaintenanceCost string          `json:"maintenance_cost" binding:"required"`
+	PaymentMethod   int8            `json:"payment_method"`
+	UserName        *string         `json:"user_name"`
+	UserPhoneNumber *string         `json:"user_phone_number"`
+	Note            *string         `json:"note"`
+	Products        []Product       `json:"products" binding:"required,dive"`
+	ManualProducts  []ManualProduct `json:"manual_products" binding:"required,dive"`
 }
 
 type Product struct {
 	Id       int    `json:"id" binding:"required"`
+	Price    string `json:"price" binding:"required"`
+	Quantity int64  `json:"quantity" binding:"required"`
+}
+
+type ManualProduct struct {
+	PartName string `json:"part_name" binding:"required"`
 	Price    string `json:"price" binding:"required"`
 	Quantity int64  `json:"quantity" binding:"required"`
 }
@@ -163,23 +170,27 @@ func (h *handler) AddBill(c *gin.Context) {
 
 	subTotal := zeroBigFloat()
 	for _, product := range request.Products {
-		price, success := stringToBigFloat(product.Price)
-		if !success || product.Quantity <= 0 {
-			c.Status(http.StatusBadRequest)
-			log.Panic("invalid product")
-			return
+		if _subTotal, err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		} else {
+			subTotal = _subTotal
 		}
-		quantity := big.NewFloat(float64(product.Quantity))
-		cost := new(big.Float).Mul(price, quantity)
-		subTotal = new(big.Float).Add(cost, subTotal)
 	}
+
+	for _, product := range request.ManualProducts {
+		if _subTotal, err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		} else {
+			subTotal = _subTotal
+		}
+	}
+
 	totalWithOutVat := new(big.Float).Sub(new(big.Float).Add(subTotal, maintenanceCost), discount)
 	vatTotal := new(big.Float).Mul(totalWithOutVat, big.NewFloat(.15))
 	total := new(big.Float).Add(totalWithOutVat, vatTotal)
 
 	if paidAmount.Cmp(total) == 1 {
-		c.Status(http.StatusBadRequest)
-		log.Panic("invalid paid ammount")
+		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("invalid paid ammount"))
 	}
 
 	squenceNumber := h.getNextSquenceNumber(userSession.id)
@@ -202,9 +213,20 @@ func (h *handler) AddBill(c *gin.Context) {
 	}
 
 	h.addProductToBill(request.Products, id)
+	h.addManualProductToBill(request.ManualProducts, id)
 
 	c.Status(http.StatusCreated)
 
+}
+
+func CalSubtotal(subTotal *big.Float, price string, quantity int) (*big.Float, error) {
+	_price, success := stringToBigFloat(price)
+	if !success || quantity <= 0 {
+		return nil, fmt.Errorf("invalid product")
+	}
+	_quantity := big.NewFloat(float64(quantity))
+	cost := new(big.Float).Mul(_price, _quantity)
+	return new(big.Float).Add(cost, subTotal), nil
 }
 
 func (h *handler) addProductToBill(products []Product, billId int64) {
@@ -212,6 +234,14 @@ func (h *handler) addProductToBill(products []Product, billId int64) {
 	query := `insert into bill_product (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
 		h.DB.Exec(query, product.Id, product.Price, product.Quantity, billId)
+	}
+}
+
+func (h *handler) addManualProductToBill(products []ManualProduct, billId int64) {
+
+	query := `insert into bill_manual_product (product_name, price, quantity, bill_id) values (?, ?, ?, ?)`
+	for _, product := range products {
+		h.DB.Exec(query, product.PartName, product.Price, product.Quantity, billId)
 	}
 }
 

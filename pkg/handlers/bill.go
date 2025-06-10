@@ -243,7 +243,7 @@ func (h *handler) addProductToBill(products []Product, billId int64) error {
 
 func (h *handler) addManualProductToBill(products []ManualProduct, billId int64) error {
 
-	query := `insert into bill_manual_product (product_name, price, quantity, bill_id) values (?, ?, ?, ?)`
+	query := `insert into bill_manual_product (part_name, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
 		_, err := h.DB.Exec(query, product.PartName, product.Price, product.Quantity, billId)
 		return err

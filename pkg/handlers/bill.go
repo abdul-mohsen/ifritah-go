@@ -175,6 +175,8 @@ func (h *handler) AddBill(c *gin.Context) {
 		}
 	}
 
+	log.Println(request)
+	log.Println(request.ManualProducts)
 	for _, product := range request.ManualProducts {
 		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)

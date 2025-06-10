@@ -175,8 +175,6 @@ func (h *handler) AddBill(c *gin.Context) {
 		}
 	}
 
-	log.Println(request)
-	log.Println(request.ManualProducts)
 	for _, product := range request.ManualProducts {
 		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)
@@ -210,8 +208,12 @@ func (h *handler) AddBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	h.addProductToBill(request.Products, id)
-	h.addManualProductToBill(request.ManualProducts, id)
+	if err := h.addProductToBill(request.Products, id); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+	}
+	if err := h.addManualProductToBill(request.ManualProducts, id); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+	}
 
 	c.Status(http.StatusCreated)
 
@@ -228,20 +230,26 @@ func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
 	return nil
 }
 
-func (h *handler) addProductToBill(products []Product, billId int64) {
+func (h *handler) addProductToBill(products []Product, billId int64) error {
 
 	query := `insert into bill_product (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
-		h.DB.Exec(query, product.Id, product.Price, product.Quantity, billId)
+		_, err := h.DB.Exec(query, product.Id, product.Price, product.Quantity, billId)
+		return err
 	}
+
+	return nil
 }
 
-func (h *handler) addManualProductToBill(products []ManualProduct, billId int64) {
+func (h *handler) addManualProductToBill(products []ManualProduct, billId int64) error {
 
 	query := `insert into bill_manual_product (product_name, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
-		h.DB.Exec(query, product.PartName, product.Price, product.Quantity, billId)
+		_, err := h.DB.Exec(query, product.PartName, product.Price, product.Quantity, billId)
+		return err
 	}
+
+	return nil
 }
 
 func (h *handler) getNextSquenceNumber(id int64) int {

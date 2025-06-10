@@ -170,18 +170,14 @@ func (h *handler) AddBill(c *gin.Context) {
 
 	subTotal := zeroBigFloat()
 	for _, product := range request.Products {
-		if _subTotal, err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
+		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)
-		} else {
-			subTotal = _subTotal
 		}
 	}
 
 	for _, product := range request.ManualProducts {
-		if _subTotal, err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
+		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)
-		} else {
-			subTotal = _subTotal
 		}
 	}
 
@@ -219,14 +215,15 @@ func (h *handler) AddBill(c *gin.Context) {
 
 }
 
-func CalSubtotal(subTotal *big.Float, price string, quantity int) (*big.Float, error) {
+func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
 	_price, success := stringToBigFloat(price)
 	if !success || quantity <= 0 {
-		return nil, fmt.Errorf("invalid product")
+		return fmt.Errorf("invalid product")
 	}
 	_quantity := big.NewFloat(float64(quantity))
 	cost := new(big.Float).Mul(_price, _quantity)
-	return new(big.Float).Add(cost, subTotal), nil
+	subTotal = new(big.Float).Add(cost, subTotal)
+	return nil
 }
 
 func (h *handler) addProductToBill(products []Product, billId int64) {

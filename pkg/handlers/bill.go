@@ -174,6 +174,8 @@ func (h *handler) AddBill(c *gin.Context) {
 			c.AbortWithError(http.StatusBadRequest, err)
 		}
 	}
+	log.Printf("out of my calc func")
+	log.Printf(subTotal.Text('f', 10))
 
 	for _, product := range request.ManualProducts {
 		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
@@ -220,7 +222,6 @@ func (h *handler) AddBill(c *gin.Context) {
 }
 
 func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
-	log.Printf("in my calc func")
 	_price, success := stringToBigFloat(price)
 	if !success || quantity <= 0 {
 		return fmt.Errorf("invalid product")
@@ -228,6 +229,7 @@ func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
 	_quantity := big.NewFloat(float64(quantity))
 	cost := new(big.Float).Mul(_price, _quantity)
 	subTotal = new(big.Float).Add(cost, subTotal)
+	log.Printf("in my calc func")
 	log.Printf(subTotal.Text('f', 10))
 	return nil
 }

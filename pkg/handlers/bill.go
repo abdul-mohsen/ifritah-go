@@ -220,6 +220,7 @@ func (h *handler) AddBill(c *gin.Context) {
 }
 
 func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
+	log.Printf("in my calc func")
 	_price, success := stringToBigFloat(price)
 	if !success || quantity <= 0 {
 		return fmt.Errorf("invalid product")

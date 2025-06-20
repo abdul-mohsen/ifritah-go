@@ -227,6 +227,7 @@ func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
 	_quantity := big.NewFloat(float64(quantity))
 	cost := new(big.Float).Mul(_price, _quantity)
 	subTotal = new(big.Float).Add(cost, subTotal)
+	log.Printf(subTotal.Text('f', 10))
 	return nil
 }
 

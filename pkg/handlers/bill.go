@@ -305,8 +305,8 @@ type Bill struct {
 func (h *handler) GetBillDetail(c *gin.Context) {
 
 	// userSession := GetSessionInfo(c) // to allow users to use this feature
-	//
-	// var id string = c.Param("id")
+
+	var id string = c.Param("id")
 
 	query := `
         SELECT 
@@ -361,7 +361,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 	var bill Bill
 
-	if err := h.DB.QueryRow(query, userSession.id, id).Scan(&bill.EffectiveDate,
+	if err := h.DB.QueryRow(query, id).Scan(&bill.EffectiveDate,
 		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
 		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.Products, &bill.ManualProducts); err != nil {
 		c.Status(http.StatusBadRequest)

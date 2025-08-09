@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -282,22 +283,23 @@ type ProductDetails struct {
 }
 
 type Bill struct {
-	Id              int              `json:"id"`
-	EffectiveDate   sql.NullTime     `json:"effective_date"`
-	PaymentDueDate  *sql.NullTime    `json:"payment_due_date"`
-	State           int              `json:"state"`
-	SubTotal        float64          `json:"subtotal"`
-	Discount        float64          `json:"discount"`
-	Vat             float64          `json:"vat"`
-	SequenceNumber  int              `json:"sequence_number"`
-	Type            bool             `json:"type"`
-	StoreId         int              `json:"store_id"`
-	MerchantId      int              `json:"merchant_id"`
-	MaintenanceCost string           `json:"maintenance_cost"`
-	Note            *string          `json:"note"`
-	UserName        *string          `json:"user_name"`
-	UserPhoneNumber *string          `json:"user_phone_number"`
-	Products        []ProductDetails `json:"products"`
+	Id              int             `json:"id"`
+	EffectiveDate   sql.NullTime    `json:"effective_date"`
+	PaymentDueDate  *sql.NullTime   `json:"payment_due_date"`
+	State           int             `json:"state"`
+	SubTotal        float64         `json:"subtotal"`
+	Discount        float64         `json:"discount"`
+	Vat             float64         `json:"vat"`
+	SequenceNumber  int             `json:"sequence_number"`
+	Type            bool            `json:"type"`
+	StoreId         int             `json:"store_id"`
+	MerchantId      int             `json:"merchant_id"`
+	MaintenanceCost string          `json:"maintenance_cost"`
+	Note            *string         `json:"note"`
+	UserName        *string         `json:"user_name"`
+	UserPhoneNumber *string         `json:"user_phone_number"`
+	Products        json.RawMessage `json:"products"`
+	ManualProducts  json.RawMessage `json:"manual_products"`
 }
 
 func (h *handler) GetBillDetail(c *gin.Context) {
@@ -306,23 +308,57 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 	var id string = c.Param("id")
 
-	query := `select effective_date, payment_due_date, b.state, sub_total, discount, vat, store_id, sequence_number, merchant_id, maintenance_cost,
-	note, b.userName, user_phone_number from bill as b
-	join store on store.id = b.store_id 
-	join company on company.id = store.company_id
-	join user on user.id= ? and company.id=user.company_id
-	where b.id = ? limit 1`
+	query := `
+        SELECT 
+			effective_date,
+			payment_due_date,
+			b.state as state,
+			sub_total,
+			discount,
+			vat,
+			store_id,
+			sequence_number,
+			merchant_id,
+			maintenance_cost,
+			note,
+			b.userName as userName,
+			user_phone_number
+            JSON_ARRAYAGG(
+                JSON_OBJECT(
+                    'product_id', p.product_id,
+                    'price', p.price,
+                    'quantity', p.quantity,
+                )
+            ) AS products,
+            JSON_ARRAYAGG(
+                JSON_OBJECT(
+                    'part_name', m.part_name,
+                    'price', m.price,
+                    'quantity', m.quantity,
+                )
+            ) AS manual_products
+        FROM 
+            bill b
+		JOIN 
+			company on company.id = store.company_id
+		JOIN 
+			user on user.id= ? and company.id=user.company_id
+        LEFT JOIN 
+            bill_product p ON b.id = p.bill_id
+        LEFT JOIN 
+            bill_manual_product m ON b.id = m.bill_id
+        GROUP BY 
+            b.id;
+    `
 
 	var bill Bill
 
 	if err := h.DB.QueryRow(query, userSession.id, id).Scan(&bill.EffectiveDate,
 		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
-		&bill.Note, &bill.UserName, &bill.UserPhoneNumber); err != nil {
+		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, bill.Products, bill.ManualProducts); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}
-
-	bill.Products = h.getProducts(bill.Id)
 
 	c.JSON(http.StatusOK, bill)
 }

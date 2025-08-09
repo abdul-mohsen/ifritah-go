@@ -323,20 +323,24 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			note,
 			b.userName as userName,
 			user_phone_number,
-            JSON_ARRAYAGG(
-                JSON_OBJECT(
-                    'product_id', p.product_id,
-                    'price', p.price,
-                    'quantity', p.quantity
-                ),
-				JSON_ARRAY()
-            ) AS products,
-            JSON_ARRAYAGG(
-                JSON_OBJECT(
-                    'part_name', m.part_name,
-                    'price', m.price,
-                    'quantity', m.quantity
-                ),
+			COALESCE(
+				JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'product_id', p.product_id,
+						'price', p.price,
+						'quantity', p.quantity
+					)
+				), 
+				JSON_ARRAY()  -- Return an empty JSON array if null
+			) AS products,
+			COALESCE(
+				JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'part_name', m.part_name,
+						'price', m.price,
+						'quantity', m.quantity
+					),
+				), 
 				JSON_ARRAY()
             ) AS manual_products
         FROM 

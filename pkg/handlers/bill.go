@@ -324,29 +324,27 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			b.userName as userName,
 			user_phone_number,
 			COALESCE(
-				JSON_ARRAYAGG(
-					CASE 
-						WHEN p.product_id IS NOT NULL THEN JSON_OBJECT(
-							'product_id', p.product_id,
-							'price', p.price,
-							'quantity', p.quantity
-						)
-					END
-				), 
-				JSON_ARRAY()  -- Return an empty JSON array if null
-			) AS products,
+				(SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'product_id', p.product_id,
+						'price', p.price,
+						'quantity', p.quantity
+					)
+				)
+				FROM bill_product p
+				WHERE p.bill_id = b.id), 
+				JSON_ARRAY()) AS products,
 			COALESCE(
-				JSON_ARRAYAGG(
-					CASE 
-						WHEN m.part_name IS NOT NULL THEN JSON_OBJECT(
-							'part_name', m.part_name,
-							'price', m.price,
-							'quantity', m.quantity
-						)
-					END
-				), 
-				JSON_ARRAY()  -- Return an empty JSON array if null
-			) AS manual_products
+				(SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'part_name', m.part_name,
+						'price', m.price,
+						'quantity', m.quantity
+					)
+				)
+				FROM bill_manual_product m
+				WHERE m.bill_id = b.id), 
+				JSON_ARRAY()) AS manual_products
         FROM 
             bill b
 		JOIN 
@@ -355,14 +353,8 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			company on company.id = store.company_id
 		JOIN 
 			user on user.id= ? and company.id=user.company_id
-        LEFT JOIN 
-            bill_product p ON b.id = p.bill_id
-        LEFT JOIN 
-            bill_manual_product m ON b.id = m.bill_id
 		WHERE
 			b.id = ?
-        GROUP BY 
-	    effective_date, payment_due_date, b.state, b.sub_total, discount, b.vat, b.store_id, sequence_number, merchant_id, maintenance_cost, note, b.userName, user_phone_number
 		LIMIT 1 ;
 	`
 

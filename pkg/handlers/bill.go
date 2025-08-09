@@ -311,7 +311,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 	query := `
         SELECT 
-			CONCAT('http://ifritah.com/bill', b.id) AS url,
+			CONCAT('https://ifritah.com/bill', b.id) AS url,
 			effective_date,
 			payment_due_date,
 			b.state as state,

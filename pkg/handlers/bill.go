@@ -322,7 +322,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			maintenance_cost,
 			note,
 			b.userName as userName,
-			user_phone_number
+			user_phone_number,
             JSON_ARRAYAGG(
                 JSON_OBJECT(
                     'product_id', p.product_id,

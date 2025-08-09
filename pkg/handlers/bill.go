@@ -313,9 +313,9 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			effective_date,
 			payment_due_date,
 			b.state as state,
-			sub_total,
-			discount,
-			vat,
+			b.sub_total,
+			b.discount,
+			b.vat,
 			b.store_id,
 			sequence_number,
 			merchant_id,
@@ -350,7 +350,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
         LEFT JOIN 
             bill_manual_product m ON b.id = m.bill_id
         GROUP BY 
-	    effective_date, payment_due_date, b.state, sub_total, discount, vat, b.store_id, sequence_number, merchant_id, maintenance_cost, note, b.userName, user_phone_number;
+	    effective_date, payment_due_date, b.state, b.sub_total, discount, b.vat, b.store_id, sequence_number, merchant_id, maintenance_cost, note, b.userName, user_phone_number;
     `
 
 	var bill Bill

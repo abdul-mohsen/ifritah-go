@@ -329,7 +329,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 						'product_id', p.product_id,
 						'price', p.price,
 						'quantity', p.quantity
-					)
+					),
 				), 
 				JSON_ARRAY()  -- Return an empty JSON array if null
 			) AS products,

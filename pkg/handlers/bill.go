@@ -304,9 +304,9 @@ type Bill struct {
 
 func (h *handler) GetBillDetail(c *gin.Context) {
 
-	userSession := GetSessionInfo(c)
-
-	var id string = c.Param("id")
+	// userSession := GetSessionInfo(c) // to allow users to use this feature
+	//
+	// var id string = c.Param("id")
 
 	query := `
         SELECT 

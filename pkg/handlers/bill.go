@@ -298,6 +298,7 @@ type Bill struct {
 	Note            *string         `json:"note"`
 	UserName        *string         `json:"user_name"`
 	UserPhoneNumber *string         `json:"user_phone_number"`
+	Url             *string         `json:"url"`
 	Products        json.RawMessage `json:"products"`
 	ManualProducts  json.RawMessage `json:"manual_products"`
 }
@@ -310,7 +311,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 	query := `
         SELECT 
-			CONCAT('http://ifritah.com/bill', b.id) AS bill_url,
+			CONCAT('http://ifritah.com/bill', b.id) AS url,
 			effective_date,
 			payment_due_date,
 			b.state as state,
@@ -361,7 +362,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 	var bill Bill
 
-	if err := h.DB.QueryRow(query, id).Scan(&bill.EffectiveDate,
+	if err := h.DB.QueryRow(query, id).Scan(&bill.Url, &bill.EffectiveDate,
 		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
 		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.Products, &bill.ManualProducts); err != nil {
 		c.Status(http.StatusBadRequest)

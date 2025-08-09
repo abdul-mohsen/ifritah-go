@@ -316,7 +316,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			sub_total,
 			discount,
 			vat,
-			store_id,
+			b.store_id,
 			sequence_number,
 			merchant_id,
 			maintenance_cost,
@@ -327,18 +327,20 @@ func (h *handler) GetBillDetail(c *gin.Context) {
                 JSON_OBJECT(
                     'product_id', p.product_id,
                     'price', p.price,
-                    'quantity', p.quantity,
+                    'quantity', p.quantity
                 )
             ) AS products,
             JSON_ARRAYAGG(
                 JSON_OBJECT(
                     'part_name', m.part_name,
                     'price', m.price,
-                    'quantity', m.quantity,
+                    'quantity', m.quantity
                 )
             ) AS manual_products
         FROM 
             bill b
+		JOIN 
+			store on store.id = b.store_id 
 		JOIN 
 			company on company.id = store.company_id
 		JOIN 
@@ -348,7 +350,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
         LEFT JOIN 
             bill_manual_product m ON b.id = m.bill_id
         GROUP BY 
-            b.id;
+	    effective_date, payment_due_date, b.state, sub_total, discount, vat, b.store_id, sequence_number, merchant_id, maintenance_cost, note, b.userName, user_phone_number;
     `
 
 	var bill Bill

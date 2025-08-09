@@ -349,6 +349,8 @@ func (h *handler) GetBillDetail(c *gin.Context) {
             bill_product p ON b.id = p.bill_id
         LEFT JOIN 
             bill_manual_product m ON b.id = m.bill_id
+		WHERE
+			b.id = ?
         GROUP BY 
 	    effective_date, payment_due_date, b.state, b.sub_total, discount, b.vat, b.store_id, sequence_number, merchant_id, maintenance_cost, note, b.userName, user_phone_number;
     `

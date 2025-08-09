@@ -4,11 +4,13 @@ import (
 	"ifritah/web-service-gin/pkg/db"
 	"ifritah/web-service-gin/pkg/handlers"
 
-	"github.com/gin-contrib/cache"
-	"github.com/gin-contrib/cache/persistence"
 	"log"
 	"os"
 	"time"
+
+	"github.com/gin-contrib/cache"
+	"github.com/gin-contrib/cache/persistence"
+	"github.com/gin-contrib/cors"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -29,6 +31,15 @@ func main() {
 	store := persistence.NewInMemoryStore(time.Second)
 	// Recovery middleware recovers from any panics and writes a 500 if there was one.
 	router.Use(gin.Recovery())
+
+	// Configure CORS
+	router.Use(cors.New(cors.Config{
+		AllowAllOrigins: true,                               // Allow all origins (adjust as needed)
+		AllowMethods:    []string{"GET", "POST", "OPTIONS"}, // Allow specific methods
+		AllowHeaders:    []string{"Content-Type", "Authorization"},
+		ExposeHeaders:   []string{"Content-Length"},
+		MaxAge:          12 * 3600, // Cache preflight response for 12 hours
+	}))
 
 	// Per route middleware, you can add as many as you desire.
 	// router.GET("/benchmark", MyBenchLogger(), benchEndpoint)

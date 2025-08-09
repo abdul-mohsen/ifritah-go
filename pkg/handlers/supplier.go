@@ -24,7 +24,6 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 	var id int
 	if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&id); err != nil {
 		log.Panic(err)
-
 	}
 
 	rows, err := h.DB.Query("SELECT * From supplier where company_id = ? and is_deleted = FALSE", id)

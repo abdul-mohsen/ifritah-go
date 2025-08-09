@@ -52,7 +52,6 @@ func main() {
 		authorized.GET("notification", h.GetNotificationAll)
 		authorized.POST("bill/all", h.GetBills)
 		authorized.POST("bill", h.AddBill)
-		authorized.GET("bill/:id", h.GetBillDetail)
 		authorized.DELETE("bill/:id", h.DeleteBillDetail)
 
 		authorized.POST("purchase_bill", h.AddPurchaseBill)
@@ -68,6 +67,7 @@ func main() {
 
 		// router.GET(baseUrl + ":id", h.GetCarPartDetail)
 	}
+	router.GET("bill/:id", h.GetBillDetail) // allow all user to get all bill details
 	router.POST(baseUrl+"register", h.Register)
 	router.POST(baseUrl+"login", h.Login)
 

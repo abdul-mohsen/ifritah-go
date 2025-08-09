@@ -352,8 +352,8 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			store on store.id = b.store_id 
 		JOIN 
 			company on company.id = store.company_id
-		JOIN 
-			user on user.id= ? and company.id=user.company_id
+		-- JOIN 
+		--	user on user.id= ? and company.id=user.company_id -- commented to allow all user to get this data
 		WHERE
 			b.id = ?
 		LIMIT 1 ;

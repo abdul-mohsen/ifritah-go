@@ -352,8 +352,9 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 		WHERE
 			b.id = ?
         GROUP BY 
-	    effective_date, payment_due_date, b.state, b.sub_total, discount, b.vat, b.store_id, sequence_number, merchant_id, maintenance_cost, note, b.userName, user_phone_number;
-    `
+	    effective_date, payment_due_date, b.state, b.sub_total, discount, b.vat, b.store_id, sequence_number, merchant_id, maintenance_cost, note, b.userName, user_phone_number
+		LIMIT 1 ;
+	`
 
 	var bill Bill
 

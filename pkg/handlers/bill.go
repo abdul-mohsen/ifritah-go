@@ -329,7 +329,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 						'product_id', p.product_id,
 						'price', p.price,
 						'quantity', p.quantity
-					),
+					)
 				), 
 				JSON_ARRAY()  -- Return an empty JSON array if null
 			) AS products,
@@ -339,10 +339,10 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 						'part_name', m.part_name,
 						'price', m.price,
 						'quantity', m.quantity
-					),
+					)
 				), 
 				JSON_ARRAY()
-            ) AS manual_products
+			) AS manual_products
         FROM 
             bill b
 		JOIN 

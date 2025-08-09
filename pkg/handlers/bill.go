@@ -330,8 +330,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 						'price', p.price,
 						'quantity', p.quantity
 					)
-				) FILTER (WHERE p.product_id IS NOT NULL),  -- Only aggregate non-null products
-				JSON_ARRAY()  -- Return an empty JSON array if null
+				) 
 			) AS products,
 			COALESCE(
 				JSON_ARRAYAGG(
@@ -340,8 +339,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 						'price', m.price,
 						'quantity', m.quantity
 					)
-				) FILTER (WHERE m.part_name IS NOT NULL),  -- Only aggregate non-null manual products
-				JSON_ARRAY()
+				) 
 			) AS manual_products
         FROM 
             bill b

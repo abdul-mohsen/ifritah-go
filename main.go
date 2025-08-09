@@ -67,9 +67,13 @@ func main() {
 
 		// router.GET(baseUrl + ":id", h.GetCarPartDetail)
 	}
-	router.GET("bill/:id", h.GetBillDetail) // allow all user to get all bill details
-	router.POST(baseUrl+"register", h.Register)
-	router.POST(baseUrl+"login", h.Login)
+
+	nonAuthGroup := router.Group(baseUrl)
+	{
+		nonAuthGroup.GET("bill/:id", h.GetBillDetail) // allow all user to get all bill details
+		nonAuthGroup.POST("register", h.Register)
+		nonAuthGroup.POST("login", h.Login)
+	}
 
 	router.Run("localhost:8080")
 	DB.Close()

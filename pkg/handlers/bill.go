@@ -328,9 +328,9 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			note,
 			b.userName as userName,
 			user_phone_number,
-			c.name as company_name,
-			c.vat_registration_number,
-			s.address_name,
+			company.name as company_name,
+			company.vat_registration_number,
+			store.address_name,
 			COALESCE(
 				(SELECT JSON_ARRAYAGG(
 					JSON_OBJECT(
@@ -356,9 +356,9 @@ func (h *handler) GetBillDetail(c *gin.Context) {
         FROM 
             bill b
 		JOIN 
-			store s on store.id = b.store_id 
+			store on store.id = b.store_id 
 		JOIN 
-			company c on company.id = store.company_id
+			company on company.id = store.company_id
 		-- JOIN 
 		--	user on user.id= ? and company.id=user.company_id -- commented to allow all user to get this data
 		WHERE

@@ -329,7 +329,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			b.userName as userName,
 			user_phone_number,
 			c.name as company_name,
-			c.vat_registration_numner,
+			c.vat_registration_number,
 			s.address_name,
 			COALESCE(
 				(SELECT JSON_ARRAYAGG(

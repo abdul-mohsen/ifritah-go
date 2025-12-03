@@ -23,7 +23,7 @@ type BillBase struct {
 	Vat            float64       `json:"vat"`
 	SequenceNumber int           `json:"sequence_number"`
 	Type           bool          `json:"type"`
-	CreditState    int           `json:"credit_state"`
+	CreditState    *int          `json:"credit_state"`
 }
 
 type BillRequstFilter struct {

@@ -307,6 +307,7 @@ type Bill struct {
 	Products        json.RawMessage `json:"products"`
 	ManualProducts  json.RawMessage `json:"manual_products"`
 	CreditState     *int            `json:"credit_state"`
+	CreditNote      *string         `json:"credit_note"`
 }
 
 func (h *handler) GetBillDetail(c *gin.Context) {
@@ -334,7 +335,8 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			company.name as company_name,
 			company.vat_registration_number,
 			store.address_name,
-			cn.state as credit_state
+			cn.state as credit_state,
+			cn.note as credit_note,
 			COALESCE(
 				(SELECT JSON_ARRAYAGG(
 					JSON_OBJECT(
@@ -376,7 +378,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 	if err := h.DB.QueryRow(query, id).Scan(&bill.Url, &bill.EffectiveDate,
 		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
-		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.CompanyName, &bill.VatRegistration, &bill.Address, &bill.CreditState, &bill.Products, &bill.ManualProducts); err != nil {
+		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.CompanyName, &bill.VatRegistration, &bill.Address, &bill.CreditState, &bill.CreditNote, &bill.Products, &bill.ManualProducts); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}

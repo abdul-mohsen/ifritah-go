@@ -306,6 +306,7 @@ type Bill struct {
 	Url             *string         `json:"url"`
 	Products        json.RawMessage `json:"products"`
 	ManualProducts  json.RawMessage `json:"manual_products"`
+	CreditState     *int            `json:"credit_state"`
 }
 
 func (h *handler) GetBillDetail(c *gin.Context) {
@@ -333,6 +334,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			company.name as company_name,
 			company.vat_registration_number,
 			store.address_name,
+			cn.state as credit_state
 			COALESCE(
 				(SELECT JSON_ARRAYAGG(
 					JSON_OBJECT(
@@ -361,6 +363,8 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			store on store.id = b.store_id 
 		JOIN 
 			company on company.id = store.company_id
+		LEFT JOIN
+			credit_note  cn on cn.bill_id = bill.id
 		-- JOIN 
 		--	user on user.id= ? and company.id=user.company_id -- commented to allow all user to get this data
 		WHERE
@@ -372,7 +376,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 	if err := h.DB.QueryRow(query, id).Scan(&bill.Url, &bill.EffectiveDate,
 		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
-		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.CompanyName, &bill.VatRegistration, &bill.Address, &bill.Products, &bill.ManualProducts); err != nil {
+		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.CompanyName, &bill.VatRegistration, &bill.Address, &bill.CreditState, &bill.Products, &bill.ManualProducts); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}

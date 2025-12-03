@@ -366,7 +366,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 		JOIN 
 			company on company.id = store.company_id
 		LEFT JOIN
-			credit_note  cn on cn.bill_id = bill.id
+			credit_note  cn on cn.bill_id = b.id
 		-- JOIN 
 		--	user on user.id= ? and company.id=user.company_id -- commented to allow all user to get this data
 		WHERE

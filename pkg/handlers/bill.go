@@ -329,7 +329,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			sequence_number,
 			merchant_id,
 			maintenance_cost,
-			bill.note,
+			b.note,
 			b.userName as userName,
 			user_phone_number,
 			company.name as company_name,

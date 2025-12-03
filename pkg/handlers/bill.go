@@ -23,6 +23,7 @@ type BillBase struct {
 	Vat            float64       `json:"vat"`
 	SequenceNumber int           `json:"sequence_number"`
 	Type           bool          `json:"type"`
+	CreditState    int           `json:"credit_state"`
 }
 
 type BillRequstFilter struct {
@@ -89,7 +90,7 @@ func (h *handler) getBaseBills(page int, pageSize int) []BillBase {
 	for rows.Next() {
 		var bill BillBase
 
-		if err := rows.Scan(&bill.Id, &bill.EffectiveDate, &bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.SequenceNumber, &bill.Type); err != nil {
+		if err := rows.Scan(&bill.Id, &bill.EffectiveDate, &bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.SequenceNumber, &bill.Type, &bill.CreditState); err != nil {
 			log.Panic(err)
 		}
 

@@ -264,17 +264,14 @@ func (h *handler) addManualProductToBill(products []ManualProduct, billId int64)
 func (h *handler) getNextSquenceNumber(id int64) int {
 
 	query := `
-	select max(sequence_number) from bill
+	select COALESCE(max(sequence_number), 1) from bill
 	join store on store.id = bill.store_id
 	join company on store.company_id = company.id
 	join user on user.company_id = company.id and user.id = ?
 	`
-	var maxSequenceNumber *int
+	var maxSequenceNumber int
 	if err := h.DB.QueryRow(query, id).Scan(&maxSequenceNumber); err != nil {
 		log.Panic(err)
-	}
-	if maxSequenceNumber == nil {
-		maxSequenceNumber = 1
 	}
 
 	return maxSequenceNumber + 1

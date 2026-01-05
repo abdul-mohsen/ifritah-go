@@ -83,7 +83,7 @@ func (h *handler) getBaseBills(page int, pageSize int) []BillBase {
 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type, 0 as credit_state from purchase_bill
 	) AS T ORDER BY effective_date DESC LIMIT ? OFFSET ?`
 
-	rows, err := h.DB.Query(query, pageSize, page)
+	rows, err := h.DB.Query(query, pageSize, page * pageSize)
 
 	if err != nil {
 		log.Panic(err)

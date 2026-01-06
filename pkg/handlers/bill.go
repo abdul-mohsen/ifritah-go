@@ -91,12 +91,12 @@ func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 		rows, err = h.DB.Query(query, pageSize, page * pageSize)
 	} else {
 		query := ` Select * from(
-			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, userName, user_phone_number, TRUE as bill_type, cn.state as credit_state from bill
+			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, cn.state as credit_state from bill
 			join credit_note  cn on cn.bill_id = bill.id
 			UNION
-			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, userName, user_phone_number, TRUE as bill_type, 0 as credit_state from bill
-		) AS T WHERE MATCH(userName, user_phone_number) AGAINST(? IN NATURAL LANGUAGE MODE) ORDER BY effective_date DESC LIMIT ? OFFSET ?`
-		rows, err = h.DB.Query(query , q, pageSize, page * pageSize)
+			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, 0 as credit_state from bill
+		) AS T WHERE user_phone_number like ?  ORDER BY effective_date DESC LIMIT ? OFFSET ?`
+		rows, err = h.DB.Query(query , "%"+ q + "%", pageSize, page * pageSize)
 	}
 
 	if err != nil {

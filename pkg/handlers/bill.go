@@ -32,6 +32,7 @@ type BillRequstFilter struct {
 	EndDate   *time.Time `json:"end_date"`
 	Page      int        `json:"page_number"`
 	PageSize  int        `json:"page_size"`
+	Query string `json:"query"`
 }
 
 func (h *handler) GetBills(c *gin.Context) {
@@ -47,6 +48,7 @@ func (h *handler) GetBills(c *gin.Context) {
 		StoreIds: storeIds,
 		Page:     0,
 		PageSize: 10,
+		Query: "",
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -72,18 +74,27 @@ func (h *handler) GetBills(c *gin.Context) {
 	c.JSON(http.StatusOK, bills)
 }
 
-func (h *handler) getBaseBills(page int, pageSize int) []BillBase {
+func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 
-	query := ` Select * from(
-	SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE as bill_type, cn.state as credit_state from bill 
-	join credit_note  cn on cn.bill_id = bill.id
-	UNION
-	SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE as bill_type, 0 as credit_state from bill 
-	UNION
-	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type, 0 as credit_state from purchase_bill
-	) AS T ORDER BY effective_date DESC LIMIT ? OFFSET ?`
-
-	rows, err := h.DB.Query(query, pageSize, page * pageSize)
+	if q == "" {
+		query := ` Select * from(
+			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE as bill_type, cn.state as credit_state from bill 
+			join credit_note  cn on cn.bill_id = bill.id
+			UNION
+			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE as bill_type, 0 as credit_state from bill 
+			UNION
+			SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type, 0 as credit_state from purchase_bill
+		) AS T ORDER BY effective_date DESC LIMIT ? OFFSET ?`
+		rows, err := h.DB.Query(pageSize, page * pageSize)
+	} else {
+		query := ` Select * from(
+			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE as bill_type, cn.state as credit_state from bill 
+			join credit_note  cn on cn.bill_id = bill.id
+			UNION
+			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE as bill_type, 0 as credit_state from bill 
+		) AS T WHERE MATCH(note, userName, user_phone_number) AGAINST(? IN NATURAL LANGUAGE MODE) ORDER BY effective_date DESC LIMIT ? OFFSET ? where`
+		rows, err := h.DB.Query(q, pageSize, page * pageSize)
+	}
 
 	if err != nil {
 		log.Panic(err)

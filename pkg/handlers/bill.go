@@ -90,7 +90,7 @@ func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 		) AS T ORDER BY effective_date DESC LIMIT ? OFFSET ?`
 		rows, err = h.DB.Query(query, pageSize, page * pageSize)
 	} else {
-		query := ` Select * from(
+		query := ` Select bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE as bill_type, credit_state  from(
 			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, cn.state as credit_state from bill
 			join credit_note  cn on cn.bill_id = bill.id
 			UNION

@@ -91,7 +91,7 @@ func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 		rows, err = h.DB.Query(query, pageSize, page * pageSize)
 	} else {
 		query := ` Select * from(
-			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, note, userName, user_phone_number, TRUE as bill_type, cn.state as credit_state from bill
+			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, bill.note as note, userName, user_phone_number, TRUE as bill_type, cn.state as credit_state from bill
 			join credit_note  cn on cn.bill_id = bill.id
 			UNION
 			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, note, userName, user_phone_number, TRUE as bill_type, 0 as credit_state from bill

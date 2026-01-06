@@ -70,7 +70,7 @@ func (h *handler) GetBills(c *gin.Context) {
 		}
 	}
 
-	bills := h.getBaseBills(request.Page, request.PageSize)
+	bills := h.getBaseBills(request.Query,request.Page, request.PageSize)
 	c.JSON(http.StatusOK, bills)
 }
 

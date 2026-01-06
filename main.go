@@ -50,6 +50,8 @@ func main() {
 		authorized.GET("vin/:vin", h.SearchByVin)
 		authorized.GET("car_part/:id", h.GetAllCachedVin)
 		authorized.GET("notification", h.GetNotificationAll)
+
+		// Bills
 		authorized.POST("bill/all", h.GetBills)
 		authorized.POST("bill", h.AddBill)
 		authorized.DELETE("bill/:id", h.DeleteBillDetail)

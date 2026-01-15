@@ -433,7 +433,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 	var id string = c.Param("id")
 
-	filename := filepath.Join("", "var", "www", "html", "downloads", id+".pdf")
+	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
 	// Check if the file exists
 	_, err := os.Stat(filename)
 	if err != nil {

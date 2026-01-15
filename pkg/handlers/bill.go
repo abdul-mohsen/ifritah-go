@@ -499,10 +499,10 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 		invoice := models.Invoice{
 			Title:             "فاتورة ضريبية مبسطة",
-			InvoiceNumber:     fmt.Sprint("INV%d", bill.SequenceNumber),
+			InvoiceNumber:     fmt.Sprintf("INV%d", bill.SequenceNumber),
 			StoreName:         bill.StoreName,
 			StoreAddress:      bill.Address,
-			Date:              bill.EffectiveDate.Time.Local().Format("2026-12-29 15:04:37"),
+			Date:              bill.EffectiveDate.Time.Local().Format("2006-12-29 15:04:37"),
 			VATRegistrationNo: bill.VatRegistration,
 			QRCodeData:        *bill.QRCode,
 			TotalDiscount:     0,
@@ -522,7 +522,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 				VATAmountColumn: "ضريبة القيمة المضافة",
 				TotalColumn:     "السعر شامل الضريبة",
 				TotalDiscount:   "إجمالي الخصم",
-				Footer:          ">>>>>>>>>>>>>> إغلاق الفاتورة 0010 <<<<<<<<<<<<<<<",
+				Footer:          fmt.Sprintf(">>>>>>>>>>>>>> إغلاق الفاتورة %d <<<<<<<<<<<<<<<", bill.SequenceNumber),
 			},
 			Language: "ar",
 			Products: products,

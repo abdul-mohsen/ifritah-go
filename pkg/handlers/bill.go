@@ -7,9 +7,13 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"time"
 
+	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/models"
+	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/pdf"
 	"github.com/gin-gonic/gin"
 )
 
@@ -32,7 +36,7 @@ type BillRequestFilter struct {
 	EndDate   *time.Time `json:"end_date"`
 	Page      int        `json:"page_number"`
 	PageSize  int        `json:"page_size"`
-	Query string `json:"query"`
+	Query     string     `json:"query"`
 }
 
 func (h *handler) GetBills(c *gin.Context) {
@@ -44,11 +48,11 @@ func (h *handler) GetBills(c *gin.Context) {
 		storeIds = append(storeIds, value.Id)
 	}
 
-	request := BillRequestFilter {
+	request := BillRequestFilter{
 		StoreIds: storeIds,
 		Page:     0,
 		PageSize: 10,
-		Query: "",
+		Query:    "",
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -88,7 +92,7 @@ func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 			UNION
 			SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type, 0 as credit_state from purchase_bill
 		) AS T ORDER BY effective_date DESC LIMIT ? OFFSET ?`
-		rows, err = h.DB.Query(query, pageSize, page * pageSize)
+		rows, err = h.DB.Query(query, pageSize, page*pageSize)
 	} else {
 		query := ` SELECT T.id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, bill_type, credit_state  from(
 			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, cn.state as credit_state from bill
@@ -96,7 +100,7 @@ func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 			UNION
 			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, 0 as credit_state from bill
 		) AS T WHERE user_phone_number like ?  ORDER BY effective_date DESC LIMIT ? OFFSET ?`
-		rows, err = h.DB.Query(query , "%"+ q + "%", pageSize, page * pageSize)
+		rows, err = h.DB.Query(query, "%"+q+"%", pageSize, page*pageSize)
 	}
 
 	if err != nil {
@@ -310,6 +314,7 @@ type Bill struct {
 	Vat             float64         `json:"vat"`
 	VatRegistration string          `json:"vat_registration"`
 	Address         string          `json:"address"`
+	StoreName       string          `json:"store_name"`
 	CompanyName     string          `json:"company_name"`
 	SequenceNumber  int             `json:"sequence_number"`
 	Type            bool            `json:"type"`
@@ -327,7 +332,7 @@ type Bill struct {
 	QRCode          *string         `json:"qr_code"`
 }
 
-func (h *handler) GetBillDetail(c *gin.Context) {
+func (h *handler) getBillDetail(c *gin.Context) Bill {
 
 	// userSession := GetSessionInfo(c) // to allow users to use this feature
 
@@ -352,6 +357,7 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 			company.name as company_name,
 			company.vat_registration_number,
 			store.address_name,
+			store.name,
 			qr_code,
 			COALESCE(
 				(SELECT JSON_ARRAYAGG(
@@ -392,12 +398,137 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 	if err := h.DB.QueryRow(query, id).Scan(&bill.Url, &bill.EffectiveDate,
 		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
-		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.CompanyName, &bill.VatRegistration, &bill.Address, &bill.QRCode, &bill.Products, &bill.ManualProducts); err != nil {
+		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.CompanyName, &bill.VatRegistration, &bill.Address, &bill.StoreName, &bill.QRCode, &bill.Products, &bill.ManualProducts); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}
 
+	return bill
+}
+
+func (h *handler) GetBillDetail(c *gin.Context) {
+
+	// userSession := GetSessionInfo(c) // to allow users to use this feature
+
+	bill := h.getBillDetail(c)
+
 	c.JSON(http.StatusOK, bill)
+}
+
+func (h *handler) GetBillPDF(c *gin.Context) {
+
+	// userSession := GetSessionInfo(c) // to allow users to use this feature
+
+	var id string = c.Param("id")
+
+	filename := filepath.Join("var", "www", "html", "downloads", id+".pdf")
+	// Check if the file exists
+	_, err := os.Stat(filename)
+	if err != nil {
+		bill := h.getBillDetail(c)
+		var products []models.Product
+		var mProduct []Product
+		err := json.Unmarshal(bill.Products, &mProduct)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		var mManProduct []ManualProduct
+		err = json.Unmarshal(bill.ManualProducts, &mManProduct)
+
+		if err != nil {
+			log.Panic(err)
+		}
+
+		for _, product := range mProduct {
+			f, _, err := big.ParseFloat(product.Price, 10, 0, big.ToNearestEven)
+			if err != nil {
+				log.Panic(err)
+			}
+			price, _ := f.Float64()
+
+			// TODO fix this logic
+			product := models.Product{
+				Name:      fmt.Sprint(product.Id),
+				Quantity:  float64(product.Quantity),
+				UnitPrice: price,
+				Discount:  0,
+				VATAmount: price * .15,
+				Total:     price * 1.15,
+			}
+			products = append(products, product)
+
+		}
+
+		for _, product := range mManProduct {
+			f, _, err := big.ParseFloat(product.Price, 10, 0, big.ToNearestEven)
+			if err != nil {
+				log.Panic(err)
+			}
+			price, _ := f.Float64()
+
+			// TODO fix this logic
+			product := models.Product{
+				Name:      fmt.Sprint(product.PartName),
+				Quantity:  float64(product.Quantity),
+				UnitPrice: price,
+				Discount:  0,
+				VATAmount: price * .15,
+				Total:     price * 1.15,
+			}
+			products = append(products, product)
+
+		}
+
+		invoice := models.Invoice{
+			Title:             "فاتورة ضريبية مبسطة",
+			InvoiceNumber:     fmt.Sprint("INV%d", bill.SequenceNumber),
+			StoreName:         bill.StoreName,
+			StoreAddress:      bill.Address,
+			Date:              bill.EffectiveDate.Time.Local().Format("2026-12-29 15:04:37"),
+			VATRegistrationNo: bill.VatRegistration,
+			QRCodeData:        *bill.QRCode,
+			TotalDiscount:     0,
+			TotalTaxableAmt:   bill.SubTotal,
+			TotalVAT:          bill.Vat,
+			TotalWithVAT:      bill.Vat + bill.SubTotal, // need to be fixed for sql
+			Labels: models.Labels{
+				InvoiceNumber:   "رقم الفاتورة:",
+				Date:            "تاريخ:",
+				VATRegistration: "رقم تسجيل ضريبة القيمة المضافة:",
+				TotalTaxable:    "اجمالي المبلغ الخاضع للضريبة",
+				TotalWithVat:    "المجموع مع الضريبة",
+				ProductColumn:   "المنتجات",
+				QuantityColumn:  "الكمية",
+				UnitPriceColumn: "سعر الوحدة",
+				DiscountColumn:  "الخصم",
+				VATAmountColumn: "ضريبة القيمة المضافة",
+				TotalColumn:     "السعر شامل الضريبة",
+				TotalDiscount:   "إجمالي الخصم",
+				Footer:          ">>>>>>>>>>>>>> إغلاق الفاتورة 0010 <<<<<<<<<<<<<<<",
+			},
+			Language: "ar",
+			Products: products,
+		}
+
+		fontDir := "fonts"
+		pdfBytes, err := pdf.GenerateInvoiceBytes(invoice, fontDir)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		if err := os.WriteFile(filename, pdfBytes, 0644); err != nil {
+			log.Println(err)
+			c.Header("X-Cache-Warning", err.Error())
+		}
+
+		c.Header("X-Cache", "MISS")
+	}
+	c.Header("X-Cache", "HIT")
+
+	// Upload the file to specific dst.
+	c.File(filename)
+
 }
 
 func (h *handler) GetBillCreditDetail(c *gin.Context) {

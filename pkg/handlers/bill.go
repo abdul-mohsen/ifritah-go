@@ -526,6 +526,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			},
 			Language: "ar",
 			Products: products,
+			IsRTL:    true,
 		}
 
 		fontDir := "fonts"

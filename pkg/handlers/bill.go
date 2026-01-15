@@ -434,6 +434,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		}
 
 		var mManProduct []ManualProduct
+		log.Println(bill.ManualProducts)
 		err = json.Unmarshal(bill.ManualProducts, &mManProduct)
 
 		if err != nil {

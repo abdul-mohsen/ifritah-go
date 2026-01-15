@@ -151,6 +151,18 @@ type ManualProduct struct {
 	Quantity int64  `json:"quantity" binding:"required"`
 }
 
+type TempProduct struct {
+	Id       int     `json:"id" binding:"required"`
+	Price    float64 `json:"price" binding:"required"`
+	Quantity int64   `json:"quantity" binding:"required"`
+}
+
+type TempManualProduct struct {
+	PartName string  `json:"part_name" binding:"required"`
+	Price    float64 `json:"price" binding:"required"`
+	Quantity int64   `json:"quantity" binding:"required"`
+}
+
 func (h *handler) AddBill(c *gin.Context) {
 
 	request := AddBillRequest{
@@ -427,13 +439,13 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 	if err != nil {
 		bill := h.getBillDetail(c)
 		var products []models.Product
-		var mProduct []Product
+		var mProduct []TempProduct
 		err := json.Unmarshal(bill.Products, &mProduct)
 		if err != nil {
 			log.Panic(err)
 		}
 
-		var mManProduct []ManualProduct
+		var mManProduct []TempManualProduct
 		b, _ := json.MarshalIndent(bill.ManualProducts, "", " ")
 		log.Println(string(b))
 		log.Println(string(bill.ManualProducts))
@@ -444,11 +456,12 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		}
 
 		for _, product := range mProduct {
-			f, _, err := big.ParseFloat(product.Price, 10, 0, big.ToNearestEven)
-			if err != nil {
-				log.Panic(err)
-			}
-			price, _ := f.Float64()
+			// f, _, err := big.ParseFloat(product.Price, 10, 0, big.ToNearestEven)
+			// if err != nil {
+			// 	log.Panic(err)
+			// }
+			// price, _ := f.Float64()
+			price := product.Price
 
 			// TODO fix this logic
 			product := models.Product{
@@ -464,11 +477,12 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		}
 
 		for _, product := range mManProduct {
-			f, _, err := big.ParseFloat(product.Price, 10, 0, big.ToNearestEven)
-			if err != nil {
-				log.Panic(err)
-			}
-			price, _ := f.Float64()
+			// f, _, err := big.ParseFloat(product.Price, 10, 0, big.ToNearestEven)
+			// if err != nil {
+			// 	log.Panic(err)
+			// }
+			// price, _ := f.Float64()
+			price := product.Price
 
 			// TODO fix this logic
 			product := models.Product{

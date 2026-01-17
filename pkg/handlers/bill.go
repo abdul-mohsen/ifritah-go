@@ -342,6 +342,9 @@ type Bill struct {
 	CreditState     *int            `json:"credit_state"`
 	CreditNote      *string         `json:"credit_note"`
 	QRCode          *string         `json:"qr_code"`
+	TotalBeforeVAT  string          `json:"total_before_vat"`
+	TotalVAT        string          `json:"total_vat"`
+	Total           string          `json:"total"`
 }
 
 func (h *handler) getBillDetail(c *gin.Context) Bill {
@@ -352,7 +355,7 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 
 	query := `
         SELECT 
-			CONCAT('https://ifritah.com/bill/', b.id) AS url,
+			CONCAT('https://ifritah.com/bill_pdf/', b.id) AS url,
 			effective_date,
 			payment_due_date,
 			b.state as state,
@@ -371,6 +374,9 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 			store.address_name,
 			store.name,
 			qr_code,
+			total_before_vat,
+			total_vat,
+			total,
 			COALESCE(
 				(SELECT JSON_ARRAYAGG(
 					JSON_OBJECT(
@@ -394,7 +400,7 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 				WHERE m.bill_id = b.id), 
 				JSON_ARRAY()) AS manual_products
         FROM 
-            bill b
+            bill_totals b
 		JOIN 
 			store on store.id = b.store_id 
 		JOIN 
@@ -410,7 +416,7 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 
 	if err := h.DB.QueryRow(query, id).Scan(&bill.Url, &bill.EffectiveDate,
 		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
-		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.CompanyName, &bill.VatRegistration, &bill.Address, &bill.StoreName, &bill.QRCode, &bill.Products, &bill.ManualProducts); err != nil {
+		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.CompanyName, &bill.VatRegistration, &bill.Address, &bill.StoreName, &bill.QRCode, &bill.TotalBeforeVAT, &bill.TotalVAT, &bill.Total, &bill.Products, &bill.ManualProducts); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}
@@ -497,6 +503,45 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 		}
 
+		f, _, err := big.ParseFloat(bill.MaintenanceCost, 10, 256, big.ToNearestEven)
+
+		if err != nil {
+			log.Println(err)
+		}
+		maintenanceCost, _ := f.Float64()
+
+		if maintenanceCost > 0 {
+			product := models.Product{
+				Name:      "تكلفة الصيانة",
+				Quantity:  1,
+				UnitPrice: maintenanceCost,
+				Discount:  0,
+				VATAmount: maintenanceCost * .15,
+				Total:     maintenanceCost * 1.15,
+			}
+			products = append(products, product)
+
+		}
+		f, _, err = big.ParseFloat(bill.Total, 10, 256, big.ToNearestEven)
+
+		if err != nil {
+			log.Panic(err)
+		}
+		total, _ := f.Float64()
+		log.Println(total)
+		f, _, err = big.ParseFloat(bill.TotalVAT, 10, 256, big.ToNearestEven)
+
+		if err != nil {
+			log.Panic(err)
+		}
+		totalVAT, _ := f.Float64()
+		f, _, err = big.ParseFloat(bill.TotalBeforeVAT, 10, 256, big.ToNearestEven)
+
+		if err != nil {
+			log.Panic(err)
+		}
+		totalBeforeVAT, _ := f.Float64()
+
 		invoice := models.Invoice{
 			Title:             "فاتورة ضريبية مبسطة",
 			InvoiceNumber:     fmt.Sprintf("INV%d", bill.SequenceNumber),
@@ -506,9 +551,10 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			VATRegistrationNo: bill.VatRegistration,
 			QRCodeData:        *bill.QRCode,
 			TotalDiscount:     0,
-			TotalTaxableAmt:   bill.SubTotal,
-			TotalVAT:          bill.Vat,
-			TotalWithVAT:      bill.Vat + bill.SubTotal, // need to be fixed for sql
+			TotalTaxableAmt:   totalBeforeVAT,
+			TotalVAT:          totalVAT,
+			TotalWithVAT:      total,
+			VATPercentage:     15,
 			Labels: models.Labels{
 				InvoiceNumber:   "رقم الفاتورة:",
 				Date:            "تاريخ:",

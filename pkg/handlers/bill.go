@@ -466,11 +466,11 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			// TODO fix this logic
 			product := models.Product{
 				Name:      fmt.Sprint(product.Id),
-				Quantity:  float64(product.Quantity),
-				UnitPrice: price,
-				Discount:  0,
-				VATAmount: price * .15,
-				Total:     price * 1.15,
+				Quantity:  fmt.Sprint(float64(product.Quantity)),
+				UnitPrice: fmt.Sprint(price),
+				Discount:  "0.0",
+				VATAmount: fmt.Sprint(price * .15),
+				Total:     fmt.Sprint(price * 1.15),
 			}
 			products = append(products, product)
 
@@ -486,12 +486,12 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 			// TODO fix this logic
 			product := models.Product{
-				Name:      fmt.Sprint(product.PartName),
-				Quantity:  float64(product.Quantity),
-				UnitPrice: price,
-				Discount:  0,
-				VATAmount: price * .15,
-				Total:     price * 1.15,
+				Name:      product.PartName,
+				Quantity:  fmt.Sprint(product.Quantity),
+				UnitPrice: fmt.Sprint(price),
+				Discount:  "0.0",
+				VATAmount: fmt.Sprint(price * .15),
+				Total:     fmt.Sprint(price * 1.15),
 			}
 			products = append(products, product)
 
@@ -505,10 +505,10 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			Date:              bill.EffectiveDate.Time.Local().Format("2006-12-29 15:04:37"),
 			VATRegistrationNo: bill.VatRegistration,
 			QRCodeData:        *bill.QRCode,
-			TotalDiscount:     0,
-			TotalTaxableAmt:   bill.SubTotal,
-			TotalVAT:          bill.Vat,
-			TotalWithVAT:      bill.Vat + bill.SubTotal, // need to be fixed for sql
+			TotalDiscount:     "0.0",
+			TotalTaxableAmt:   fmt.Sprint(bill.SubTotal),
+			TotalVAT:          fmt.Sprint(bill.Vat),
+			TotalWithVAT:      fmt.Sprint(bill.Vat + bill.SubTotal), // need to be fixed for sql
 			Labels: models.Labels{
 				InvoiceNumber:   "رقم الفاتورة:",
 				Date:            "تاريخ:",

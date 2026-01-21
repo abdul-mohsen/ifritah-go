@@ -513,7 +513,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		if maintenanceCost > 0 {
 			product := models.Product{
 				Name:      "تكلفة الصيانة",
-				Quantity:  "1.0",
+				Quantity:  "1",
 				UnitPrice: fmt.Sprint(maintenanceCost),
 				Discount:  "0.0",
 				VATAmount: fmt.Sprint(maintenanceCost * .15),
@@ -553,7 +553,8 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			TotalDiscount:     "0.0",
 			TotalTaxableAmt:   fmt.Sprint(totalBeforeVAT),
 			TotalVAT:          fmt.Sprint(totalVAT),
-			TotalWithVAT:      fmt.Sprint(total), // need to be fixed for sql
+			TotalWithVAT:      fmt.Sprint(total),
+			VATPercentage:     "15",
 			Labels: models.Labels{
 				InvoiceNumber:   "رقم الفاتورة:",
 				Date:            "تاريخ:",

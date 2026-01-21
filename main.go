@@ -80,6 +80,6 @@ func main() {
 		nonAuthGroup.POST("login", h.Login)
 	}
 
-	router.Run("localhost:8080")
+	router.Run("localhost:" + os.Getenv("SERVER_PORT"))
 	DB.Close()
 }

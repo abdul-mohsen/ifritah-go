@@ -472,11 +472,11 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			// TODO fix this logic
 			product := models.Product{
 				Name:      fmt.Sprint(product.Id),
-				Quantity:  float64(product.Quantity),
-				UnitPrice: price,
-				Discount:  0,
-				VATAmount: price * .15,
-				Total:     price * 1.15,
+				Quantity:  fmt.Sprint(float64(product.Quantity)),
+				UnitPrice: fmt.Sprint(price),
+				Discount:  "0.0",
+				VATAmount: fmt.Sprint(price * .15),
+				Total:     fmt.Sprint(price * 1.15),
 			}
 			products = append(products, product)
 
@@ -492,12 +492,12 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 			// TODO fix this logic
 			product := models.Product{
-				Name:      fmt.Sprint(product.PartName),
-				Quantity:  float64(product.Quantity),
-				UnitPrice: price,
-				Discount:  0,
-				VATAmount: price * .15,
-				Total:     price * 1.15,
+				Name:      product.PartName,
+				Quantity:  fmt.Sprint(product.Quantity),
+				UnitPrice: fmt.Sprint(price),
+				Discount:  "0.0",
+				VATAmount: fmt.Sprint(price * .15),
+				Total:     fmt.Sprint(price * 1.15),
 			}
 			products = append(products, product)
 
@@ -513,11 +513,11 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		if maintenanceCost > 0 {
 			product := models.Product{
 				Name:      "تكلفة الصيانة",
-				Quantity:  1,
-				UnitPrice: maintenanceCost,
-				Discount:  0,
-				VATAmount: maintenanceCost * .15,
-				Total:     maintenanceCost * 1.15,
+				Quantity:  "1.0",
+				UnitPrice: fmt.Sprint(maintenanceCost),
+				Discount:  "0.0",
+				VATAmount: fmt.Sprint(maintenanceCost * .15),
+				Total:     fmt.Sprint(maintenanceCost * 1.15),
 			}
 			products = append(products, product)
 
@@ -550,11 +550,10 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			Date:              bill.EffectiveDate.Time.Local().Format("2006-12-29 15:04:37"),
 			VATRegistrationNo: bill.VatRegistration,
 			QRCodeData:        *bill.QRCode,
-			TotalDiscount:     0,
-			TotalTaxableAmt:   totalBeforeVAT,
-			TotalVAT:          totalVAT,
-			TotalWithVAT:      total,
-			VATPercentage:     15,
+			TotalDiscount:     "0.0",
+			TotalTaxableAmt:   fmt.Sprint(totalBeforeVAT),
+			TotalVAT:          fmt.Sprint(totalVAT),
+			TotalWithVAT:      fmt.Sprint(total), // need to be fixed for sql
 			Labels: models.Labels{
 				InvoiceNumber:   "رقم الفاتورة:",
 				Date:            "تاريخ:",

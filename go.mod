@@ -5,7 +5,7 @@ go 1.23.0
 toolchain go1.24.1
 
 require (
-	github.com/abdul-mohsen/go-arabic-pdf-lib v0.9.0
+	github.com/abdul-mohsen/go-arabic-pdf-lib v0.11.0
 	github.com/gin-contrib/cache v1.3.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-sql-driver/mysql v1.8.1

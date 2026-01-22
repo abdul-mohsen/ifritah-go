@@ -475,8 +475,8 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 				Quantity:  fmt.Sprint(float64(product.Quantity)),
 				UnitPrice: fmt.Sprint(price),
 				Discount:  "0.0",
-				VATAmount: fmt.Sprintf("%2.f", price*.15),
-				Total:     fmt.Sprintf("%2.f", price*1.15),
+				VATAmount: fmt.Sprintf("%.2f", price*.15),
+				Total:     fmt.Sprintf("%.2f", price*1.15),
 			}
 			products = append(products, product)
 
@@ -496,8 +496,8 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 				Quantity:  fmt.Sprint(product.Quantity),
 				UnitPrice: fmt.Sprint(price),
 				Discount:  "0.0",
-				VATAmount: fmt.Sprintf("%2.f", price*.15),
-				Total:     fmt.Sprintf("%2.f", price*1.15),
+				VATAmount: fmt.Sprintf("%.2f", price*.15),
+				Total:     fmt.Sprintf("%.2f", price*1.15),
 			}
 			products = append(products, product)
 
@@ -516,8 +516,8 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 				Quantity:  "1",
 				UnitPrice: fmt.Sprint(maintenanceCost),
 				Discount:  "0.0",
-				VATAmount: fmt.Sprintf("%2.f", maintenanceCost*.15),
-				Total:     fmt.Sprintf("%2.f", maintenanceCost*1.15),
+				VATAmount: fmt.Sprintf("%.2f", maintenanceCost*.15),
+				Total:     fmt.Sprintf("%.2f", maintenanceCost*1.15),
 			}
 			products = append(products, product)
 

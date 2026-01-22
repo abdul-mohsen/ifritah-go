@@ -547,7 +547,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			InvoiceNumber:     fmt.Sprintf("INV%d", bill.SequenceNumber),
 			StoreName:         bill.StoreName,
 			StoreAddress:      bill.Address,
-			Date:              bill.EffectiveDate.Time.Local().Format("2006-12-29 15:04:37"),
+			Date:              bill.EffectiveDate.Time.Local().Format(time.DateTime),
 			VATRegistrationNo: bill.VatRegistration,
 			QRCodeData:        *bill.QRCode,
 			TotalDiscount:     "0.0",

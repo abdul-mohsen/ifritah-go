@@ -365,10 +365,11 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	}
 	log.Printf("Dropped old product ")
 	if err := h.addProductToBill(request.Products, id); err != nil {
-		log.Panic(err)
+		log.Printf(err.Error())
 		c.AbortWithError(http.StatusBadRequest, err)
 	}
 	if err := h.addManualProductToBill(request.ManualProducts, id); err != nil {
+		log.Printf(err.Error())
 		c.AbortWithError(http.StatusBadRequest, err)
 	}
 

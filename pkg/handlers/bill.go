@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/models"
@@ -226,7 +227,10 @@ func (h *handler) AddBill(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("invalid paid ammount"))
 	}
 
-	squenceNumber := h.getNextSquenceNumber(userSession.id)
+	squenceNumber := 0
+	if request.State > 0 {
+		squenceNumber = h.getNextSquenceNumber(userSession.id)
+	}
 
 	query := `
 	insert into bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, sequence_number, merchant_id, maintenance_cost, note, userName, buyer_id, user_phone_number)
@@ -318,8 +322,10 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	if paidAmount.Cmp(total) == 1 {
 		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("invalid paid ammount"))
 	}
-
-	squenceNumber := h.getNextSquenceNumber(userSession.id)
+	squenceNumber := 0
+	if request.State > 0 {
+		squenceNumber = h.getNextSquenceNumber(userSession.id)
+	}
 
 	query := `
 	UPDATE bill SET
@@ -340,19 +346,19 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	WHERE id = ?;
 	`
 	log.Printf("Started")
-	res, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
+	_, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
 		request.StoreId, squenceNumber, userSession.id, maintenanceCost.Text('f', 10), request.Note, request.UserName, nil, request.UserPhoneNumber, billID)
 	log.Printf("I update the main row to the product")
 	if err != nil {
 		log.Panic(err)
 	}
 
-	id, err := res.LastInsertId()
-
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}
+
+	id, err := strconv.ParseInt(billID, 10, 64)
 
 	query = `DELETE FROM bill_product where bill_id = ?;`
 	if _, err = h.DB.Exec(query, billID); err != nil {

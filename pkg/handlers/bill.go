@@ -353,12 +353,12 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	id, err := strconv.ParseInt(billID, 10, 64)
+
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}
-
-	id, err := strconv.ParseInt(billID, 10, 64)
 
 	query = `DELETE FROM bill_product where bill_id = ?;`
 	if _, err = h.DB.Exec(query, billID); err != nil {

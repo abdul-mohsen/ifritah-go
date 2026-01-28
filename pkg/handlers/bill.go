@@ -341,6 +341,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	`
 	res, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
 		request.StoreId, squenceNumber, userSession.id, maintenanceCost.Text('f', 10), request.Note, request.UserName, nil, request.UserPhoneNumber, billID)
+	log.Println("I update the main row to the product")
 	if err != nil {
 		log.Panic(err)
 	}
@@ -353,9 +354,14 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	}
 
 	query = `drop bill_product where id = ?;`
-	h.DB.Exec(query, billID)
+	if _, err = h.DB.Exec(query, billID); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+	}
 	query = `drop bill_manual_product where id = ?;`
-	h.DB.Exec(query, billID)
+	if _, err = h.DB.Exec(query, billID); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+	}
+	log.Println("Dropped old product ")
 	if err := h.addProductToBill(request.Products, id); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 	}

@@ -352,6 +352,10 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	query = `drop bill_product where id = ?;`
+	h.DB.Exec(query, billID)
+	query = `drop bill_manual_product where id = ?;`
+	h.DB.Exec(query, billID)
 	if err := h.addProductToBill(request.Products, id); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 	}

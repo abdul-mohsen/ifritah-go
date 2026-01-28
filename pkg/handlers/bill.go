@@ -339,6 +339,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	user_phone_number = ?
 	WHERE id = ?;
 	`
+	log.Println("Started")
 	res, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
 		request.StoreId, squenceNumber, userSession.id, maintenanceCost.Text('f', 10), request.Note, request.UserName, nil, request.UserPhoneNumber, billID)
 	log.Println("I update the main row to the product")
@@ -359,10 +360,12 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	}
 	query = `DELETE FROM bill_manual_product where bill_id = ?;`
 	if _, err = h.DB.Exec(query, billID); err != nil {
+		log.Panic(err)
 		c.AbortWithError(http.StatusBadRequest, err)
 	}
 	log.Println("Dropped old product ")
 	if err := h.addProductToBill(request.Products, id); err != nil {
+		log.Panic(err)
 		c.AbortWithError(http.StatusBadRequest, err)
 	}
 	if err := h.addManualProductToBill(request.ManualProducts, id); err != nil {

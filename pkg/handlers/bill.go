@@ -24,6 +24,9 @@ type BillBase struct {
 	PaymentDueDate *sql.NullTime `json:"payment_due_date"`
 	State          int           `json:"state"`
 	SubTotal       float64       `json:"subtotal"`
+	Total          float64       `json:"total"`
+	TotalVAT       float64       `json:"total_vat"`
+	TotalBeforeVAT float64       `json:"total_before_vat"`
 	Discount       float64       `json:"discount"`
 	Vat            float64       `json:"vat"`
 	SequenceNumber int           `json:"sequence_number"`
@@ -86,20 +89,24 @@ func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 
 	if q == "" {
 		query := ` Select * from(
-			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE as bill_type, cn.state as credit_state from bill 
-			join credit_note  cn on cn.bill_id = bill.id
+			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE as bill_type, cn.state as credit_state, total, total_vat, total_before_vat
+			FROM bill_totals as bill
+			JOIN credit_note  cn ON cn.bill_id = bill.id
 			UNION
-			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE as bill_type, 0 as credit_state from bill 
+			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE AS bill_type, 0 AS credit_state,  total, total_vat, total_before_vat
+			FROM bill_totals as bill
 			UNION
-			SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type, 0 as credit_state from purchase_bill
+			SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type, 0 as credit_state, total, total_vat, total_before_vat
+			FROM purchase_bill_totals as purchase_bill
 		) AS T ORDER BY effective_date DESC LIMIT ? OFFSET ?`
 		rows, err = h.DB.Query(query, pageSize, page*pageSize)
 	} else {
-		query := ` SELECT T.id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, bill_type, credit_state  from(
-			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, cn.state as credit_state from bill
-			join credit_note  cn on cn.bill_id = bill.id
+		query := ` SELECT T.id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, bill_type, credit_state, total, total_vat, total_before_vat  from(
+			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, cn.state as credit_state, total, total_vat, total_before_vat
+			FROM bill_totals as bill
+			JOIN credit_note  cn on cn.bill_id = bill.id
 			UNION
-			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, 0 as credit_state from bill
+			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, 0 as credit_state, total, total_vat, total_before_vat from bill_totals as bill
 		) AS T WHERE user_phone_number like ?  ORDER BY effective_date DESC LIMIT ? OFFSET ?`
 		rows, err = h.DB.Query(query, "%"+q+"%", pageSize, page*pageSize)
 	}
@@ -112,7 +119,7 @@ func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 	for rows.Next() {
 		var bill BillBase
 
-		if err := rows.Scan(&bill.Id, &bill.EffectiveDate, &bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.SequenceNumber, &bill.Type, &bill.CreditState); err != nil {
+		if err := rows.Scan(&bill.Id, &bill.EffectiveDate, &bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.SequenceNumber, &bill.Type, &bill.CreditState, &bill.Total, &bill.TotalVAT, &bill.TotalBeforeVAT); err != nil {
 			log.Panic(err)
 		}
 

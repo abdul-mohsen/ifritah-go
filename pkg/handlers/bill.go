@@ -322,11 +322,11 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	squenceNumber := h.getNextSquenceNumber(userSession.id)
 
 	query := `
-	insert into bill (id, effective_date, payment_due_date, state, sub_total, discount, vat, store_id, sequence_number, merchant_id, maintenance_cost, note, userName, buyer_id, user_phone_number)
-	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+	update bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, sequence_number, merchant_id, maintenance_cost, note, userName, buyer_id, user_phone_number)
+	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) where id = ?;
 	`
-	res, err := h.DB.Exec(query, billID, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10), request.StoreId, squenceNumber, userSession.id,
-		maintenanceCost.Text('f', 10), request.Note, request.UserName, nil, request.UserPhoneNumber)
+	res, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10), request.StoreId, squenceNumber, userSession.id,
+		maintenanceCost.Text('f', 10), request.Note, request.UserName, nil, request.UserPhoneNumber, billID)
 	if err != nil {
 		log.Panic(err)
 	}

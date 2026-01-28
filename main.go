@@ -53,6 +53,7 @@ func main() {
 
 		// Bills
 		authorized.POST("bill/all", h.GetBills)
+		authorized.POST("bill/:id", h.SubmitDraftBill)
 		authorized.POST("bill", h.AddBill)
 		authorized.DELETE("bill/:id", h.DeleteBillDetail)
 		authorized.POST("bill/credit", h.CreditBill)

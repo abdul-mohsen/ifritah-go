@@ -353,11 +353,11 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	query = `drop bill_product where id = ?;`
+	query = `delete bill_product where id = ?;`
 	if _, err = h.DB.Exec(query, billID); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 	}
-	query = `drop bill_manual_product where id = ?;`
+	query = `delete bill_manual_product where id = ?;`
 	if _, err = h.DB.Exec(query, billID); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 	}

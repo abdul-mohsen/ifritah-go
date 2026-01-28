@@ -256,6 +256,99 @@ func (h *handler) AddBill(c *gin.Context) {
 
 }
 
+func (h *handler) SubmitDraftBill(c *gin.Context) {
+	var billID string = c.Param("id")
+
+	request := AddBillRequest{
+		State:         1,
+		PaymentMethod: 0,
+		PaidAmount:    "0.0",
+	}
+
+	if err := c.BindJSON(&request); err != nil {
+		c.Status(http.StatusBadRequest)
+		log.Panic(err)
+	}
+
+	userSession := GetSessionInfo(c)
+
+	storeIds := h.getStoreIds(c)
+
+	if !slices.Contains(storeIds, request.StoreId) {
+		c.Status(http.StatusBadRequest)
+		log.Panic("invalid store id")
+	}
+
+	var paymentDueDate *time.Time
+	if request.PaymentDueDate != nil {
+
+		parsedTime, err := time.Parse(time.RFC3339, *request.PaymentDueDate)
+		paymentDueDate = &parsedTime
+		if err != nil {
+			log.Panic("Error parsing date:", err)
+		}
+	}
+	discount, success1 := stringToBigFloat(request.Discount)
+	paidAmount, success2 := stringToBigFloat(request.PaidAmount)
+	maintenanceCost, success3 := stringToBigFloat(request.MaintenanceCost)
+
+	if !(success1 && success2 && success3) {
+		c.Status(http.StatusBadRequest)
+		log.Panic("big float are bad")
+	}
+
+	subTotal := zeroBigFloat()
+	for _, product := range request.Products {
+		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		}
+	}
+	log.Printf(subTotal.Text('f', 10))
+
+	for _, product := range request.ManualProducts {
+		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		}
+	}
+
+	totalWithOutVat := new(big.Float).Sub(new(big.Float).Add(subTotal, maintenanceCost), discount)
+	vatTotal := new(big.Float).Mul(totalWithOutVat, big.NewFloat(.15))
+	total := new(big.Float).Add(totalWithOutVat, vatTotal)
+
+	if paidAmount.Cmp(total) == 1 {
+		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("invalid paid ammount"))
+	}
+
+	squenceNumber := h.getNextSquenceNumber(userSession.id)
+
+	query := `
+	insert into bill (id, effective_date, payment_due_date, state, sub_total, discount, vat, store_id, sequence_number, merchant_id, maintenance_cost, note, userName, buyer_id, user_phone_number)
+	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+	`
+	res, err := h.DB.Exec(query, billID, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10), request.StoreId, squenceNumber, userSession.id,
+		maintenanceCost.Text('f', 10), request.Note, request.UserName, nil, request.UserPhoneNumber)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	id, err := res.LastInsertId()
+
+	if err != nil {
+		c.Status(http.StatusBadRequest)
+		log.Panic(err)
+	}
+
+	if err := h.addProductToBill(request.Products, id); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+	}
+	if err := h.addManualProductToBill(request.ManualProducts, id); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+	}
+
+	c.Status(http.StatusCreated)
+
+}
+
 func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
 	_price, success := stringToBigFloat(price)
 	if !success || quantity <= 0 {
@@ -514,7 +607,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			product := models.Product{
 				Name:      "تكلفة الصيانة",
 				Quantity:  "1",
-				UnitPrice: fmt.Sprint(maintenanceCost),
+				UnitPrice: fmt.Sprintf("%.2f", maintenanceCost),
 				Discount:  "0.0",
 				VATAmount: fmt.Sprintf("%.2f", maintenanceCost*.15),
 				Total:     fmt.Sprintf("%.2f", maintenanceCost*1.15),

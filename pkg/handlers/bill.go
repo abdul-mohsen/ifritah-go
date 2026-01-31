@@ -834,21 +834,25 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	var id string = c.Param("id")
 
 	if _, err := h.DB.Exec("DELETE bill_product where bill_id = ?", id); err != nil {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.AbortWithError(http.StatusInternalServerError, err)
 	}
 	if _, err := h.DB.Exec("DELETE bill_manual_product where bill_id = ?", id); err != nil {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.AbortWithError(http.StatusInternalServerError, err)
 	}
 	// TODO check if the user has right to delete and is the owner of the bill
 	res, err := h.DB.Exec("DELETE FROM bill where id = ?", id)
-	if err != nil || res == nil {
-		c.AbortWithStatus(http.StatusBadRequest)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+	}
+
+	if res == nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
 	}
 
 	affectedRows, err := res.RowsAffected()
 
 	if err != nil {
-		log.Panic(err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 	}
 
 	if affectedRows == 0 {

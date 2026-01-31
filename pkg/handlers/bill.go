@@ -408,7 +408,9 @@ func (h *handler) addProductToBill(products []Product, billId int64) error {
 	query := `insert into bill_product (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
 		_, err := h.DB.Exec(query, product.Id, product.Price, product.Quantity, billId)
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -419,7 +421,9 @@ func (h *handler) addManualProductToBill(products []ManualProduct, billId int64)
 	query := `insert into bill_manual_product (part_name, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
 		_, err := h.DB.Exec(query, product.PartName, product.Price, product.Quantity, billId)
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -841,7 +841,7 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	}
 	// TODO check if the user has right to delete and is the owner of the bill
 	res, err := h.DB.Exec("DELETE FROM bill where id = ?", id)
-	if err != nil {
+	if err != nil || res == nil {
 		c.AbortWithStatus(http.StatusBadRequest)
 	}
 

@@ -516,7 +516,7 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 			total_before_vat,
 			total_vat,
 			total,
-			commercial_registration_number,
+			company.commercial_registration_number,
 			COALESCE(
 				(SELECT JSON_ARRAYAGG(
 					JSON_OBJECT(

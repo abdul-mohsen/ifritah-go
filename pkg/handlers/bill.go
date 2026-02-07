@@ -82,6 +82,37 @@ func (h *handler) GetBills(c *gin.Context) {
 	c.JSON(http.StatusOK, bills)
 }
 
+func (h *handler) getPurchaseBills(page int, pageSize int, q string) []BillBase {
+
+	var rows *sql.Rows
+	var err error
+
+	query := `
+	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type, 0 as credit_state, total, total_vat, total_before_vat
+	FROM purchase_bill_totals as purchase_bill
+	WHERE state >= 0 ORDER BY effective_date  DESC LIMIT ? OFFSET ?`
+	rows, err = h.DB.Query(query, pageSize, page*pageSize)
+
+	if err != nil {
+		log.Panic(err)
+	}
+
+	var bills []BillBase
+	for rows.Next() {
+		var bill BillBase
+
+		if err := rows.Scan(&bill.Id, &bill.EffectiveDate, &bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.SequenceNumber, &bill.Type, &bill.CreditState, &bill.Total, &bill.TotalVAT, &bill.TotalBeforeVAT); err != nil {
+			log.Panic(err)
+		}
+
+		bills = append(bills, bill)
+	}
+
+	defer rows.Close()
+
+	return bills
+}
+
 func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 
 	var rows *sql.Rows
@@ -983,6 +1014,46 @@ type PurchaseBill struct {
 	StoreId        int              `json:"store_id"`
 	MerchantId     int              `json:"merchant_id"`
 	Products       []ProductDetails `json:"products"`
+}
+
+func (h *handler) GetALLPurchaseBillDetail(c *gin.Context) {
+
+	userSession := GetSessionInfo(c)
+
+	var storeIds []int
+	for _, value := range h.getStores(userSession) {
+		storeIds = append(storeIds, value.Id)
+	}
+
+	request := BillRequestFilter{
+		StoreIds: storeIds,
+		Page:     0,
+		PageSize: 10,
+		Query:    "",
+	}
+
+	if err := c.BindJSON(&request); err != nil {
+		log.Panic(err)
+		c.Status(http.StatusBadRequest)
+	}
+
+	fmt.Println("request:", request)
+
+	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds == nil || len(request.StoreIds) == 0 {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	for _, value := range request.StoreIds {
+		if !slices.Contains(storeIds, value) {
+			c.Status(http.StatusBadRequest)
+			return
+		}
+	}
+
+	bill := h.getPurchaseBills(request.Page, request.PageSize, request.Query)
+
+	c.JSON(http.StatusOK, bill)
 }
 
 func (h *handler) GetPurchaseBillDetail(c *gin.Context) {

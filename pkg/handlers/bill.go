@@ -932,7 +932,6 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	var paymentDueDate *time.Time
 	if request.PaymentDueDate != nil {
-
 		parsedTime, err := time.Parse(time.RFC3339, *request.PaymentDueDate)
 		paymentDueDate = &parsedTime
 		if err != nil {
@@ -967,6 +966,11 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	if paidAmount.Cmp(total) == 1 {
 		c.Status(http.StatusBadRequest)
 		log.Panic("invalid paid ammount")
+	}
+
+	if total.Cmp(zeroBigFloat()) == 0 {
+		c.Status(http.StatusBadRequest)
+		log.Panic("invalid total")
 	}
 
 	query := `

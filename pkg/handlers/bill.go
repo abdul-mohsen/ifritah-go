@@ -896,16 +896,16 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 }
 
 type AddPurchaseBillRequest struct {
-	StoreId                int       `json:"store_id" binding:"required"`
-	State                  int8      `json:"state"`
-	PaymentDueDate         *string   `json:"payment_due_date" `
-	PaymentDate            *string   `json:"payment_date" `
-	Discount               string    `json:"discount"`
-	PaidAmount             string    `json:"paidAmount" `
-	PaymentMethod          int8      `json:"payment_method"`
-	Products               []Product `json:"products" binding:"required,dive"`
-	SupplierId             int       `json:"supplier_id" binding:"required"`
-	SupplierSequenceNumber int       `json:"supplier_sequence_number" binding:"required"`
+	StoreId                int             `json:"store_id" binding:"required"`
+	State                  int8            `json:"state"`
+	PaymentDueDate         *string         `json:"payment_due_date" `
+	PaymentDate            *string         `json:"payment_date" `
+	Discount               string          `json:"discount"`
+	PaidAmount             string          `json:"paidAmount" `
+	PaymentMethod          int8            `json:"payment_method"`
+	Products               []ManualProduct `json:"products" binding:"required,dive"`
+	SupplierId             int             `json:"supplier_id" binding:"required"`
+	SupplierSequenceNumber int             `json:"supplier_sequence_number" binding:"required"`
 }
 
 func (h *handler) AddPurchaseBill(c *gin.Context) {
@@ -997,12 +997,16 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 }
 
-func (h *handler) addProductToBillPurchase(products []Product, billId int64) {
+func (h *handler) addProductToBillPurchase(products []ManualProduct, billId int64) error {
 
-	query := `insert into purchase_bill_product (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
+	query := `insert into bill_manual_purchase_product  (part_name, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
-		h.DB.Exec(query, product.Id, product.Price, product.Quantity, billId)
+		_, err := h.DB.Exec(query, product.PartName, product.Price, product.Quantity, billId)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 type PurchaseBill struct {

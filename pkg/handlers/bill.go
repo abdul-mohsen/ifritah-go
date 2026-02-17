@@ -964,12 +964,12 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	total := new(big.Float).Add(totalWithOutVat, vatTotal)
 
 	if paidAmount.Cmp(total) == 1 {
-		c.Status(http.StatusBadRequest)
+		c.AbortWithStatus(http.StatusBadRequest)
 		log.Panic("invalid paid ammount")
 	}
 
 	if total.Cmp(zeroBigFloat()) == 0 {
-		c.Status(http.StatusBadRequest)
+		c.AbortWithStatus(http.StatusBadRequest)
 		log.Panic("invalid total")
 	}
 

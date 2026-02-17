@@ -26,7 +26,7 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	rows, err := h.DB.Query("SELECT name, address, phone_nubmer, vat_number, bank_account From supplier where company_id = ? and is_deleted = FALSE", id)
+	rows, err := h.DB.Query("SELECT id, name, address, phone_nubmer, vat_number, bank_account From supplier where company_id = ? and is_deleted = FALSE", id)
 
 	if err != nil {
 		log.Panic(err)
@@ -35,7 +35,7 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 	for rows.Next() {
 		var supplier model.Supplier
 
-		if err := rows.Scan(&supplier.Name, &supplier.Address, &supplier.PhoneNumber, &supplier.Number, &supplier.VatNumber, &supplier.BankAccount); err != nil {
+		if err := rows.Scan(&supplier.Id, &supplier.Name, &supplier.Address, &supplier.PhoneNumber, &supplier.Number, &supplier.VatNumber, &supplier.BankAccount); err != nil {
 			log.Panic(err)
 		}
 

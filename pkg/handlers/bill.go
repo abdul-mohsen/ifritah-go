@@ -1094,26 +1094,24 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 	var id string = c.Param("id")
 
 	// TODO check if the user has right to delete and is the owner of the bill
-	query := `DELETE FROM purchase_bill where id = ?`
-
-	res, err := h.DB.Exec(query, id)
+	res, err := h.DB.Exec("update purchase_bill set state = -1 where id = ?", id)
 	if err != nil {
-		c.Status(http.StatusBadRequest)
-		log.Panic(err)
+		c.AbortWithError(http.StatusBadRequest, err)
+	}
+
+	if res == nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
 	}
 
 	affectedRows, err := res.RowsAffected()
 
 	if err != nil {
-		log.Panic(err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 	}
 
 	if affectedRows == 0 {
-		c.Status(http.StatusBadRequest)
-		log.Panic("no recored has been deleted")
+		c.AbortWithStatus(http.StatusBadRequest)
 	}
-
-	h.DB.Exec("DELETE purchase_bill_product where bill_id = ?")
 
 	c.Status(http.StatusOK)
 }

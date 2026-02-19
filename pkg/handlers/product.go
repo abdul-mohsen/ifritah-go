@@ -48,7 +48,7 @@ func (h *handler) AddQuantity(c *gin.Context) {
 
 	query := `
 	add product
-	set quantity = COALESCE(quantity, 0) + ?
+	set quantity = COALESCE(?, 0),
 	set price = ?
 	set cost_price = ?
 	set shelf_number = ?

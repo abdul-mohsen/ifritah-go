@@ -181,9 +181,9 @@ type AddBillRequest struct {
 type Product struct {
 	Id          int    `json:"id" binding:"required"`
 	Price       string `json:"price" binding:"required"`
-	CostPrice   string `json:"cost_price" binding:"required"`
-	ShelfNumber string `json:"shelf_number" binding:"required"`
-	Quantity    int64  `json:"quantity" binding:"required"`
+	CostPrice   string `json:"cost_price"`
+	ShelfNumber string `json:"shelf_number"`
+	Quantity    int64  `json:"quantity"`
 }
 
 type ManualProduct struct {
@@ -918,7 +918,7 @@ type AddPurchaseBillRequest struct {
 	PaidAmount             string          `json:"paidAmount" `
 	PaymentMethod          int8            `json:"payment_method"`
 	Products               []Product       `json:"products" binding:"required,dive"`
-	ManualProducts         []ManualProduct `json:"products" binding:"required,dive"`
+	ManualProducts         []ManualProduct `json:"manual_products" binding:"required,dive"`
 	SupplierId             int             `json:"supplier_id" binding:"required"`
 	SupplierSequenceNumber int             `json:"supplier_sequence_number" binding:"required"`
 }
@@ -1015,8 +1015,8 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 	if err := h.addManualProductToPurchaseBill(request.ManualProducts, id); err != nil {
-		log.Printf(err.Error())
 		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
 	}
 
 	c.Status(http.StatusOK)

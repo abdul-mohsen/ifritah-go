@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"slices"
 
 	"github.com/gin-gonic/gin"
@@ -24,6 +25,11 @@ type AddProduct struct {
 
 func (h *handler) AddQuantity(c *gin.Context) {
 
+	raw, err := httputil.DumpRequest(c.Request, true)
+	if err != nil {
+		fmt.Println(raw)
+
+	}
 	var request AddQuantityRequest
 	if err := c.BindJSON(&request); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
@@ -35,11 +41,13 @@ func (h *handler) AddQuantity(c *gin.Context) {
 
 	if len(request.Products) == 0 {
 		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("ERR: missing required value"))
+		log.Panic("ERR: missing required value")
 	}
 
 	for _, value := range request.Products {
 		if value.Quantity <= 0 {
 			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("ERR: quantity can't be 0 or less"))
+			log.Panic("ERR: quantity can't be 0 or less")
 		}
 	}
 

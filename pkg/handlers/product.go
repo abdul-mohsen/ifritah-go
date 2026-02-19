@@ -27,6 +27,7 @@ func (h *handler) AddQuantity(c *gin.Context) {
 	var request AddQuantityRequest
 	if err := c.BindJSON(&request); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
 	}
 	log.Print(request)
 

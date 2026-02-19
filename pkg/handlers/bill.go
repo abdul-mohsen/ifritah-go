@@ -990,7 +990,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	}
 
 	query := `
-	update purchase_bill set effective_date = ?, set payment_due_date = ?, set state = ?, set sub_total = ?, set discount = ?, set vat = ?, set store_id = ?, set merchant_id = ?, set supplier_id = ?, set sequence_number = ? where id = ?
+	update purchase_bill set effective_date = ?, payment_due_date = ?, state = ?, sub_total = ?, discount = ?, vat = ?, store_id = ?, merchant_id = ?, supplier_id = ?, sequence_number = ? where id = ?
 	`
 	_, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
 		request.StoreId, userSession.id, request.SupplierId, request.SupplierSequenceNumber, id)

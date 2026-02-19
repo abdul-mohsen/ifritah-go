@@ -1210,7 +1210,7 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
 	var id string = c.Param("id")
 
-	query := `select effective_date, payment_due_date, b.state, sub_total, discount, vat, store_id, sequence_number, merchant_id
+	query := `select effective_date, payment_due_date, b.state, sub_total, discount, vat, store_id, sequence_number, merchant_id,
 			COALESCE(
 				(SELECT JSON_ARRAYAGG(
 					JSON_OBJECT(

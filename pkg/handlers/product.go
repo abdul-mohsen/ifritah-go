@@ -48,15 +48,12 @@ func (h *handler) AddQuantity(c *gin.Context) {
 
 	query := `
 	insert into product
-	set quantity = COALESCE(?, 0),
-	set price = ?
-	set cost_price = ?
-	set shelf_number = ?
+	(article_id, quantity, price, cost_price ,shelf_number) values (?,?,?,?,?)
 	where store_id = ?
 	`
 
 	for _, value := range request.Products {
-		if _, err := h.DB.Exec(query, value.Quantity, value.Price, value.CostPrice, value.ShelfNumber, request.StoreId); err != nil {
+		if _, err := h.DB.Exec(query, value.Id, value.Quantity, value.Price, value.CostPrice, value.ShelfNumber, request.StoreId); err != nil {
 			log.Panic(err)
 		}
 	}

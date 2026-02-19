@@ -1114,7 +1114,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 func (h *handler) updateProductToBillPurchase(products []Product, billId string) error {
 
-	query := `insert into bill_purchase_product  (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
+	query := `insert into purchase_bill_product  (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
 		_, err := h.DB.Exec(query, product.Id, product.Price, product.Quantity, billId)
 		if err != nil {

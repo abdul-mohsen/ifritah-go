@@ -42,7 +42,7 @@ func (h *handler) AddQuantity(c *gin.Context) {
 	}
 
 	if !slices.Contains(storeIds, request.StoreId) {
-		c.Status(http.StatusBadRequest)
+		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("ERR: store id does not match"))
 		log.Panic("ERR: store id does not match")
 	}
 

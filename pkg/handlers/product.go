@@ -9,35 +9,35 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type AddQuentityRequest struct {
+type AddQuantityRequest struct {
 	StoreId  int          `json:"store_id" binding:"required"`
 	Products []AddProduct `json:"products" binding:"required,dive"`
 }
 
 type AddProduct struct {
-	Id       int `json:"product_id" binding:"required"`
-	Quantity int `json:"quantity" binding:"required"`
+	Id          int    `json:"product_id" binding:"required"`
+	Quantity    int    `json:"quantity" binding:"required"`
+	Price       int    `json:"price" binding:"required"`
+	ShelfNumber string `json:"shelf_number" binding:"required"`
+	CostPrice   int    `json:"cost_price" binding:"required"`
 }
 
-func (h *handler) AddQuentity(c *gin.Context) {
+func (h *handler) AddQuantity(c *gin.Context) {
 
-	var request AddQuentityRequest
+	var request AddQuantityRequest
 	if err := c.BindJSON(&request); err != nil {
-		c.Status(http.StatusBadRequest)
-		log.Panic(err)
+		c.AbortWithError(http.StatusBadRequest, err)
 	}
 
 	storeIds := h.getStoreIds(c)
 
 	if len(request.Products) == 0 {
-		c.Status(http.StatusBadRequest)
-		log.Panic("ERR: missing required value")
+		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("ERR: missing required value"))
 	}
 
 	for _, value := range request.Products {
 		if value.Quantity <= 0 {
-			log.Panic("ERR: quantity can't be 0 or less")
-			c.Status(http.StatusBadRequest)
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("ERR: quantity can't be 0 or less"))
 		}
 	}
 
@@ -47,13 +47,16 @@ func (h *handler) AddQuentity(c *gin.Context) {
 	}
 
 	query := `
-	update product
+	add product
 	set quantity = COALESCE(quantity, 0) + ?
-	where id = ? and store_id = ?
+	set price = ?
+	set cost_price = ?
+	set shelf_number = ?
+	where store_id = ?
 	`
 
 	for _, value := range request.Products {
-		if _, err := h.DB.Exec(query, value.Quantity, value.Id, request.StoreId); err != nil {
+		if _, err := h.DB.Exec(query, value.Quantity, value.Price, value.CostPrice, value.ShelfNumber, request.StoreId); err != nil {
 			log.Panic(err)
 		}
 	}
@@ -65,7 +68,7 @@ func (h *handler) AddQuentity(c *gin.Context) {
 func (h *handler) GetAllProducts(c *gin.Context) {
 	user := GetSessionInfo(c)
 	query := `
-	select  p.article_id, p.price, p.quantity
+	select  p.article_id, p.price, p.quantity, p.cost_price, p.shelf_number
 	from user
 	join store s on s.company_id = user.company_id
 	join product p on p.store_id = s.id
@@ -82,7 +85,7 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 	var products []Product
 	for rows.Next() {
 		var product Product
-		if rows.Scan(&product.Id, &product.Price, &product.Quantity); err != nil {
+		if rows.Scan(&product.Id, &product.Price, &product.Quantity, &product.CostPrice, &product.ShelfNumber); err != nil {
 			fmt.Println("Error in query", err)
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return

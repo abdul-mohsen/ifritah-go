@@ -64,7 +64,7 @@ func main() {
 		authorized.POST("purchase_bill/all", h.GetALLPurchaseBillDetail)
 
 		authorized.GET("stores/all", h.GetStores)
-		authorized.POST("product", h.AddQuentity)
+		authorized.POST("product", h.AddQuantity)
 		authorized.GET("product/all", h.GetAllProducts)
 
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))

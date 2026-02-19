@@ -179,9 +179,11 @@ type AddBillRequest struct {
 }
 
 type Product struct {
-	Id       int    `json:"id" binding:"required"`
-	Price    string `json:"price" binding:"required"`
-	Quantity int64  `json:"quantity" binding:"required"`
+	Id          int    `json:"id" binding:"required"`
+	Price       string `json:"price" binding:"required"`
+	CostPrice   string `json:"cost_price" binding:"required"`
+	ShelfNumber string `json:"shelf_number" binding:"required"`
+	Quantity    int64  `json:"quantity" binding:"required"`
 }
 
 type ManualProduct struct {

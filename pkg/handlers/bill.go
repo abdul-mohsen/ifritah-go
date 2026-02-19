@@ -999,7 +999,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	query = `DELETE FROM bill_purchase_product where bill_id = ?;`
+	query = `DELETE FROM purchase_bill_product where bill_id = ?;`
 	if _, err = h.DB.Exec(query, id); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)

@@ -46,9 +46,9 @@ func (h *handler) AddQuantity(c *gin.Context) {
 		log.Panic("ERR: store id does not match")
 	}
 
+	log.Print(request)
 	query := `
-	insert into product
-	(article_id, quantity, price, cost_price ,shelf_number, store_id) values (?,?,?,?,?,?)
+	INSERT INTO product (article_id, quantity, price, cost_price ,shelf_number, store_id) VALUES (?,?,?,?,?,?)
 	`
 
 	for _, value := range request.Products {

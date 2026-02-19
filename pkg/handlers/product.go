@@ -48,8 +48,7 @@ func (h *handler) AddQuantity(c *gin.Context) {
 
 	query := `
 	insert into product
-	(article_id, quantity, price, cost_price ,shelf_number) values (?,?,?,?,?)
-	where store_id = ?
+	(article_id, quantity, price, cost_price ,shelf_number, store_id) values (?,?,?,?,?,?)
 	`
 
 	for _, value := range request.Products {

@@ -17,9 +17,9 @@ type AddQuantityRequest struct {
 type AddProduct struct {
 	Id          int    `json:"product_id" binding:"required"`
 	Quantity    int    `json:"quantity" binding:"required"`
-	Price       int    `json:"price" binding:"required"`
-	ShelfNumber string `json:"shelf_number" binding:"required"`
-	CostPrice   int    `json:"cost_price" binding:"required"`
+	Price       int    `json:"price" `
+	ShelfNumber string `json:"shelf_number"`
+	CostPrice   int    `json:"cost_price"`
 }
 
 func (h *handler) AddQuantity(c *gin.Context) {

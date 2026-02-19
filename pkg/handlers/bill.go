@@ -462,6 +462,18 @@ func (h *handler) addManualProductToBill(products []ManualProduct, billId int64)
 	return nil
 }
 
+func (h *handler) addManualProductToPurchaseBill(products []ManualProduct, billId string) error {
+
+	query := `insert into bill_manual_purchase_product  (part_name, price, quantity, bill_id) values (?, ?, ?, ?)`
+	for _, product := range products {
+		_, err := h.DB.Exec(query, product.PartName, product.Price, product.Quantity, billId)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (h *handler) getNextSquenceNumber(id int64) int {
 
 	query := `
@@ -905,11 +917,111 @@ type AddPurchaseBillRequest struct {
 	Discount               string          `json:"discount"`
 	PaidAmount             string          `json:"paidAmount" `
 	PaymentMethod          int8            `json:"payment_method"`
-	Products               []ManualProduct `json:"products" binding:"required,dive"`
+	Products               []Product       `json:"products" binding:"required,dive"`
+	ManualProducts         []ManualProduct `json:"products" binding:"required,dive"`
 	SupplierId             int             `json:"supplier_id" binding:"required"`
 	SupplierSequenceNumber int             `json:"supplier_sequence_number" binding:"required"`
 }
 
+func (h *handler) UpdatePurchaseBill(c *gin.Context) {
+
+	id := c.Param("id")
+	request := AddPurchaseBillRequest{
+		State:         1,
+		PaymentMethod: 0,
+		PaidAmount:    "0.0",
+	}
+
+	if err := c.BindJSON(&request); err != nil {
+		c.Status(http.StatusBadRequest)
+		log.Panic(err)
+	}
+
+	userSession := GetSessionInfo(c)
+
+	storeIds := h.getStoreIds(c)
+
+	if !slices.Contains(storeIds, request.StoreId) {
+		c.Status(http.StatusBadRequest)
+		log.Panic("invalid store id")
+	}
+
+	var paymentDueDate *time.Time
+	if request.PaymentDueDate != nil {
+		parsedTime, err := time.Parse(time.RFC3339, *request.PaymentDueDate)
+		paymentDueDate = &parsedTime
+		if err != nil {
+			log.Panic("Error parsing date:", err)
+		}
+	}
+
+	discount, success1 := stringToBigFloat(request.Discount)
+	paidAmount, success2 := stringToBigFloat(request.PaidAmount)
+
+	if !(success1 && success2) {
+		c.Status(http.StatusBadRequest)
+		log.Panic("big float are bad")
+	}
+
+	subTotal := zeroBigFloat()
+	for _, product := range request.Products {
+		price, success := stringToBigFloat(product.Price)
+		if !success || product.Quantity <= 0 {
+			c.Status(http.StatusBadRequest)
+			log.Panic("invalid product")
+		}
+		quantity := big.NewFloat(float64(product.Quantity))
+		cost := new(big.Float).Mul(price, quantity)
+		subTotal = new(big.Float).Add(cost, subTotal)
+	}
+
+	totalWithOutVat := new(big.Float).Sub(subTotal, discount)
+	vatTotal := new(big.Float).Mul(totalWithOutVat, big.NewFloat(.15))
+	total := new(big.Float).Add(totalWithOutVat, vatTotal)
+
+	if paidAmount.Cmp(total) == 1 {
+		c.AbortWithStatus(http.StatusBadRequest)
+		log.Panic("invalid paid ammount")
+	}
+
+	if total.Cmp(zeroBigFloat()) == 0 {
+		c.AbortWithStatus(http.StatusBadRequest)
+		log.Panic("invalid total")
+	}
+
+	query := `
+	update purchase_bill set effective_date = ?, set payment_due_date = ?, set state = ?, set sub_total = ?, set discount = ?, set vat = ?, set store_id = ?, set merchant_id = ?, set supplier_id = ?, set sequence_number = ? where id = ?
+	`
+	_, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
+		request.StoreId, userSession.id, request.SupplierId, request.SupplierSequenceNumber, id)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
+
+	query = `DELETE FROM bill_purchase_product where bill_id = ?;`
+	if _, err = h.DB.Exec(query, id); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
+	query = `DELETE FROM bill_manual_purchase_product where bill_id = ?;`
+	if _, err = h.DB.Exec(query, id); err != nil {
+		log.Panic(err)
+		c.AbortWithError(http.StatusBadRequest, err)
+	}
+	log.Printf("Dropped old product ")
+	if err := h.updateProductToBillPurchase(request.Products, id); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
+	if err := h.addManualProductToPurchaseBill(request.ManualProducts, id); err != nil {
+		log.Printf(err.Error())
+		c.AbortWithError(http.StatusBadRequest, err)
+	}
+
+	c.Status(http.StatusOK)
+
+}
 func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	request := AddPurchaseBillRequest{
@@ -994,12 +1106,37 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	}
 
 	h.addProductToBillPurchase(request.Products, id)
+	h.addManualProductToBillPurchase(request.ManualProducts, id)
 
-	c.Status(http.StatusOK)
+	c.Status(http.StatusCreated)
 
 }
 
-func (h *handler) addProductToBillPurchase(products []ManualProduct, billId int64) error {
+func (h *handler) updateProductToBillPurchase(products []Product, billId string) error {
+
+	query := `insert into bill_purchase_product  (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
+	for _, product := range products {
+		_, err := h.DB.Exec(query, product.Id, product.Price, product.Quantity, billId)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *handler) addProductToBillPurchase(products []Product, billId int64) error {
+
+	query := `insert into bill_manual_purchase_product  (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
+	for _, product := range products {
+		_, err := h.DB.Exec(query, product.Id, product.Price, product.Quantity, billId)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *handler) addManualProductToBillPurchase(products []ManualProduct, billId int64) error {
 
 	query := `insert into bill_manual_purchase_product  (part_name, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
@@ -1012,18 +1149,19 @@ func (h *handler) addProductToBillPurchase(products []ManualProduct, billId int6
 }
 
 type PurchaseBill struct {
-	Id             int              `json:"id"`
-	EffectiveDate  sql.NullTime     `json:"effective_date"`
-	PaymentDueDate *sql.NullTime    `json:"payment_due_date"`
-	State          int              `json:"state"`
-	SubTotal       float64          `json:"subtotal"`
-	Discount       float64          `json:"discount"`
-	Vat            float64          `json:"vat"`
-	SequenceNumber int              `json:"sequence_number"`
-	Type           bool             `json:"type"`
-	StoreId        int              `json:"store_id"`
-	MerchantId     int              `json:"merchant_id"`
-	Products       []ProductDetails `json:"products"`
+	Id             int             `json:"id"`
+	EffectiveDate  sql.NullTime    `json:"effective_date"`
+	PaymentDueDate *sql.NullTime   `json:"payment_due_date"`
+	State          int             `json:"state"`
+	SubTotal       float64         `json:"subtotal"`
+	Discount       float64         `json:"discount"`
+	Vat            float64         `json:"vat"`
+	SequenceNumber int             `json:"sequence_number"`
+	Type           bool            `json:"type"`
+	StoreId        int             `json:"store_id"`
+	MerchantId     int             `json:"merchant_id"`
+	Products       json.RawMessage `json:"products"`
+	ManualProducts json.RawMessage `json:"manual_products"`
 }
 
 func (h *handler) GetALLPurchaseBillDetail(c *gin.Context) {
@@ -1073,20 +1211,40 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 	var id string = c.Param("id")
 
 	query := `select effective_date, payment_due_date, b.state, sub_total, discount, vat, store_id, sequence_number, merchant_id
+			COALESCE(
+				(SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'product_id', p.product_id,
+						'price', p.price,
+						'quantity', p.quantity
+					)
+				)
+				FROM purchase_bill_product p
+				WHERE p.bill_id = b.id),
+				JSON_ARRAY()) AS products,
+			COALESCE(
+				(SELECT JSON_ARRAYAGG(
+					JSON_OBJECT(
+						'part_name', m.part_name,
+						'price', m.price,
+						'quantity', m.quantity
+					)
+				)
+				FROM bill_manual_purchase_product m
+				WHERE m.bill_id = b.id),
+				JSON_ARRAY()) AS manual_products
 	from purchase_bill as b
-	join store on store.id = b.store_id 
+	join store on store.id = b.store_id
 	join company on company.id = store.company_id
 	join user on user.id= ? and company.id=user.company_id
 	where b.id = ? limit 1`
 	var bill PurchaseBill
 
 	if err := h.DB.QueryRow(query, userSession.id, id).Scan(&bill.EffectiveDate,
-		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId); err != nil {
+		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.Products, &bill.ManualProducts); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}
-
-	bill.Products = h.getProducts(bill.Id)
 
 	c.JSON(http.StatusOK, bill)
 }

@@ -58,7 +58,8 @@ func main() {
 		authorized.DELETE("bill/:id", h.DeleteBillDetail)
 		authorized.POST("bill/credit", h.CreditBill)
 
-		authorized.POST("purchase_bill", h.AddPurchaseBill)
+		authorized.POST("purchase_bill/:id", h.AddPurchaseBill)
+		authorized.PUT("purchase_bill", h.UpdatePurchaseBill)
 		authorized.GET("purchase_bill/:id", h.GetPurchaseBillDetail)
 		authorized.DELETE("purchase_bill/:id", h.DeletePurchaseBillDetail)
 		authorized.POST("purchase_bill/all", h.GetALLPurchaseBillDetail)

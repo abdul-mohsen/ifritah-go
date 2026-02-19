@@ -49,10 +49,10 @@ func (h *handler) GetPart(c *gin.Context) {
 	}
 	query := `
 	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription 
-	from oem_number o
-	left join articles on o.articleId = articles.legacyArticleId 
-	left join articlelinks al on al.legacyArticleId = articles.legacyArticleId 
-	left join articlepdfs p on p.legacyArticleId = articles.legacyArticleId 
+	from carpart.oem_number o
+	left join carpart.articles on o.articleId = articles.legacyArticleId
+	left join carpart.articlelinks al on al.legacyArticleId = articles.legacyArticleId
+	left join carpart.articlepdfs p on p.legacyArticleId = articles.legacyArticleId
 	where o.number like ?
 	limit ? offset ?
 	`

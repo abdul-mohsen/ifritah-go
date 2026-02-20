@@ -47,6 +47,28 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, suppliers)
 }
 
+func (h *handler) GetSupplier(c *gin.Context) {
+
+	userSession := GetSessionInfo(c)
+
+	id, err := h.queries.GetCompanyIdByUser(c.Request.Context(), int32(userSession.id))
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	} else if !id.Valid {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
+
+	supplier, err := h.queries.GetSupplier(c.Request.Context(), db.GetSupplierParams{id.Int32, userSession.id})
+
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
+	c.IndentedJSON(http.StatusOK, supplier)
+}
+
 func (h *handler) AddSupplier(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)

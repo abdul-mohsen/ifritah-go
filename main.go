@@ -69,7 +69,7 @@ func main() {
 		authorized.GET("stores/all", h.GetStores)
 		authorized.POST("product", h.AddQuantity)
 		authorized.GET("product/all", h.GetAllProducts)
-		authorized.GET("product/all", h.GetProduct)
+		authorized.GET("product/:id", h.GetProduct)
 
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))
 		authorized.POST("part/", h.GetPart)

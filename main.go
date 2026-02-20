@@ -1,7 +1,7 @@
 package main
 
 import (
-	"ifritah/web-service-gin/pkg/db"
+	"ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/handlers"
 
 	"log"
@@ -23,8 +23,10 @@ func main() {
 		log.Fatalf("unable to load .env file: %e", err)
 	}
 	DB := db.Connect()
+	queries := db.New(DB)
+
 	handlers.EnvSetup()
-	h := handlers.New(DB)
+	h := handlers.New(DB, queries)
 	router := gin.Default()
 	baseUrl := os.Getenv("BASEURL")
 	store := persistence.NewInMemoryStore(time.Second)

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	db "ifritah/web-service-gin/pkg/db/gen"
 	"math/big"
 	"os"
 	"strconv"
@@ -9,7 +10,8 @@ import (
 )
 
 type handler struct {
-	DB *sql.DB
+	DB      *sql.DB
+	queries *db.Queries
 }
 
 type userSession struct {
@@ -18,8 +20,9 @@ type userSession struct {
 	exp      int64
 }
 
-func New(db *sql.DB) handler {
-	return handler{db}
+func New(db *sql.DB, queries *db.Queries) handler {
+
+	return handler{db, queries}
 }
 
 func EnvSetup() {

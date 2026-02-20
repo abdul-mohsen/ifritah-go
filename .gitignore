@@ -1,3 +1,4 @@
 *.sh
 .env
 web-service-gin
+pkg/db/gen/*

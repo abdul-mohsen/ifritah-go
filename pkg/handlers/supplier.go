@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
 	"log"
@@ -101,7 +102,7 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	var request db.UpdateSupplierParams
+	var request SupplierRequest
 	if err := c.BindJSON(&request); err != nil {
 		log.Panic(err)
 	}
@@ -111,11 +112,24 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
-	request.ID = res
+	row := db.UpdateSupplierParams{
+		Name:        NewNullString(request.Name),
+		Address:     NewNullString(request.Address),
+		PhoneNumber: NewNullString(request.PhoneNumber),
+		Number:      NewNullString(request.Number),
+		VatNumber:   NewNullString(request.VatNumber),
+		BankAccount: NewNullString(request.BankAccount),
+		CompanyID:   int32(companyId),
+		ID:          res,
+	}
 
-	h.queries.UpdateSupplier(c.Request.Context(), request)
+	h.queries.UpdateSupplier(c.Request.Context(), row)
 
 	c.Status(http.StatusOK)
+}
+
+func NewNullString(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: true}
 }
 
 func (h *handler) DeleteSupplier(c *gin.Context) {

@@ -21,7 +21,6 @@ type userSession struct {
 }
 
 func New(db *sql.DB, queries *db.Queries) handler {
-
 	return handler{db, queries}
 }
 

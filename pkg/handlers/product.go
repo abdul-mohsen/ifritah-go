@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"slices"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -101,5 +102,24 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 	defer rows.Close()
 
 	c.JSON(http.StatusOK, products)
+
+}
+
+func (h *handler) GetProduct(c *gin.Context) {
+	// user := GetSessionInfo(c)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
+
+	res, err := h.queries.GetProduct(c.Request.Context(), int32(id))
+	if err != nil {
+		fmt.Println("Error in query", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	c.JSON(http.StatusOK, res)
 
 }

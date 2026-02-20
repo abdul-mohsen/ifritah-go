@@ -55,7 +55,7 @@ func main() {
 
 		// Bills
 		authorized.POST("bill/all", h.GetBills)
-		authorized.POST("bill/:id", h.SubmitDraftBill)
+		authorized.PUT("bill/:id", h.SubmitDraftBill)
 		authorized.POST("bill", h.AddBill)
 		authorized.DELETE("bill/:id", h.DeleteBillDetail)
 		authorized.POST("bill/credit", h.CreditBill)
@@ -69,6 +69,7 @@ func main() {
 		authorized.GET("stores/all", h.GetStores)
 		authorized.POST("product", h.AddQuantity)
 		authorized.GET("product/all", h.GetAllProducts)
+		authorized.GET("product/all", h.GetProduct)
 
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))
 		authorized.POST("part/", h.GetPart)
@@ -83,6 +84,7 @@ func main() {
 		nonAuthGroup.GET("credit_bill/:id", h.GetBillCreditDetail) // allow all user to get all bill details
 		nonAuthGroup.POST("register", h.Register)
 		nonAuthGroup.POST("login", h.Login)
+		nonAuthGroup.POST("refresh", h.Login)
 	}
 
 	router.Run("localhost:" + os.Getenv("SERVER_PORT"))

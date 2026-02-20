@@ -2,9 +2,9 @@ version: "2"
 sql:
   - engine : "mysql"
     queries: "pkg/db/queries"
-    schema: "pkg/db/schema.sql"
+    schema: "pkg/db/schema"
     gen:
       go:
         package: "db"
         out: "pkg/db/gen"
-        emit_pointers_for_null_types: true
+        emit_json_tags: true

@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -77,16 +79,19 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	var request SupplierRequest
+	var request db.UpdateSupplierParams
 	if err := c.BindJSON(&request); err != nil {
 		log.Panic(err)
 	}
 
-	var id string = c.Param("id")
-	if _, err := h.DB.Exec(
-		"UPDATE supplier SET name=?, address=?, phone_number=?, number=?, vat_number=? bank_account=? where company_id=? and id=?;", request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber, request.BankAccount, companyId, id); err != nil {
+	res, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
+	request.ID = res
+
+	h.queries.UpdateSupplier(c.Request.Context(), request)
 
 	c.Status(http.StatusOK)
 }

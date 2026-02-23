@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-sql-driver/mysql"
 )
 
 type AddQuantityRequest struct {
@@ -63,6 +65,10 @@ func (h *handler) AddQuantity(c *gin.Context) {
 
 	for _, value := range request.Products {
 		if _, err := h.DB.Exec(query, value.Id, value.Quantity, value.Price, value.CostPrice, value.ShelfNumber, request.StoreId); err != nil {
+			var mysqlErr *mysql.MySQLError
+			if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+				c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Product already exists in this store"))
+			}
 			log.Panic(err)
 		}
 	}

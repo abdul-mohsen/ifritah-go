@@ -248,7 +248,6 @@ func (h *handler) AddBill(c *gin.Context) {
 		}
 	}
 	log.Printf("out of my calc func")
-	log.Printf(subTotal.Text('f', 10))
 
 	for _, product := range request.ManualProducts {
 		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
@@ -344,7 +343,6 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 			c.AbortWithError(http.StatusBadRequest, err)
 		}
 	}
-	log.Printf(subTotal.Text('f', 10))
 
 	for _, product := range request.ManualProducts {
 		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
@@ -429,7 +427,6 @@ func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
 	cost := new(big.Float).Mul(_price, _quantity)
 	subTotal = subTotal.Add(cost, subTotal)
 	log.Printf("in my calc func")
-	log.Printf(subTotal.Text('f', 10))
 	return nil
 }
 

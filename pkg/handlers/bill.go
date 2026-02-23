@@ -126,9 +126,6 @@ func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 			UNION
 			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE AS bill_type, 0 AS credit_state,  total, total_vat, total_before_vat
 			FROM bill_totals as bill
-			UNION
-			SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type, 0 as credit_state, total, total_vat, total_before_vat
-			FROM purchase_bill_totals as purchase_bill
 		) AS T WHERE state >= 0 ORDER BY effective_date  DESC LIMIT ? OFFSET ?`
 		rows, err = h.DB.Query(query, pageSize, page*pageSize)
 	} else {

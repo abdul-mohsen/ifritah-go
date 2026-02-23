@@ -67,7 +67,6 @@ func (h *handler) GetSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	log.Print(companyID.Int32, id)
 	supplier, err := h.queries.GetSupplier(c.Request.Context(), db.GetSupplierParams{CompanyID: companyID.Int32, ID: id})
 
 	if err != nil {

@@ -61,7 +61,7 @@ func (h *handler) GetSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	supplier, err := h.queries.GetSupplier(c.Request.Context(), db.GetSupplierParams{id.Int32, userSession.id})
+	supplier, err := h.queries.GetSupplier(c.Request.Context(), db.GetSupplierParams{CompanyID: id.Int32, ID: userSession.id})
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)

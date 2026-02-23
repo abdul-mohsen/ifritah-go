@@ -50,18 +50,25 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 
 func (h *handler) GetSupplier(c *gin.Context) {
 
-	userSession := GetSessionInfo(c)
-
-	id, err := h.queries.GetCompanyIdByUser(c.Request.Context(), int32(userSession.id))
+	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
-	} else if !id.Valid {
+	}
+	userSession := GetSessionInfo(c)
+
+	companyID, err := h.queries.GetCompanyIdByUser(c.Request.Context(), int32(userSession.id))
+
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	} else if !companyID.Valid {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
 
-	supplier, err := h.queries.GetSupplier(c.Request.Context(), db.GetSupplierParams{CompanyID: id.Int32, ID: userSession.id})
+	log.Print(companyID.Int32, id)
+	supplier, err := h.queries.GetSupplier(c.Request.Context(), db.GetSupplierParams{CompanyID: companyID.Int32, ID: id})
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)

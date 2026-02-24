@@ -44,11 +44,10 @@ func (h *handler) GetAllClient(c *gin.Context) {
 	if err := c.BindJSON(&request); err != nil {
 		log.Panic(err)
 	}
-	res, err := h.queries.GetClients(c.Request.Context(), db.GetClientsParams{Limit: request.Page, Offset: request.PageSize})
+	res, err := h.queries.GetClients(c.Request.Context(), db.GetClientsParams{Limit: request.PageSize, Offset: request.Page * request.PageSize})
 	if err != nil {
-		fmt.Println("Error in query", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
-		return
+		log.Panic("Error in query", err)
 	}
 
 	c.JSON(http.StatusOK, res)

@@ -745,13 +745,13 @@ CREATE TABLE `carsbodies` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `clients`
+-- Table structure for table `client`
 --
 
-DROP TABLE IF EXISTS `clients`;
+DROP TABLE IF EXISTS `client`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `clients` (
+CREATE TABLE `client` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(255) NOT NULL,
   `company_name` varchar(255) DEFAULT NULL,

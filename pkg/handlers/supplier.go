@@ -137,6 +137,9 @@ func (h *handler) EditSupplier(c *gin.Context) {
 func NewNullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
+func NewNullStringPointer(s *string) sql.NullString {
+	return sql.NullString{String: *s, Valid: s != nil}
+}
 
 func (h *handler) DeleteSupplier(c *gin.Context) {
 

@@ -24,11 +24,12 @@ func (h *handler) GetClient(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	log.Print(id, uint32(id))
+
 	res, err := h.queries.GetClientByID(c.Request.Context(), uint32(id))
 	if err != nil {
-		fmt.Println("Error in query", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
 	}
 
 	c.JSON(http.StatusOK, res)

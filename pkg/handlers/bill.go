@@ -237,9 +237,14 @@ func (h *handler) AddBill(c *gin.Context) {
 	if request.State > 0 {
 		squenceNumber = h.getNextSquenceNumber(userSession.id)
 	}
+	date := sql.NullTime{Valid: paymentDueDate != nil}
+	if paymentDueDate != nil {
+		date.Time = *paymentDueDate
+	}
+
 	args := db.CreateBillParams{
 		EffectiveDate:   time.Now(),
-		PaymentDueDate:  sql.NullTime{Time: *paymentDueDate, Valid: paymentDueDate != nil},
+		PaymentDueDate:  date,
 		State:           int32(request.State),
 		SubTotal:        subTotal.Text('f', 10),
 		Discount:        discount.Text('f', 10),

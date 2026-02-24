@@ -56,12 +56,12 @@ func (h *handler) GetAllClient(c *gin.Context) {
 }
 
 type CreateClientRequest struct {
-	Name        string `json:"name" binding:"required"`
-	CompanyName string `json:"company_name" binding:"required"`
-	Email       string `json:"email" binding:"required"`
-	Phone       string `json:"phone" binding:"required"`
-	Address     string `json:"address" binding:"required"`
-	VatNumber   string `json:"vat_number" binding:"required"`
+	Name        string  `json:"name" binding:"required"`
+	CompanyName *string `json:"company_name" binding:"required"`
+	Email       *string `json:"email" binding:"required"`
+	Phone       *string `json:"phone" binding:"required"`
+	Address     *string `json:"address" binding:"required"`
+	VatNumber   string  `json:"vat_number" binding:"required"`
 }
 
 func (h *handler) CreateClient(c *gin.Context) {
@@ -72,10 +72,10 @@ func (h *handler) CreateClient(c *gin.Context) {
 	}
 	query := db.CreateClientParams{
 		Name:        request.Name,
-		CompanyName: NewNullString(request.CompanyName),
-		Email:       NewNullString(request.Email),
-		Address:     NewNullString(request.Address),
-		Phone:       NewNullString(request.Phone),
+		CompanyName: request.CompanyName,
+		Email:       request.Email,
+		Address:     request.Address,
+		Phone:       request.Phone,
 		VatNumber:   request.VatNumber,
 	}
 	err := h.queries.CreateClient(c.Request.Context(), query)
@@ -103,10 +103,10 @@ func (h *handler) UpdateClient(c *gin.Context) {
 
 	query := db.UpdateClientParams{
 		Name:        request.Name,
-		CompanyName: NewNullString(request.CompanyName),
-		Email:       NewNullString(request.Email),
-		Address:     NewNullString(request.Address),
-		Phone:       NewNullString(request.Phone),
+		CompanyName: request.CompanyName,
+		Email:       request.Email,
+		Address:     request.Address,
+		Phone:       request.Phone,
 		VatNumber:   request.VatNumber,
 		ID:          uint32(id),
 	}

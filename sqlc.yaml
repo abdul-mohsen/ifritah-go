@@ -9,3 +9,44 @@ sql:
         out: "pkg/db/gen"
         emit_json_tags: true
         emit_pointers_for_null_types: true
+        json_tags_case_style: "camel"
+        overrides:
+          - db_type: "varchar"
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true
+          - db_type: "text"
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true
+          - db_type: "int32"
+            nullable: true
+            go_type:
+              type: "int32"
+              pointer: true
+          - db_type: "datetime"
+            nullable: true
+            go_type:
+              import : "time"
+              type: "Time"
+              pointer: true
+          - db_type: "timestamp"
+            nullable: true
+            go_type:
+              import : "time"
+              type: "Time"
+              pointer: true
+          - db_type: "date"
+            nullable: true
+            go_type:
+              import : "time"
+              type: "Time"
+              pointer: true
+          - db_type: "time"
+            nullable: true
+            go_type:
+              import : "time"
+              type: "Time"
+              pointer: true

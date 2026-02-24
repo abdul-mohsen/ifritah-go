@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
 	"log"
@@ -12,12 +11,12 @@ import (
 )
 
 type SupplierRequest struct {
-	Name        string `json:"name"`
-	Address     string `json:"address"`
-	PhoneNumber string `json:"phone_number"`
-	Number      string `json:"number"`
-	VatNumber   string `json:"vat_number"`
-	BankAccount string `json:"bank_account"`
+	Name        *string `json:"name"`
+	Address     *string `json:"address"`
+	PhoneNumber *string `json:"phone_number"`
+	Number      *string `json:"number"`
+	VatNumber   *string `json:"vat_number"`
+	BankAccount *string `json:"bank_account"`
 }
 
 func (h *handler) GetAllSupplier(c *gin.Context) {
@@ -119,12 +118,12 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 	row := db.UpdateSupplierParams{
-		Name:        NewNullString(request.Name),
-		Address:     NewNullString(request.Address),
-		PhoneNumber: NewNullString(request.PhoneNumber),
-		Number:      NewNullString(request.Number),
-		VatNumber:   NewNullString(request.VatNumber),
-		BankAccount: NewNullString(request.BankAccount),
+		Name:        request.Name,
+		Address:     request.Address,
+		PhoneNumber: request.PhoneNumber,
+		Number:      request.Number,
+		VatNumber:   request.VatNumber,
+		BankAccount: request.BankAccount,
 		CompanyID:   int32(companyId),
 		ID:          res,
 	}
@@ -132,13 +131,6 @@ func (h *handler) EditSupplier(c *gin.Context) {
 	h.queries.UpdateSupplier(c.Request.Context(), row)
 
 	c.Status(http.StatusOK)
-}
-
-func NewNullString(s string) sql.NullString {
-	return sql.NullString{String: s, Valid: true}
-}
-func NewNullStringPointer(s *string) sql.NullString {
-	return sql.NullString{String: *s, Valid: s != nil}
 }
 
 func (h *handler) DeleteSupplier(c *gin.Context) {

@@ -96,7 +96,7 @@ func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 			UNION
 			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE AS bill_type, 0 AS credit_state,  total, total_vat, total_before_vat
 			FROM bill_totals as bill
-		) AS T WHERE state >= 0 LIMIT ? OFFSET ?`
+		) AS T WHERE state >= 0 ORDER BY id DESC LIMIT ? OFFSET ?`
 		rows, err = h.DB.Query(query, pageSize, page*pageSize)
 	} else {
 		query := ` SELECT T.id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, bill_type, credit_state, total, total_vat, total_before_vat  from(
@@ -105,7 +105,7 @@ func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
 			JOIN credit_note  cn on cn.bill_id = bill.id
 			UNION
 			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, 0 as credit_state, total, total_vat, total_before_vat from bill_totals as bill
-		) AS T WHERE user_phone_number like ?  and state >= 0 LIMIT ? OFFSET ?`
+		) AS T WHERE user_phone_number like ?  and state >= 0 ORDER BY id DESC LIMIT ? OFFSET ?`
 		rows, err = h.DB.Query(query, "%"+q+"%", pageSize, page*pageSize)
 	}
 

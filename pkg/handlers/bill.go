@@ -690,6 +690,11 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			log.Panic(err)
 		}
 		totalBeforeVAT, _ := f.Float64()
+		qr := ""
+
+		if bill.QRCode != nil {
+			qr = *bill.QRCode
+		}
 
 		invoice := models.Invoice{
 			Title:                        "فاتورة ضريبية مبسطة",
@@ -698,7 +703,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			StoreAddress:                 bill.Address,
 			Date:                         bill.EffectiveDate.Time.Local().Format(time.DateTime),
 			VATRegistrationNo:            bill.VatRegistration,
-			QRCodeData:                   *bill.QRCode,
+			QRCodeData:                   qr,
 			TotalDiscount:                "0.0",
 			TotalTaxableAmt:              fmt.Sprint(totalBeforeVAT),
 			TotalVAT:                     fmt.Sprint(totalVAT),

@@ -725,6 +725,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 				TotalColumn:                  "السعر شامل الضريبة",
 				TotalDiscount:                "إجمالي الخصم",
 				Footer:                       fmt.Sprintf(">>>>>>>>>>>>>> إغلاق الفاتورة %d <<<<<<<<<<<<<<<", bill.SequenceNumber),
+				Vat:                          fmt.Sprint("ضريبة القيمة المضافة (%d%)", 15),
 			},
 			Language: "ar",
 			Products: products,

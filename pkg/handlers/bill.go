@@ -590,8 +590,8 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
 	// Check if the file exists
-	_, err := os.Stat(filename)
-	if err != nil {
+	// _, err := os.Stat(filename)
+	if true {
 		bill := h.getBillDetail(c)
 		var products []models.Product
 		var mProduct []TempProduct

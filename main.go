@@ -66,7 +66,7 @@ func main() {
 		authorized.PUT("purchase_bill/:id", h.UpdatePurchaseBill)
 		authorized.GET("purchase_bill/:id", h.GetPurchaseBillDetail)
 		authorized.DELETE("purchase_bill/:id", h.DeletePurchaseBillDetail)
-		authorized.POST("purchase_bill/all", h.GetALLPurchaseBillDetail)
+		authorized.POST("purchase_bill/all", h.GetAllPurchaseBill)
 
 		authorized.GET("stores/all", h.GetStores)
 		authorized.POST("product", h.AddQuantity)
@@ -92,7 +92,7 @@ func main() {
 		nonAuthGroup.GET("credit_bill/:id", h.GetBillCreditDetail) // allow all user to get all bill details
 		nonAuthGroup.POST("register", h.Register)
 		nonAuthGroup.POST("login", h.Login)
-		nonAuthGroup.POST("refresh", h.Login)
+		// nonAuthGroup.POST("refresh", h.Refresh)
 	}
 
 	router.Run("localhost:" + os.Getenv("SERVER_PORT"))

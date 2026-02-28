@@ -3,42 +3,30 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	db "ifritah/web-service-gin/pkg/db/gen"
 	"log"
 	"math/big"
 	"net/http"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-func (h *handler) getPurchaseBills(page int, pageSize int, q string) []BillBase {
+func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, q string, userID int32) []db.PurchaseBillTotal {
 
-	var rows *sql.Rows
-	var err error
+	args := db.GetAllPurchaseBillParams{
+		ID:     userID,
+		Limit:  pageSize,
+		Offset: pageSize * page,
+	}
 
-	query := `
-	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type, 0 as credit_state, total, total_vat, total_before_vat
-	FROM purchase_bill_totals as purchase_bill
-	WHERE state >= 0 ORDER BY id DESC LIMIT ? OFFSET ?`
-	rows, err = h.DB.Query(query, pageSize, page*pageSize)
+	bills, err := h.queries.GetAllPurchaseBill(c.Request.Context(), args)
 
 	if err != nil {
 		log.Panic(err)
 	}
-
-	var bills []BillBase
-	for rows.Next() {
-		var bill BillBase
-
-		if err := rows.Scan(&bill.Id, &bill.EffectiveDate, &bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.SequenceNumber, &bill.Type, &bill.CreditState, &bill.Total, &bill.TotalVAT, &bill.TotalBeforeVAT); err != nil {
-			log.Panic(err)
-		}
-
-		bills = append(bills, bill)
-	}
-
-	defer rows.Close()
 
 	return bills
 }
@@ -310,7 +298,7 @@ type PurchaseBill struct {
 	ManualProducts json.RawMessage `json:"manual_products"`
 }
 
-func (h *handler) GetALLPurchaseBillDetail(c *gin.Context) {
+func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
 
@@ -343,7 +331,7 @@ func (h *handler) GetALLPurchaseBillDetail(c *gin.Context) {
 		}
 	}
 
-	bill := h.getPurchaseBills(request.Page, request.PageSize, request.Query)
+	bill := h.getPurchaseBills(c, int32(request.Page), int32(request.PageSize), request.Query, int32(userSession.id))
 
 	c.JSON(http.StatusOK, bill)
 }
@@ -352,41 +340,22 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
 
-	var id string = c.Param("id")
+	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
 
-	query := `select effective_date, payment_due_date, b.state, sub_total, discount, vat, store_id, sequence_number, merchant_id,
-			COALESCE(
-				(SELECT JSON_ARRAYAGG(
-					JSON_OBJECT(
-						'product_id', p.product_id,
-						'price', p.price,
-						'quantity', p.quantity
-					)
-				)
-				FROM purchase_bill_product p
-				WHERE p.bill_id = b.id),
-				JSON_ARRAY()) AS products,
-			COALESCE(
-				(SELECT JSON_ARRAYAGG(
-					JSON_OBJECT(
-						'part_name', m.part_name,
-						'price', m.price,
-						'quantity', m.quantity
-					)
-				)
-				FROM bill_manual_purchase_product m
-				WHERE m.bill_id = b.id),
-				JSON_ARRAY()) AS manual_products
-	from purchase_bill as b
-	join store on store.id = b.store_id
-	join company on company.id = store.company_id
-	join user on user.id= ? and company.id=user.company_id
-	where b.id = ? limit 1`
-	var bill PurchaseBill
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
 
-	if err := h.DB.QueryRow(query, userSession.id, id).Scan(&bill.EffectiveDate,
-		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.Products, &bill.ManualProducts); err != nil {
-		c.Status(http.StatusBadRequest)
+	args := db.GetPurchaseBillDetailParams{
+		ID:   int32(userSession.id),
+		ID_2: int32(id),
+	}
+
+	bill, err := h.queries.GetPurchaseBillDetail(c.Request.Context(), args)
+
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
 

@@ -20,7 +20,7 @@ func (h *handler) getPurchaseBills(page int, pageSize int, q string) []BillBase 
 	query := `
 	SELECT id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, FALSE as bill_type, 0 as credit_state, total, total_vat, total_before_vat
 	FROM purchase_bill_totals as purchase_bill
-	WHERE state >= 0 ORDER BY effective_date  DESC LIMIT ? OFFSET ?`
+	WHERE state >= 0 ORDER BY id DESC LIMIT ? OFFSET ?`
 	rows, err = h.DB.Query(query, pageSize, page*pageSize)
 
 	if err != nil {

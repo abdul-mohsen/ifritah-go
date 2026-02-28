@@ -221,6 +221,14 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		log.Panic("invalid total")
 	}
 
+	tx, err := h.DB.Begin()
+
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+	defer tx.Rollback()
+
 	query := `
 	insert into purchase_bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, merchant_id, supplier_id, sequence_number)
 	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -241,6 +249,11 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	h.addProductToBillPurchase(request.Products, id)
 	h.addManualProductToBillPurchase(request.ManualProducts, id)
+
+	if err := tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
 
 	c.Status(http.StatusCreated)
 

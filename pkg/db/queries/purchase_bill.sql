@@ -4,7 +4,7 @@ select b.*
 	join store on store.id = b.store_id
 	join company on company.id = store.company_id
 	join user on user.id= ? and company.id=user.company_id
-	limit ? offset ?;
+	order by id desc limit ? offset ?;
 
 -- name: GetPurchaseBillDetail :one
 select effective_date, payment_due_date, b.state, sub_total, discount, vat, store_id, sequence_number, merchant_id,

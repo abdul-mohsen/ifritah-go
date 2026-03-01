@@ -239,7 +239,7 @@ func (h *handler) AddBill(c *gin.Context) {
 		MaintenanceCost: maintenanceCost.Text('f', 10),
 		Note:            request.Note,
 		Username:        request.UserName,
-		BuyerID:         sql.NullInt32{},
+		BuyerID:         nil,
 		UserPhoneNumber: request.UserPhoneNumber,
 	}
 

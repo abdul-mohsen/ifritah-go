@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"log"
 	"math/big"
@@ -169,6 +170,13 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	if len(request.Products)+len(request.ManualProducts) == 0 {
+		err := fmt.Errorf("product list should never be empty")
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+
+	}
+
 	userSession := GetSessionInfo(c)
 
 	storeIds := h.getStoreIds(c)
@@ -233,7 +241,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	insert into purchase_bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, merchant_id, supplier_id, sequence_number)
 	values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	res, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
+	res, err := tx.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
 		request.StoreId, userSession.id, request.SupplierId, request.SupplierSequenceNumber)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
@@ -247,8 +255,8 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	h.addProductToBillPurchase(request.Products, id)
-	h.addManualProductToBillPurchase(request.ManualProducts, id)
+	addProductToBillPurchase(request.Products, id, tx)
+	addManualProductToBillPurchase(request.ManualProducts, id, tx)
 
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -271,11 +279,11 @@ func (h *handler) updateProductToBillPurchase(products []Product, billId string)
 	return nil
 }
 
-func (h *handler) addProductToBillPurchase(products []Product, billId int64) error {
+func addProductToBillPurchase(products []Product, billId int64, tx *sql.Tx) error {
 
 	query := `insert into bill_manual_purchase_product  (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
-		_, err := h.DB.Exec(query, product.Id, product.Price, product.Quantity, billId)
+		_, err := tx.Exec(query, product.Id, product.Price, product.Quantity, billId)
 		if err != nil {
 			return err
 		}
@@ -283,11 +291,11 @@ func (h *handler) addProductToBillPurchase(products []Product, billId int64) err
 	return nil
 }
 
-func (h *handler) addManualProductToBillPurchase(products []ManualProduct, billId int64) error {
+func addManualProductToBillPurchase(products []ManualProduct, billId int64, tx *sql.Tx) error {
 
 	query := `insert into bill_manual_purchase_product  (part_name, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
-		_, err := h.DB.Exec(query, product.PartName, product.Price, product.Quantity, billId)
+		_, err := tx.Exec(query, product.PartName, product.Price, product.Quantity, billId)
 		if err != nil {
 			return err
 		}

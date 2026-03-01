@@ -35,3 +35,13 @@ select effective_date, payment_due_date, b.state, sub_total, discount, vat, stor
 	join company on company.id = store.company_id
 	join user on user.id = ? and company.id=user.company_id
 	where b.id = ? limit 1;
+
+-- name: AddPurchaseBill :execresult
+insert into purchase_bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, merchant_id, supplier_id, sequence_number)
+values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: AddPurchaseProduct :exec
+insert into purchase_bill_product (product_id, price, quantity, bill_id) values (?, ?, ?, ?);
+
+-- name: AddManualPurchaseProduct :exec
+insert into bill_manual_purchase_product (part_name, price, quantity, bill_id) values (?, ?, ?, ?);

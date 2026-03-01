@@ -146,17 +146,17 @@ type AddBillRequest struct {
 }
 
 type Product struct {
-	Id          int    `json:"id" binding:"required"`
-	Price       string `json:"price" binding:"required"`
+	Id          int32  `json:"id" binding:"required"`
+	Price       int64  `json:"price" binding:"required"`
 	CostPrice   string `json:"cost_price"`
 	ShelfNumber string `json:"shelf_number"`
-	Quantity    int64  `json:"quantity"`
+	Quantity    int32  `json:"quantity"`
 }
 
 type ManualProduct struct {
 	PartName string `json:"part_name" binding:"required"`
-	Price    string `json:"price" binding:"required"`
-	Quantity int64  `json:"quantity" binding:"required"`
+	Price    int64  `json:"price" binding:"required"`
+	Quantity int32  `json:"quantity" binding:"required"`
 }
 
 type TempProduct struct {
@@ -212,18 +212,6 @@ func (h *handler) AddBill(c *gin.Context) {
 	}
 
 	subTotal := zeroBigFloat()
-	for _, product := range request.Products {
-		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-		}
-	}
-	log.Printf("out of my calc func")
-
-	for _, product := range request.ManualProducts {
-		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-		}
-	}
 
 	totalWithOutVat := new(big.Float).Sub(new(big.Float).Add(subTotal, maintenanceCost), discount)
 	vatTotal := new(big.Float).Mul(totalWithOutVat, big.NewFloat(.15))
@@ -320,17 +308,6 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	}
 
 	subTotal := zeroBigFloat()
-	for _, product := range request.Products {
-		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-		}
-	}
-
-	for _, product := range request.ManualProducts {
-		if err := CalSubtotal(subTotal, product.Price, int(product.Quantity)); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-		}
-	}
 
 	totalWithOutVat := new(big.Float).Sub(new(big.Float).Add(subTotal, maintenanceCost), discount)
 	vatTotal := new(big.Float).Mul(totalWithOutVat, big.NewFloat(.15))

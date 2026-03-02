@@ -220,7 +220,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		EffectiveDate:  time.Now(),
 		PaymentDueDate: paymentDueDate,
 		State:          request.State,
-		SubTotal:       0,
+		SubTotal:       1,
 		Discount:       0,
 		Vat:            0,
 		StoreID:        int32(request.StoreId),

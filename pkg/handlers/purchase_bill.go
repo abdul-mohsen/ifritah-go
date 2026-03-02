@@ -192,20 +192,6 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		log.Panic("big float are bad")
 	}
 
-	for _, product := range request.Products {
-		if product.Price <= 0 || product.Quantity <= 0 {
-			c.Status(http.StatusBadRequest)
-			log.Panic("invalid product")
-		}
-	}
-
-	for _, product := range request.ManualProducts {
-		if product.Price <= 0 || product.Quantity <= 0 {
-			c.Status(http.StatusBadRequest)
-			log.Panic("invalid product")
-		}
-	}
-
 	tx, err := h.DB.Begin()
 
 	if err != nil {

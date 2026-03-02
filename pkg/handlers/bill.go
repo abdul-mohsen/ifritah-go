@@ -116,16 +116,16 @@ type AddBillRequest struct {
 
 type Product struct {
 	Id          int32  `json:"id" binding:"required"`
-	Price       int64  `json:"price" binding:"required"`
+	Price       string `json:"price" binding:"required"`
 	CostPrice   string `json:"cost_price"`
 	ShelfNumber string `json:"shelf_number"`
-	Quantity    int32  `json:"quantity"`
+	Quantity    string `json:"quantity"`
 }
 
 type ManualProduct struct {
 	PartName string `json:"part_name" binding:"required"`
-	Price    int64  `json:"price" binding:"required"`
-	Quantity int32  `json:"quantity" binding:"required"`
+	Price    string `json:"price" binding:"required"`
+	Quantity string `json:"quantity" binding:"required"`
 }
 
 type TempProduct struct {
@@ -199,9 +199,7 @@ func (h *handler) AddBill(c *gin.Context) {
 		EffectiveDate:   time.Now(),
 		PaymentDueDate:  paymentDueDate,
 		State:           int32(request.State),
-		SubTotal:        subTotal.Text('f', 10),
 		Discount:        discount.Text('f', 10),
-		Vat:             vatTotal.Text('f', 10),
 		StoreID:         int32(request.StoreId),
 		SequenceNumber:  int32(squenceNumber),
 		MerchantID:      int32(userSession.id),

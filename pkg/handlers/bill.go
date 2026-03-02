@@ -79,54 +79,22 @@ func (h *handler) GetBills(c *gin.Context) {
 		}
 	}
 
-	bills := h.getBaseBills(request.Page, request.PageSize, request.Query)
-	c.JSON(http.StatusOK, bills)
-}
-
-func (h *handler) getBaseBills(page int, pageSize int, q string) []BillBase {
-
-	var rows *sql.Rows
-	var err error
-
-	if q == "" {
-		query := ` Select * from(
-			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE as bill_type, cn.state as credit_state, total, total_vat, total_before_vat
-			FROM bill_totals as bill
-			JOIN credit_note  cn ON cn.bill_id = bill.id
-			UNION
-			SELECT bill.id, effective_date, payment_due_date, bill.state, sub_total, discount, vat, sequence_number, TRUE AS bill_type, 0 AS credit_state,  total, total_vat, total_before_vat
-			FROM bill_totals as bill
-		) AS T WHERE state >= 0 ORDER BY id DESC LIMIT ? OFFSET ?`
-		rows, err = h.DB.Query(query, pageSize, page*pageSize)
-	} else {
-		query := ` SELECT T.id, effective_date, payment_due_date, state, sub_total, discount, vat, sequence_number, bill_type, credit_state, total, total_vat, total_before_vat  from(
-			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, cn.state as credit_state, total, total_vat, total_before_vat
-			FROM bill_totals as bill
-			JOIN credit_note  cn on cn.bill_id = bill.id
-			UNION
-			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, sub_total, discount, vat, sequence_number, user_phone_number, TRUE as bill_type, 0 as credit_state, total, total_vat, total_before_vat from bill_totals as bill
-		) AS T WHERE user_phone_number like ?  and state >= 0 ORDER BY id DESC LIMIT ? OFFSET ?`
-		rows, err = h.DB.Query(query, "%"+q+"%", pageSize, page*pageSize)
+	if request.Query != "" {
+		request.Query = "%" + request.Query + "%"
 	}
 
+	args := db.GetAllBillParams{
+		UserPhoneNumber: &request.Query,
+		Limit:           int32(request.PageSize),
+		Offset:          int32(request.Page) * int32(request.PageSize),
+	}
+	bills, err := h.queries.GetAllBill(c.Request.Context(), args)
 	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
-
-	var bills []BillBase
-	for rows.Next() {
-		var bill BillBase
-
-		if err := rows.Scan(&bill.Id, &bill.EffectiveDate, &bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.SequenceNumber, &bill.Type, &bill.CreditState, &bill.Total, &bill.TotalVAT, &bill.TotalBeforeVAT); err != nil {
-			log.Panic(err)
-		}
-
-		bills = append(bills, bill)
-	}
-
-	defer rows.Close()
-
-	return bills
+	// , , pageSize, page*pageSize)
+	c.JSON(http.StatusOK, bills)
 }
 
 type AddBillRequest struct {

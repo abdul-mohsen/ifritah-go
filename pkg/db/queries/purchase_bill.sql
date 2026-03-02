@@ -7,7 +7,7 @@ select b.*
 	order by id desc limit ? offset ?;
 
 -- name: GetPurchaseBillDetail :one
-select effective_date, payment_due_date, b.state, sub_total, discount, vat, store_id, sequence_number, merchant_id,
+select effective_date, payment_due_date, b.state, discount, store_id, sequence_number, merchant_id,
 			COALESCE(
 				(SELECT JSON_ARRAYAGG(
 					JSON_OBJECT(
@@ -37,8 +37,8 @@ select effective_date, payment_due_date, b.state, sub_total, discount, vat, stor
 	where b.id = ? limit 1;
 
 -- name: AddPurchaseBill :execresult
-insert into purchase_bill (effective_date, payment_due_date, state, sub_total, discount, vat, store_id, merchant_id, supplier_id, sequence_number)
-values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+insert into purchase_bill (effective_date, payment_due_date, state, discount, store_id, merchant_id, supplier_id, sequence_number)
+values (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: AddPurchaseProduct :exec
 insert into purchase_bill_product (product_id, price, quantity, bill_id) values (?, ?, ?, ?);

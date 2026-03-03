@@ -27,15 +27,15 @@ maintenance_cost,
 b.note,
 b.userName as userName,
 user_phone_number,
-company.name as company_name,
-company.vat_registration_number,
-store.address_name,
-store.name as store_name,
 qr_code,
 total_before_vat,
 total_vat,
 total,
+company.name as company_name,
+company.vat_registration_number,
 company.commercial_registration_number,
+store.address_name,
+store.name as store_name,
 COALESCE(
   (SELECT JSON_ARRAYAGG(
 	  JSON_OBJECT(
@@ -58,15 +58,10 @@ COALESCE(
 	FROM bill_manual_product m
 	WHERE m.bill_id = b.id),
   JSON_ARRAY()) AS manual_products
-FROM
-bill_totals b
-JOIN
-store on store.id = b.store_id
-JOIN
-company on company.id = store.company_id
-WHERE
-b.id = ?
-LIMIT 1 ;
+FROM bill_totals b
+JOIN store on store.id = b.store_id
+JOIN company on company.id = store.company_id
+WHERE b.id = ? LIMIT 1 ;
 
 -- name: GetCreditBillByID :one
 SELECT
@@ -109,14 +104,24 @@ COALESCE(
 	FROM bill_manual_product m
 	WHERE m.bill_id = b.id),
   JSON_ARRAY()) AS manual_products
-FROM
-bill b
-JOIN
-store on store.id = b.store_id
-JOIN
-company on company.id = store.company_id
-JOIN
-credit_note  cn on cn.bill_id = b.id
-WHERE
-b.id = ?
-LIMIT 1;
+FROM bill b
+JOIN store on store.id = b.store_id
+JOIN company on company.id = store.company_id
+JOIN credit_note  cn on cn.bill_id = b.id
+WHERE b.id = ? LIMIT 1;
+
+
+-- name: GetBillPDFByID :one
+SELECT b.*,
+company.name as company_name,
+company.vat_registration_number,
+company.commercial_registration_number,
+store.address_name,
+store.name as store_name,
+cn.state as credit_state,
+cn.note as credit_note
+FROM bill_totals b
+JOIN store on store.id = b.store_id
+JOIN company on company.id = store.company_id
+JOIN credit_note  cn on cn.bill_id = b.id
+WHERE b.id = ? LIMIT 1 ;

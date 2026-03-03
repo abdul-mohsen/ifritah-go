@@ -409,38 +409,35 @@ type ProductDetails struct {
 }
 
 type Bill struct {
-	Id                           int             `json:"id"`
-	EffectiveDate                sql.NullTime    `json:"effective_date"`
-	PaymentDueDate               *sql.NullTime   `json:"payment_due_date"`
-	State                        int             `json:"state"`
-	SubTotal                     float64         `json:"subtotal"`
-	Discount                     float64         `json:"discount"`
-	Vat                          float64         `json:"vat"`
-	VatRegistration              string          `json:"vat_registration"`
-	Address                      string          `json:"address"`
-	StoreName                    string          `json:"store_name"`
-	CompanyName                  string          `json:"company_name"`
-	SequenceNumber               int             `json:"sequence_number"`
-	Type                         bool            `json:"type"`
-	StoreId                      int             `json:"store_id"`
-	MerchantId                   int             `json:"merchant_id"`
-	MaintenanceCost              string          `json:"maintenance_cost"`
-	Note                         *string         `json:"note"`
-	UserName                     *string         `json:"user_name"`
-	UserPhoneNumber              *string         `json:"user_phone_number"`
-	Url                          *string         `json:"url"`
-	Products                     json.RawMessage `json:"products"`
-	ManualProducts               json.RawMessage `json:"manual_products"`
-	CreditState                  *int            `json:"credit_state"`
-	CreditNote                   *string         `json:"credit_note"`
-	QRCode                       *string         `json:"qr_code"`
-	TotalBeforeVAT               string          `json:"total_before_vat"`
-	TotalVAT                     string          `json:"total_vat"`
-	Total                        string          `json:"total"`
+	Id                           int32                  `json:"id"`
+	EffectiveDate                time.Time              `json:"effective_date"`
+	PaymentDueDate               *time.Time             `json:"payment_due_date"`
+	State                        int32                  `json:"state"`
+	Discount                     string                 `json:"discount"`
+	VatRegistration              string                 `json:"vat_registration"`
+	Address                      string                 `json:"address"`
+	StoreName                    string                 `json:"store_name"`
+	CompanyName                  string                 `json:"company_name"`
+	SequenceNumber               int32                  `json:"sequence_number"`
+	Type                         bool                   `json:"type"`
+	StoreId                      int32                  `json:"store_id"`
+	MerchantId                   int32                  `json:"merchant_id"`
+	MaintenanceCost              string                 `json:"maintenance_cost"`
+	Note                         *string                `json:"note"`
+	UserName                     *string                `json:"user_name"`
+	UserPhoneNumber              *string                `json:"user_phone_number"`
+	Products                     []db.BillProduct       `json:"products"`
+	ManualProducts               []db.BillManualProduct `json:"manual_products"`
+	CreditState                  *int32                 `json:"credit_state"`
+	CreditNote                   *string                `json:"credit_note"`
+	QRCode                       *string                `json:"qr_code"`
+	TotalBeforeVAT               string                 `json:"total_before_vat"`
+	TotalVAT                     string                 `json:"total_vat"`
+	Total                        string                 `json:"total"`
 	CommercialRegistrationNumber string
 }
 
-func (h *handler) getBillDetail(c *gin.Context) db.GetBillByIDRow {
+func (h *handler) getBillDetail(c *gin.Context) Bill {
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 
@@ -449,9 +446,37 @@ func (h *handler) getBillDetail(c *gin.Context) db.GetBillByIDRow {
 		log.Panic(err)
 	}
 
-	bill, err := h.queries.GetBillByID(c.Request.Context(), int32(id))
+	bill, err := h.queries.GetBillPDFByID(c.Request.Context(), int32(id))
+	products, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
+	manualProducts, err := h.queries.GetBillManualProductByBillID(c.Request.Context(), bill.ID)
 
-	return bill
+	return Bill{
+		Id:                           bill.ID,
+		EffectiveDate:                bill.EffectiveDate,
+		PaymentDueDate:               bill.PaymentDueDate,
+		State:                        bill.State,
+		Discount:                     bill.Discount,
+		VatRegistration:              *bill.VatRegistrationNumber,
+		Address:                      *bill.AddressName,
+		StoreName:                    *bill.StoreName,
+		CompanyName:                  bill.CompanyName,
+		SequenceNumber:               bill.SequenceNumber,
+		StoreId:                      bill.StoreID,
+		MerchantId:                   bill.MerchantID,
+		MaintenanceCost:              bill.MaintenanceCost,
+		Note:                         bill.Note,
+		UserName:                     bill.Username,
+		UserPhoneNumber:              bill.UserPhoneNumber,
+		Products:                     products,
+		ManualProducts:               manualProducts,
+		CreditState:                  bill.CreditState,
+		CreditNote:                   bill.CreditNote,
+		QRCode:                       bill.QrCode,
+		TotalBeforeVAT:               bill.TotalBeforeVat.Round(2).String(),
+		TotalVAT:                     bill.TotalVat.Round(2).String(),
+		Total:                        bill.Total.Round(2).String(),
+		CommercialRegistrationNumber: *bill.CommercialRegistrationNumber,
+	}
 }
 
 func (h *handler) GetBillDetail(c *gin.Context) {
@@ -573,24 +598,24 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		}
 		qr := ""
 
-		if bill.QrCode != nil {
-			qr = *bill.QrCode
+		if bill.QRCode != nil {
+			qr = *bill.QRCode
 		}
 
 		invoice := models.Invoice{
 			Title:                        "فاتورة ضريبية مبسطة",
 			InvoiceNumber:                fmt.Sprintf("INV%d", bill.SequenceNumber),
-			StoreName:                    *bill.StoreName,
-			StoreAddress:                 *bill.AddressName,
+			StoreName:                    *&bill.StoreName,
+			StoreAddress:                 bill.Address,
 			Date:                         bill.EffectiveDate.Local().Format(time.DateTime),
-			VATRegistrationNo:            *bill.VatRegistrationNumber,
+			VATRegistrationNo:            *&bill.VatRegistration,
 			QRCodeData:                   qr,
 			TotalDiscount:                "0.0",
-			TotalTaxableAmt:              bill.TotalBeforeVat.Round(2).String(),
-			TotalVAT:                     bill.TotalVat.Round(2).String(),
-			TotalWithVAT:                 bill.Total.Round(2).String(),
+			TotalTaxableAmt:              bill.TotalBeforeVAT,
+			TotalVAT:                     bill.TotalVAT,
+			TotalWithVAT:                 bill.Total,
 			VATPercentage:                "15",
-			CommercialRegistrationNumber: *bill.CommercialRegistrationNumber,
+			CommercialRegistrationNumber: *&bill.CommercialRegistrationNumber,
 			Labels: models.Labels{
 				CommercialRegistrationNumber: "رقم السجل التجاري",
 				InvoiceNumber:                "رقم الفاتورة:",

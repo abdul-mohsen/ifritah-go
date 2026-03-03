@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"log"
@@ -533,101 +532,22 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 	// _, err := os.Stat(filename)
 	if true {
 		bill := h.getBillDetail(c)
-		var products []models.Product
-		log.Print(bill.Products)
-		log.Print(bill.ManualProducts)
-		x, err := json.Marshal(bill.Products)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			log.Panic(err)
-		}
+		products := append(bill.Products, bill.ManualProducts...)
 
-		var mProduct []TempProduct
-		err = json.Unmarshal(x, &mProduct)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			log.Panic(err)
-		}
-
-		y, err := json.Marshal(bill.ManualProducts)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			log.Panic(err)
-		}
-		var mManProduct []TempManualProduct
-		err = json.Unmarshal(y, &mManProduct)
-
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			log.Panic(err)
-		}
-
-		for _, product := range mProduct {
-			price, err := decimal.NewFromString(product.Price)
-			if err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				log.Panic(err)
-			}
-
-			quantity, err := decimal.NewFromString(product.Quantity)
-			if err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				log.Panic(err)
-			}
-
-			// TODO fix this logic
-			product := models.Product{
-				Name:      fmt.Sprint(product.Id),
-				Quantity:  quantity.Round(2).String(),
-				UnitPrice: price.Round(2).String(),
-				Discount:  "0.0",
-				VATAmount: price.Mul(quantity).Mul(decimal.NewFromFloat(0.15)).Round(2).String(),
-				Total:     price.Mul(quantity).Mul(decimal.NewFromFloat(1.15)).Round(2).String(),
-			}
-			products = append(products, product)
-
-		}
-
-		for _, product := range mManProduct {
-			price, err := decimal.NewFromString(product.Price)
-			if err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				log.Panic(err)
-			}
-
-			quantity, err := decimal.NewFromString(product.Quantity)
-			if err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				log.Panic(err)
-			}
-
-			product := models.Product{
-				Name:      product.PartName,
-				Quantity:  quantity.Round(2).String(),
-				UnitPrice: price.Round(2).String(),
-				Discount:  "0.0",
-				VATAmount: price.Mul(quantity).Mul(decimal.NewFromFloat(0.15)).Round(2).String(),
-				Total:     price.Mul(quantity).Mul(decimal.NewFromFloat(1.15)).Round(2).String(),
-			}
-			products = append(products, product)
-
-		}
-
-		f, _, err := big.ParseFloat(bill.MaintenanceCost, 10, 256, big.ToNearestEven)
+		maintenanceCost, err := decimal.NewFromString(bill.MaintenanceCost)
 
 		if err != nil {
 			log.Println(err)
 		}
-		maintenanceCost, _ := f.Float64()
 
-		if maintenanceCost > 0 {
+		if maintenanceCost.GreaterThan(decimal.NewFromInt(0)) {
 			product := models.Product{
 				Name:      "تكلفة الصيانة",
 				Quantity:  "1",
 				UnitPrice: fmt.Sprintf("%.2f", maintenanceCost),
 				Discount:  "0.0",
-				VATAmount: fmt.Sprintf("%.2f", maintenanceCost*.15),
-				Total:     fmt.Sprintf("%.2f", maintenanceCost*1.15),
+				VATAmount: fmt.Sprintf("%.2f", maintenanceCost.Mul(decimal.NewFromFloat(.15))),
+				Total:     fmt.Sprintf("%.2f", maintenanceCost.Mul(decimal.NewFromFloat(1.15))),
 			}
 			products = append(products, product)
 

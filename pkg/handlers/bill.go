@@ -438,7 +438,7 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 	bill, err := h.queries.GetBillPDFByID(c.Request.Context(), int32(id))
 	products, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
 	manualProducts, err := h.queries.GetBillManualProductByBillID(c.Request.Context(), bill.ID)
-	log.Print(id, bill, products, manualProducts)
+	log.Print(int32(id), bill, products, manualProducts)
 	// TODO: @ssda Review it
 	VatRegistrationNumber := ""
 	if bill.VatRegistrationNumber != nil {

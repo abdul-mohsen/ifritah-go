@@ -85,10 +85,9 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 
 	args := db.GetAllBillParams{
-		UserPhoneNumber:   &request.Query,
-		UserPhoneNumber_2: &request.Query,
-		Limit:             int32(request.PageSize),
-		Offset:            int32(request.Page) * int32(request.PageSize),
+		Phonenumber: &request.Query,
+		Limit:       int32(request.PageSize),
+		Offset:      int32(request.Page) * int32(request.PageSize),
 	}
 	bills, err := h.queries.GetAllBill(c.Request.Context(), args)
 	if err != nil {

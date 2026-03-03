@@ -450,14 +450,19 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 	products, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
 	manualProducts, err := h.queries.GetBillManualProductByBillID(c.Request.Context(), bill.ID)
 	// TODO: @ssda Review it
-	if bill.VatRegistrationNumber == nil {
-		*bill.VatRegistrationNumber = ""
+	VatRegistrationNumber := ""
+	if bill.VatRegistrationNumber != nil {
+		VatRegistrationNumber = *bill.VatRegistrationNumber
 	}
-	if bill.AddressName == nil {
-		*bill.AddressName = ""
+
+	AddressName := ""
+	if bill.AddressName != nil {
+		AddressName = *bill.AddressName
 	}
-	if bill.StoreName == nil {
-		*bill.StoreName = ""
+
+	StoreName := ""
+	if bill.StoreName != nil {
+		StoreName = *bill.StoreName
 	}
 
 	return Bill{
@@ -466,9 +471,9 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 		PaymentDueDate:               bill.PaymentDueDate,
 		State:                        bill.State,
 		Discount:                     bill.Discount,
-		VatRegistration:              *bill.VatRegistrationNumber,
-		Address:                      *bill.AddressName,
-		StoreName:                    *bill.StoreName,
+		VatRegistration:              VatRegistrationNumber,
+		Address:                      AddressName,
+		StoreName:                    StoreName,
 		CompanyName:                  bill.CompanyName,
 		SequenceNumber:               bill.SequenceNumber,
 		StoreId:                      bill.StoreID,

@@ -449,6 +449,16 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 	bill, err := h.queries.GetBillPDFByID(c.Request.Context(), int32(id))
 	products, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
 	manualProducts, err := h.queries.GetBillManualProductByBillID(c.Request.Context(), bill.ID)
+	// TODO: @ssda Review it
+	if bill.VatRegistrationNumber == nil {
+		*bill.VatRegistrationNumber = ""
+	}
+	if bill.AddressName == nil {
+		*bill.AddressName = ""
+	}
+	if bill.StoreName == nil {
+		*bill.StoreName = ""
+	}
 
 	return Bill{
 		Id:                           bill.ID,

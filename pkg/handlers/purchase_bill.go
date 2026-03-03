@@ -131,10 +131,9 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	}
 	query = `DELETE FROM bill_manual_purchase_product where bill_id = ?;`
 	if _, err = h.DB.Exec(query, id); err != nil {
-		log.Panic(err)
 		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
 	}
-	log.Printf("Dropped old product ")
 	if err := h.updateProductToBillPurchase(request.Products, id); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)

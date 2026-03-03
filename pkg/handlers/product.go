@@ -38,7 +38,6 @@ func (h *handler) AddQuantity(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
-	log.Print(request)
 
 	storeIds := h.getStoreIds(c)
 

@@ -295,10 +295,8 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	user_phone_number = ?
 	WHERE id = ?;
 	`
-	log.Printf("Started")
 	_, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
 		request.StoreId, squenceNumber, userSession.id, maintenanceCost.Text('f', 10), request.Note, request.UserName, nil, request.UserPhoneNumber, billID)
-	log.Printf("I update the main row to the product")
 	if err != nil {
 		log.Panic(err)
 	}
@@ -319,7 +317,6 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		log.Panic(err)
 		c.AbortWithError(http.StatusBadRequest, err)
 	}
-	log.Printf("Dropped old product ")
 	if err := h.addProductToBill(request.Products, id); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
@@ -341,7 +338,6 @@ func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
 	_quantity := big.NewFloat(float64(quantity))
 	cost := new(big.Float).Mul(_price, _quantity)
 	subTotal = subTotal.Add(cost, subTotal)
-	log.Printf("in my calc func")
 	return nil
 }
 
@@ -437,7 +433,6 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 	bill, err := h.queries.GetBillPDFByID(c.Request.Context(), int32(id))
 	products, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
 	manualProducts, err := h.queries.GetBillManualProductByBillID(c.Request.Context(), bill.ID)
-	log.Print(int32(id), bill, products, manualProducts)
 	// TODO: @ssda Review it
 	VatRegistrationNumber := ""
 	if bill.VatRegistrationNumber != nil {
@@ -537,7 +532,8 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		maintenanceCost, err := decimal.NewFromString(bill.MaintenanceCost)
 
 		if err != nil {
-			log.Println(err)
+			c.AbortWithError(http.StatusInternalServerError, err)
+			log.Panic(err)
 		}
 
 		if maintenanceCost.GreaterThan(decimal.NewFromInt(0)) {
@@ -601,7 +597,6 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		}
 
 		if err := os.WriteFile(filename, pdfBytes, 0644); err != nil {
-			log.Println(err)
 			c.Header("X-Cache-Warning", err.Error())
 		}
 

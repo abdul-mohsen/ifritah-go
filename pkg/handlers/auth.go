@@ -105,8 +105,8 @@ func (h *handler) Login(c *gin.Context) {
 	var id int64
 	var hashedPassword string
 	if err := h.DB.QueryRow("SELECT id, password FROM user where username = ? limit 1;", request.Username).Scan(&id, &hashedPassword); err != nil {
-		log.Println(request)
 		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
 	}
 
 	err := checkPassword([]byte(hashedPassword), request.Password)
@@ -175,7 +175,6 @@ func JWTVerifyMiddleware(c *gin.Context) {
 		}
 	}
 
-	log.Println("Token is invalid")
 	c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("Token is invalid"))
 }
 
@@ -183,7 +182,6 @@ func GetSessionInfo(c *gin.Context) userSession {
 
 	claimsStr, exist := c.Get("decoded_jwt")
 	if !exist {
-		log.Println("Token is invalid, but how I am here")
 		c.AbortWithStatus(http.StatusUnauthorized)
 	}
 	claims := claimsStr.(*Claims)

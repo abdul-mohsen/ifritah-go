@@ -24,8 +24,6 @@ func (h *handler) GetClient(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	log.Print(id, uint32(id))
-
 	res, err := h.queries.GetClientByID(c.Request.Context(), uint32(id))
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)

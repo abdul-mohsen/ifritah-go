@@ -30,6 +30,10 @@ sql:
             go_type:
               import: "github.com/shopspring/decimal"
               type : "Decimal"
+          - column: "*.maintenance_cost"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type : "Decimal"
           - column: "*.total_vat"
             go_type:
               import: "github.com/shopspring/decimal"

@@ -172,23 +172,13 @@ func (h *handler) AddBill(c *gin.Context) {
 			log.Panic("Error parsing date:", err)
 		}
 	}
-	discount, success1 := stringToBigFloat(request.Discount)
-	paidAmount, success2 := stringToBigFloat(request.PaidAmount)
-	maintenanceCost, success3 := stringToBigFloat(request.MaintenanceCost)
+	// discount, _:= decimal.NewFromString(request.Discount)
+	// paidAmount, success2 := stringToBigFloat(request.PaidAmount)
+	maintenanceCost, err := decimal.NewFromString(request.MaintenanceCost)
 
-	if !(success1 && success2 && success3) {
-		c.Status(http.StatusBadRequest)
-		log.Panic("big float are bad")
-	}
-
-	subTotal := zeroBigFloat()
-
-	totalWithOutVat := new(big.Float).Sub(new(big.Float).Add(subTotal, maintenanceCost), discount)
-	vatTotal := new(big.Float).Mul(totalWithOutVat, big.NewFloat(.15))
-	total := new(big.Float).Add(totalWithOutVat, vatTotal)
-
-	if paidAmount.Cmp(total) == 1 {
-		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("invalid paid ammount"))
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
 	}
 
 	squenceNumber := 0
@@ -200,11 +190,11 @@ func (h *handler) AddBill(c *gin.Context) {
 		EffectiveDate:   time.Now(),
 		PaymentDueDate:  paymentDueDate,
 		State:           int32(request.State),
-		Discount:        discount.Text('f', 10),
+		Discount:        request.Discount,
 		StoreID:         int32(request.StoreId),
 		SequenceNumber:  int32(squenceNumber),
 		MerchantID:      int32(userSession.id),
-		MaintenanceCost: maintenanceCost.Text('f', 10),
+		MaintenanceCost: maintenanceCost,
 		Note:            request.Note,
 		Username:        request.UserName,
 		BuyerID:         nil,
@@ -409,31 +399,31 @@ type ProductDetails struct {
 }
 
 type Bill struct {
-	Id                           int32                  `json:"id"`
-	EffectiveDate                time.Time              `json:"effective_date"`
-	PaymentDueDate               *time.Time             `json:"payment_due_date"`
-	State                        int32                  `json:"state"`
-	Discount                     string                 `json:"discount"`
-	VatRegistration              string                 `json:"vat_registration"`
-	Address                      string                 `json:"address"`
-	StoreName                    string                 `json:"store_name"`
-	CompanyName                  string                 `json:"company_name"`
-	SequenceNumber               int32                  `json:"sequence_number"`
-	Type                         bool                   `json:"type"`
-	StoreId                      int32                  `json:"store_id"`
-	MerchantId                   int32                  `json:"merchant_id"`
-	MaintenanceCost              string                 `json:"maintenance_cost"`
-	Note                         *string                `json:"note"`
-	UserName                     *string                `json:"user_name"`
-	UserPhoneNumber              *string                `json:"user_phone_number"`
-	Products                     []db.BillProduct       `json:"products"`
-	ManualProducts               []db.BillManualProduct `json:"manual_products"`
-	CreditState                  *int32                 `json:"credit_state"`
-	CreditNote                   *string                `json:"credit_note"`
-	QRCode                       *string                `json:"qr_code"`
-	TotalBeforeVAT               string                 `json:"total_before_vat"`
-	TotalVAT                     string                 `json:"total_vat"`
-	Total                        string                 `json:"total"`
+	Id                           int32            `json:"id"`
+	EffectiveDate                time.Time        `json:"effective_date"`
+	PaymentDueDate               *time.Time       `json:"payment_due_date"`
+	State                        int32            `json:"state"`
+	Discount                     string           `json:"discount"`
+	VatRegistration              string           `json:"vat_registration"`
+	Address                      string           `json:"address"`
+	StoreName                    string           `json:"store_name"`
+	CompanyName                  string           `json:"company_name"`
+	SequenceNumber               int32            `json:"sequence_number"`
+	Type                         bool             `json:"type"`
+	StoreId                      int32            `json:"store_id"`
+	MerchantId                   int32            `json:"merchant_id"`
+	MaintenanceCost              string           `json:"maintenance_cost"`
+	Note                         *string          `json:"note"`
+	UserName                     *string          `json:"user_name"`
+	UserPhoneNumber              *string          `json:"user_phone_number"`
+	Products                     []models.Product `json:"products"`
+	ManualProducts               []models.Product `json:"manual_products"`
+	CreditState                  *int32           `json:"credit_state"`
+	CreditNote                   *string          `json:"credit_note"`
+	QRCode                       *string          `json:"qr_code"`
+	TotalBeforeVAT               string           `json:"total_before_vat"`
+	TotalVAT                     string           `json:"total_vat"`
+	Total                        string           `json:"total"`
 	CommercialRegistrationNumber string
 }
 
@@ -470,6 +460,32 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 		CommercialRegistrationNumber = *bill.CommercialRegistrationNumber
 	}
 
+	var xProducts []models.Product
+	for _, product := range products {
+		product := models.Product{
+			Name:      fmt.Sprint(product.ID),
+			Quantity:  product.Quantity,
+			UnitPrice: product.Price,
+			Discount:  "0.0",
+			VATAmount: product.VatTotal.Round(2).String(),
+			Total:     product.TotalIncludingVat.Round(2).String(),
+		}
+		xProducts = append(xProducts, product)
+	}
+
+	var xManualProducts []models.Product
+	for _, product := range manualProducts {
+		product := models.Product{
+			Name:      product.PartName,
+			Quantity:  product.Quantity,
+			UnitPrice: product.Price,
+			Discount:  "0.0",
+			VATAmount: product.VatTotal.Round(2).String(),
+			Total:     product.TotalIncludingVat.Round(2).String(),
+		}
+		xManualProducts = append(xManualProducts, product)
+	}
+
 	return Bill{
 		Id:                           bill.ID,
 		EffectiveDate:                bill.EffectiveDate,
@@ -483,12 +499,12 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 		SequenceNumber:               bill.SequenceNumber,
 		StoreId:                      bill.StoreID,
 		MerchantId:                   bill.MerchantID,
-		MaintenanceCost:              bill.MaintenanceCost,
+		MaintenanceCost:              bill.MaintenanceCost.Round(2).String(),
 		Note:                         bill.Note,
 		UserName:                     bill.Username,
 		UserPhoneNumber:              bill.UserPhoneNumber,
-		Products:                     products,
-		ManualProducts:               manualProducts,
+		Products:                     xProducts,
+		ManualProducts:               xManualProducts,
 		CreditState:                  bill.CreditState,
 		CreditNote:                   bill.CreditNote,
 		QRCode:                       bill.QrCode,

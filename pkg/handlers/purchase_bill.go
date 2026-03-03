@@ -15,7 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, q string, userID int32) []db.PurchaseBillTotal {
+func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, userID int32) []db.PurchaseBillTotal {
 
 	args := db.GetAllPurchaseBillParams{
 		ID:     userID,
@@ -331,7 +331,7 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		}
 	}
 
-	bill := h.getPurchaseBills(c, int32(request.Page), int32(request.PageSize), *request.Query, int32(userSession.id))
+	bill := h.getPurchaseBills(c, int32(request.Page), int32(request.PageSize), int32(userSession.id))
 
 	c.JSON(http.StatusOK, bill)
 }

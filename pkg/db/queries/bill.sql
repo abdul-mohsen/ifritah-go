@@ -126,5 +126,5 @@ cn.note as credit_note
 FROM bill_totals b
 JOIN store on store.id = b.store_id
 JOIN company on company.id = store.company_id
-JOIN credit_note  cn on cn.bill_id = b.id
+LEFT JOIN credit_note  cn on cn.bill_id = b.id
 WHERE b.id = ? LIMIT 1 ;

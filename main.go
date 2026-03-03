@@ -61,6 +61,7 @@ func main() {
 		authorized.POST("bill", h.AddBill)
 		authorized.DELETE("bill/:id", h.DeleteBillDetail)
 		authorized.POST("bill/credit", h.CreditBill)
+		authorized.GET("bill/:id", h.GetBillDetail) // allow all user to get all bill details
 
 		authorized.POST("purchase_bill", h.AddPurchaseBill)
 		authorized.PUT("purchase_bill/:id", h.UpdatePurchaseBill)
@@ -87,7 +88,6 @@ func main() {
 
 	nonAuthGroup := router.Group(baseUrl)
 	{
-		nonAuthGroup.GET("bill/:id", h.GetBillDetail)              // allow all user to get all bill details
 		nonAuthGroup.GET("bill_pdf/:id", h.GetBillPDF)             // allow all user to get all bill details
 		nonAuthGroup.GET("credit_bill/:id", h.GetBillCreditDetail) // allow all user to get all bill details
 		nonAuthGroup.POST("register", h.Register)

@@ -14,9 +14,6 @@ type BillCredit struct {
 
 func (h *handler) CreditBill(c *gin.Context) {
 
-	// Need to check the user if he is auth to do that
-	// userSession := GetSessionInfo(c)
-
 	var request BillCredit
 
 	if err := c.BindJSON(&request); err != nil {

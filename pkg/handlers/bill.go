@@ -620,72 +620,15 @@ func (h *handler) GetBillCreditDetail(c *gin.Context) {
 
 	// userSession := GetSessionInfo(c) // to allow users to use this feature
 
-	var id string = c.Param("id")
+	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+	bill, err := h.queries.GetCreditBillByID(c.Request.Context(), int32(id))
 
-	query := `
-        SELECT 
-			CONCAT('https://ifritah.com/bill/', b.id) AS url,
-			effective_date,
-			payment_due_date,
-			b.state as state,
-			b.sub_total,
-			b.discount,
-			b.vat,
-			b.store_id,
-			sequence_number,
-			merchant_id,
-			maintenance_cost,
-			b.note,
-			b.userName as userName,
-			user_phone_number,
-			company.name as company_name,
-			company.vat_registration_number,
-			store.address_name,
-			cn.state as credit_state,
-			cn.note as credit_note,
-			COALESCE(
-				(SELECT JSON_ARRAYAGG(
-					JSON_OBJECT(
-						'product_id', p.product_id,
-						'price', p.price,
-						'quantity', p.quantity
-					)
-				)
-				FROM bill_product p
-				WHERE p.bill_id = b.id), 
-				JSON_ARRAY()) AS products,
-			COALESCE(
-				(SELECT JSON_ARRAYAGG(
-					JSON_OBJECT(
-						'part_name', m.part_name,
-						'price', m.price,
-						'quantity', m.quantity
-					)
-				)
-				FROM bill_manual_product m
-				WHERE m.bill_id = b.id), 
-				JSON_ARRAY()) AS manual_products
-        FROM 
-            bill b
-		JOIN 
-			store on store.id = b.store_id 
-		JOIN 
-			company on company.id = store.company_id
-		JOIN
-			credit_note  cn on cn.bill_id = b.id
-		-- JOIN 
-		--	user on user.id= ? and company.id=user.company_id -- commented to allow all user to get this data
-		WHERE
-			b.id = ?
-		LIMIT 1 ;
-	`
-
-	var bill Bill
-
-	if err := h.DB.QueryRow(query, id).Scan(&bill.Url, &bill.EffectiveDate,
-		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
-		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.CompanyName, &bill.VatRegistration, &bill.Address, &bill.CreditState, &bill.CreditNote, &bill.Products, &bill.ManualProducts); err != nil {
-		c.Status(http.StatusBadRequest)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
 

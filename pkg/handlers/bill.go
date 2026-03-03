@@ -439,87 +439,21 @@ type Bill struct {
 	CommercialRegistrationNumber string
 }
 
-func (h *handler) getBillDetail(c *gin.Context) Bill {
+func (h *handler) getBillDetail(c *gin.Context) db.GetBillByIDRow {
 
-	// userSession := GetSessionInfo(c) // to allow users to use this feature
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 
-	var id string = c.Param("id")
-
-	query := `
-        SELECT 
-			CONCAT('https://ifritah.com/bill_pdf/', b.id) AS url,
-			effective_date,
-			payment_due_date,
-			b.state as state,
-			b.sub_total,
-			b.discount,
-			b.vat,
-			b.store_id,
-			sequence_number,
-			merchant_id,
-			maintenance_cost,
-			b.note,
-			b.userName as userName,
-			user_phone_number,
-			company.name as company_name,
-			company.vat_registration_number,
-			store.address_name,
-			store.name,
-			qr_code,
-			total_before_vat,
-			total_vat,
-			total,
-			company.commercial_registration_number,
-			COALESCE(
-				(SELECT JSON_ARRAYAGG(
-					JSON_OBJECT(
-						'product_id', p.product_id,
-						'price', p.price,
-						'quantity', p.quantity
-					)
-				)
-				FROM bill_product p
-				WHERE p.bill_id = b.id), 
-				JSON_ARRAY()) AS products,
-			COALESCE(
-				(SELECT JSON_ARRAYAGG(
-					JSON_OBJECT(
-						'part_name', m.part_name,
-						'price', m.price,
-						'quantity', m.quantity
-					)
-				)
-				FROM bill_manual_product m
-				WHERE m.bill_id = b.id), 
-				JSON_ARRAY()) AS manual_products
-        FROM 
-            bill_totals b
-		JOIN 
-			store on store.id = b.store_id 
-		JOIN 
-			company on company.id = store.company_id
-		-- JOIN 
-		--	user on user.id= ? and company.id=user.company_id -- commented to allow all user to get this data
-		WHERE
-			b.id = ?
-		LIMIT 1 ;
-	`
-
-	var bill Bill
-
-	if err := h.DB.QueryRow(query, id).Scan(&bill.Url, &bill.EffectiveDate,
-		&bill.PaymentDueDate, &bill.State, &bill.SubTotal, &bill.Discount, &bill.Vat, &bill.StoreId, &bill.SequenceNumber, &bill.MerchantId, &bill.MaintenanceCost,
-		&bill.Note, &bill.UserName, &bill.UserPhoneNumber, &bill.CompanyName, &bill.VatRegistration, &bill.Address, &bill.StoreName, &bill.QRCode, &bill.TotalBeforeVAT, &bill.TotalVAT, &bill.Total, &bill.CommercialRegistrationNumber, &bill.Products, &bill.ManualProducts); err != nil {
-		c.Status(http.StatusBadRequest)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
+
+	bill, err := h.queries.GetBillByID(c.Request.Context(), int32(id))
 
 	return bill
 }
 
 func (h *handler) GetBillDetail(c *gin.Context) {
-
-	// userSession := GetSessionInfo(c) // to allow users to use this feature
 
 	bill := h.getBillDetail(c)
 
@@ -538,28 +472,33 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 	if true {
 		bill := h.getBillDetail(c)
 		var products []models.Product
-		var mProduct []TempProduct
-		err := json.Unmarshal(bill.Products, &mProduct)
+		x, err := json.Marshal(bill.Products)
 		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
 			log.Panic(err)
 		}
 
+		var mProduct []TempProduct
+		err = json.Unmarshal(x, &mProduct)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			log.Panic(err)
+		}
+
+		y, err := json.Marshal(bill.ManualProducts)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			log.Panic(err)
+		}
 		var mManProduct []TempManualProduct
-		b, _ := json.MarshalIndent(bill.ManualProducts, "", " ")
-		log.Println(string(b))
-		log.Println(string(bill.ManualProducts))
-		err = json.Unmarshal(bill.ManualProducts, &mManProduct)
+		err = json.Unmarshal(y, &mManProduct)
 
 		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
 			log.Panic(err)
 		}
 
 		for _, product := range mProduct {
-			// f, _, err := big.ParseFloat(product.Price, 10, 0, big.ToNearestEven)
-			// if err != nil {
-			// 	log.Panic(err)
-			// }
-			// price, _ := f.Float64()
 			price := product.Price
 
 			// TODO fix this logic
@@ -615,45 +554,26 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			products = append(products, product)
 
 		}
-		f, _, err = big.ParseFloat(bill.Total, 10, 256, big.ToNearestEven)
-
-		if err != nil {
-			log.Panic(err)
-		}
-		total, _ := f.Float64()
-		log.Println(total)
-		f, _, err = big.ParseFloat(bill.TotalVAT, 10, 256, big.ToNearestEven)
-
-		if err != nil {
-			log.Panic(err)
-		}
-		totalVAT, _ := f.Float64()
-		f, _, err = big.ParseFloat(bill.TotalBeforeVAT, 10, 256, big.ToNearestEven)
-
-		if err != nil {
-			log.Panic(err)
-		}
-		totalBeforeVAT, _ := f.Float64()
 		qr := ""
 
-		if bill.QRCode != nil {
-			qr = *bill.QRCode
+		if bill.QrCode != nil {
+			qr = *bill.QrCode
 		}
 
 		invoice := models.Invoice{
 			Title:                        "فاتورة ضريبية مبسطة",
 			InvoiceNumber:                fmt.Sprintf("INV%d", bill.SequenceNumber),
-			StoreName:                    bill.StoreName,
-			StoreAddress:                 bill.Address,
-			Date:                         bill.EffectiveDate.Time.Local().Format(time.DateTime),
-			VATRegistrationNo:            bill.VatRegistration,
+			StoreName:                    *bill.StoreName,
+			StoreAddress:                 *bill.AddressName,
+			Date:                         bill.EffectiveDate.Local().Format(time.DateTime),
+			VATRegistrationNo:            *bill.VatRegistrationNumber,
 			QRCodeData:                   qr,
 			TotalDiscount:                "0.0",
-			TotalTaxableAmt:              fmt.Sprint(totalBeforeVAT),
-			TotalVAT:                     fmt.Sprint(totalVAT),
-			TotalWithVAT:                 fmt.Sprint(total),
+			TotalTaxableAmt:              bill.TotalBeforeVat.Round(2).String(),
+			TotalVAT:                     bill.TotalVat.Round(2).String(),
+			TotalWithVAT:                 bill.Total.Round(2).String(),
 			VATPercentage:                "15",
-			CommercialRegistrationNumber: bill.CommercialRegistrationNumber,
+			CommercialRegistrationNumber: *bill.CommercialRegistrationNumber,
 			Labels: models.Labels{
 				CommercialRegistrationNumber: "رقم السجل التجاري",
 				InvoiceNumber:                "رقم الفاتورة:",

@@ -11,6 +11,10 @@ sql:
         emit_pointers_for_null_types: true
         json_tags_case_style: "snake"
         overrides:
+          # - column: "*.total"
+          #   go_type: "string"
+          # - column: "*.total_vat"
+          #   go_type: "string"
           - db_type: "bigint"
             nullable: true
             go_type:
@@ -19,8 +23,21 @@ sql:
           - db_type: "decimal"
             nullable: true
             go_type:
-              type : "string"
+              import: "github.com/shopspring/decimal"
+              type : "Decimal"
               pointer: true
+          - column: "*.total"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type : "Decimal"
+          - column: "*.total_vat"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type : "Decimal"
+          - column: "*.total_before_vat"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type : "Decimal"
           - db_type: "int64"
             nullable: true
             go_type:

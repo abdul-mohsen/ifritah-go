@@ -17,6 +17,7 @@ import (
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/models"
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/pdf"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 type BillBase struct {
@@ -129,15 +130,15 @@ type ManualProduct struct {
 }
 
 type TempProduct struct {
-	Id       int     `json:"id" binding:"required"`
-	Price    float64 `json:"price" binding:"required"`
-	Quantity int64   `json:"quantity" binding:"required"`
+	Id       int    `json:"id" binding:"required"`
+	Price    string `json:"price" binding:"required"`
+	Quantity string `json:"quantity" binding:"required"`
 }
 
 type TempManualProduct struct {
-	PartName string  `json:"part_name" binding:"required"`
-	Price    float64 `json:"price" binding:"required"`
-	Quantity int64   `json:"quantity" binding:"required"`
+	PartName string `json:"part_name" binding:"required"`
+	Price    string `json:"price" binding:"required"`
+	Quantity string `json:"quantity" binding:"required"`
 }
 
 func (h *handler) AddBill(c *gin.Context) {
@@ -472,6 +473,8 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 	if true {
 		bill := h.getBillDetail(c)
 		var products []models.Product
+		log.Print(bill.Products)
+		log.Print(bill.ManualProducts)
 		x, err := json.Marshal(bill.Products)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
@@ -499,37 +502,51 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		}
 
 		for _, product := range mProduct {
-			price := product.Price
+			price, err := decimal.NewFromString(product.Price)
+			if err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				log.Panic(err)
+			}
+
+			quantity, err := decimal.NewFromString(product.Quantity)
+			if err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				log.Panic(err)
+			}
 
 			// TODO fix this logic
 			product := models.Product{
 				Name:      fmt.Sprint(product.Id),
-				Quantity:  fmt.Sprint(float64(product.Quantity)),
-				UnitPrice: fmt.Sprint(price),
+				Quantity:  quantity.Round(2).String(),
+				UnitPrice: price.Round(2).String(),
 				Discount:  "0.0",
-				VATAmount: fmt.Sprintf("%.2f", price*.15),
-				Total:     fmt.Sprintf("%.2f", price*1.15),
+				VATAmount: price.Mul(quantity).Mul(decimal.NewFromFloat(0.15)).Round(2).String(),
+				Total:     price.Mul(quantity).Mul(decimal.NewFromFloat(1.15)).Round(2).String(),
 			}
 			products = append(products, product)
 
 		}
 
 		for _, product := range mManProduct {
-			// f, _, err := big.ParseFloat(product.Price, 10, 0, big.ToNearestEven)
-			// if err != nil {
-			// 	log.Panic(err)
-			// }
-			// price, _ := f.Float64()
-			price := product.Price
+			price, err := decimal.NewFromString(product.Price)
+			if err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				log.Panic(err)
+			}
 
-			// TODO fix this logic
+			quantity, err := decimal.NewFromString(product.Quantity)
+			if err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				log.Panic(err)
+			}
+
 			product := models.Product{
 				Name:      product.PartName,
-				Quantity:  fmt.Sprint(product.Quantity),
-				UnitPrice: fmt.Sprint(price),
+				Quantity:  quantity.Round(2).String(),
+				UnitPrice: price.Round(2).String(),
 				Discount:  "0.0",
-				VATAmount: fmt.Sprintf("%.2f", price*.15),
-				Total:     fmt.Sprintf("%.2f", price*1.15),
+				VATAmount: price.Mul(quantity).Mul(decimal.NewFromFloat(0.15)).Round(2).String(),
+				Total:     price.Mul(quantity).Mul(decimal.NewFromFloat(1.15)).Round(2).String(),
 			}
 			products = append(products, product)
 

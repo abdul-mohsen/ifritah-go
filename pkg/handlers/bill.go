@@ -464,6 +464,11 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 	if bill.StoreName != nil {
 		StoreName = *bill.StoreName
 	}
+	CommercialRegistrationNumber := ""
+
+	if bill.CommercialRegistrationNumber != nil {
+		CommercialRegistrationNumber = *bill.CommercialRegistrationNumber
+	}
 
 	return Bill{
 		Id:                           bill.ID,
@@ -490,7 +495,7 @@ func (h *handler) getBillDetail(c *gin.Context) Bill {
 		TotalBeforeVAT:               bill.TotalBeforeVat.Round(2).String(),
 		TotalVAT:                     bill.TotalVat.Round(2).String(),
 		Total:                        bill.Total.Round(2).String(),
-		CommercialRegistrationNumber: *bill.CommercialRegistrationNumber,
+		CommercialRegistrationNumber: CommercialRegistrationNumber,
 	}
 }
 

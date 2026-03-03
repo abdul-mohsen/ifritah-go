@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
+	"ifritah/web-service-gin/pkg/model"
 )
 
 type AddQuantityRequest struct {
@@ -93,9 +94,9 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 		return
 	}
 
-	var products []Product
+	var products []model.Product
 	for rows.Next() {
-		var product Product
+		var product model.Product
 		if rows.Scan(&product.Id, &product.Price, &product.Quantity, &product.CostPrice, &product.ShelfNumber); err != nil {
 			fmt.Println("Error in query", err)
 			c.AbortWithStatus(http.StatusInternalServerError)

@@ -1,10 +1,9 @@
 package handlers
 
 import (
-	"database/sql"
-	"encoding/json"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/model"
 	"log"
 	"math/big"
 	"net/http"
@@ -32,7 +31,7 @@ func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, u
 	return bills
 }
 
-func (h *handler) addManualProductToPurchaseBill(products []ManualProduct, billId string) error {
+func (h *handler) addManualProductToPurchaseBill(products []model.ManualProduct, billId string) error {
 
 	query := `insert into bill_manual_purchase_product  (part_name, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
@@ -44,24 +43,10 @@ func (h *handler) addManualProductToPurchaseBill(products []ManualProduct, billI
 	return nil
 }
 
-type AddPurchaseBillRequest struct {
-	StoreId                int             `json:"store_id" binding:"required"`
-	State                  int32           `json:"state"`
-	PaymentDueDate         *string         `json:"payment_due_date" `
-	PaymentDate            *string         `json:"payment_date" `
-	Discount               string          `json:"discount"`
-	PaidAmount             string          `json:"paidAmount" `
-	PaymentMethod          int8            `json:"payment_method"`
-	Products               []Product       `json:"products" binding:"required,dive"`
-	ManualProducts         []ManualProduct `json:"manual_products" binding:"required,dive"`
-	SupplierId             int32           `json:"supplier_id" binding:"required"`
-	SupplierSequenceNumber int32           `json:"supplier_sequence_number" binding:"required"`
-}
-
 func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	id := c.Param("id")
-	request := AddPurchaseBillRequest{
+	request := model.AddPurchaseBillRequest{
 		State:         1,
 		PaymentMethod: 0,
 		PaidAmount:    "0.0",
@@ -148,7 +133,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 }
 func (h *handler) AddPurchaseBill(c *gin.Context) {
 
-	request := AddPurchaseBillRequest{
+	request := model.AddPurchaseBillRequest{
 		State:         1,
 		PaymentMethod: 0,
 		PaidAmount:    "0.0",
@@ -236,7 +221,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 }
 
-func (h *handler) updateProductToBillPurchase(products []Product, billId string) error {
+func (h *handler) updateProductToBillPurchase(products []model.Product, billId string) error {
 
 	query := `insert into purchase_bill_product  (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
 	for _, product := range products {
@@ -248,7 +233,7 @@ func (h *handler) updateProductToBillPurchase(products []Product, billId string)
 	return nil
 }
 
-func addProductToBillPurchase(products []Product, billId int64, tx *db.Queries, c *gin.Context) error {
+func addProductToBillPurchase(products []model.Product, billId int64, tx *db.Queries, c *gin.Context) error {
 
 	for _, product := range products {
 		args := db.AddPurchaseProductParams{
@@ -265,7 +250,7 @@ func addProductToBillPurchase(products []Product, billId int64, tx *db.Queries, 
 	return nil
 }
 
-func addManualProductToBillPurchase(products []ManualProduct, billId int64, tx *db.Queries, c *gin.Context) error {
+func addManualProductToBillPurchase(products []model.ManualProduct, billId int64, tx *db.Queries, c *gin.Context) error {
 
 	for _, product := range products {
 		args := db.AddManualPurchaseProductParams{
@@ -282,22 +267,6 @@ func addManualProductToBillPurchase(products []ManualProduct, billId int64, tx *
 	return nil
 }
 
-type PurchaseBill struct {
-	Id             int             `json:"id"`
-	EffectiveDate  sql.NullTime    `json:"effective_date"`
-	PaymentDueDate *sql.NullTime   `json:"payment_due_date"`
-	State          int             `json:"state"`
-	SubTotal       float64         `json:"subtotal"`
-	Discount       float64         `json:"discount"`
-	Vat            float64         `json:"vat"`
-	SequenceNumber int             `json:"sequence_number"`
-	Type           bool            `json:"type"`
-	StoreId        int             `json:"store_id"`
-	MerchantId     int             `json:"merchant_id"`
-	Products       json.RawMessage `json:"products"`
-	ManualProducts json.RawMessage `json:"manual_products"`
-}
-
 func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
@@ -307,7 +276,7 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		storeIds = append(storeIds, value.Id)
 	}
 
-	request := BillRequestFilter{
+	request := model.BillRequestFilter{
 		StoreIds: storeIds,
 		Page:     0,
 		PageSize: 10,

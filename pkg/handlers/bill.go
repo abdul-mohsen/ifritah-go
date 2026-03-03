@@ -540,10 +540,10 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 			product := models.Product{
 				Name:      "تكلفة الصيانة",
 				Quantity:  "1",
-				UnitPrice: fmt.Sprintf("%.2f", maintenanceCost),
+				UnitPrice: maintenanceCost.Round(2).String(),
 				Discount:  "0.0",
-				VATAmount: fmt.Sprintf("%.2f", maintenanceCost.Mul(decimal.NewFromFloat(.15))),
-				Total:     fmt.Sprintf("%.2f", maintenanceCost.Mul(decimal.NewFromFloat(1.15))),
+				VATAmount: maintenanceCost.Mul(decimal.NewFromFloat(.15)).Round(2).String(),
+				Total:     maintenanceCost.Mul(decimal.NewFromFloat(1.15)).Round(2).String(),
 			}
 			products = append(products, product)
 
@@ -557,17 +557,17 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		invoice := models.Invoice{
 			Title:                        "فاتورة ضريبية مبسطة",
 			InvoiceNumber:                fmt.Sprintf("INV%d", bill.SequenceNumber),
-			StoreName:                    *&bill.StoreName,
+			StoreName:                    bill.StoreName,
 			StoreAddress:                 bill.Address,
 			Date:                         bill.EffectiveDate.Local().Format(time.DateTime),
-			VATRegistrationNo:            *&bill.VatRegistration,
+			VATRegistrationNo:            bill.VatRegistration,
 			QRCodeData:                   qr,
 			TotalDiscount:                "0.0",
 			TotalTaxableAmt:              bill.TotalBeforeVAT,
 			TotalVAT:                     bill.TotalVAT,
 			TotalWithVAT:                 bill.Total,
 			VATPercentage:                "15",
-			CommercialRegistrationNumber: *&bill.CommercialRegistrationNumber,
+			CommercialRegistrationNumber: bill.CommercialRegistrationNumber,
 			Labels: models.Labels{
 				CommercialRegistrationNumber: "رقم السجل التجاري",
 				InvoiceNumber:                "رقم الفاتورة:",

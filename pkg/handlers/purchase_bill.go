@@ -312,7 +312,6 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		StoreIds: storeIds,
 		Page:     0,
 		PageSize: 10,
-		Query:    "",
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -332,7 +331,7 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		}
 	}
 
-	bill := h.getPurchaseBills(c, int32(request.Page), int32(request.PageSize), request.Query, int32(userSession.id))
+	bill := h.getPurchaseBills(c, int32(request.Page), int32(request.PageSize), *request.Query, int32(userSession.id))
 
 	c.JSON(http.StatusOK, bill)
 }

@@ -42,7 +42,7 @@ type BillRequestFilter struct {
 	EndDate   *time.Time `json:"end_date"`
 	Page      int        `json:"page_number"`
 	PageSize  int        `json:"page_size"`
-	Query     string     `json:"query"`
+	Query     *string    `json:"query"`
 }
 
 func (h *handler) GetBills(c *gin.Context) {
@@ -58,7 +58,6 @@ func (h *handler) GetBills(c *gin.Context) {
 		StoreIds: storeIds,
 		Page:     0,
 		PageSize: 10,
-		Query:    "",
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -80,12 +79,13 @@ func (h *handler) GetBills(c *gin.Context) {
 		}
 	}
 
-	if request.Query != "" {
-		request.Query = "%" + request.Query + "%"
+	if request.Query != nil {
+		data := "%" + *request.Query + "%"
+		request.Query = &data
 	}
 
 	args := db.GetAllBillParams{
-		Phonenumber: &request.Query,
+		Phonenumber: request.Query,
 		Limit:       int32(request.PageSize),
 		Offset:      int32(request.Page) * int32(request.PageSize),
 	}

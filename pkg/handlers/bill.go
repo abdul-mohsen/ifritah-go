@@ -240,7 +240,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		ID:              int32(billID),
 	}
 
-	log.Print(args, request)
+	log.Print(*request.Note, args)
 
 	err = qtx.UpdateBillByID(c.Request.Context(), args)
 

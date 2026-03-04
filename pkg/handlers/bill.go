@@ -239,9 +239,13 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		UserPhoneNumber: request.UserPhoneNumber,
 		ID:              int32(billID),
 	}
+
+	log.Print(args, request)
+
 	err = qtx.UpdateBillByID(c.Request.Context(), args)
 
 	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)
 	}
 

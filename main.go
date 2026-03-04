@@ -76,9 +76,9 @@ func main() {
 		authorized.DELETE("product/:id", h.GetProduct)
 
 		authorized.POST("client", h.CreateClient)
-		authorized.POST("client/all", h.GetAllClient)
 		authorized.PUT("client/:id", h.UpdateClient)
 		authorized.GET("client/:id", h.GetClient)
+		authorized.POST("client/all", h.GetAllClient)
 
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))
 		authorized.POST("part/", h.GetPart)

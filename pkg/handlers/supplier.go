@@ -61,7 +61,7 @@ func (h *handler) GetSupplier(c *gin.Context) {
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
-	} else if companyID != nil {
+	} else if companyID == nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}

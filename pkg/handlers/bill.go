@@ -161,6 +161,10 @@ func (h *handler) AddBill(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
 	c.JSON(http.StatusCreated, id)
 
 }
@@ -263,6 +267,11 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	}
 	if err := addManualProductToBill(qtx, c, request.ManualProducts, int32(billID)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)
 	}
 

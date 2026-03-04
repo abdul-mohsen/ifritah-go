@@ -46,3 +46,15 @@ insert into purchase_bill_product (product_id, price, quantity, bill_id) values 
 
 -- name: AddManualPurchaseProduct :exec
 insert into bill_manual_purchase_product (part_name, price, quantity, bill_id) values (?, ?, ?, ?);
+
+-- name: UpdatePurchaseBill :exec
+UPDATE purchase_bill set effective_date = ?, payment_due_date = ?, state = ?, discount = ?, store_id = ?, merchant_id = ?, supplier_id = ?, sequence_number = ? where id = ?;
+
+-- name: DeleteProductPurchaseBill :exec
+DELETE FROM purchase_bill_product where bill_id = ?;
+
+-- name: DeleteManualProductPurchaseBill :exec
+DELETE FROM bill_manual_purchase_product where bill_id = ?;
+
+-- name: AddProductToBillPurchase :exec
+insert into purchase_bill_product  (product_id, price, quantity, bill_id) values (?, ?, ?, ?);

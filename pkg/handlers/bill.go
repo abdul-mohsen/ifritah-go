@@ -39,8 +39,6 @@ func (h *handler) GetBills(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 	}
 
-	fmt.Println("request:", request)
-
 	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds == nil || len(request.StoreIds) == 0 {
 		c.Status(http.StatusBadRequest)
 		return

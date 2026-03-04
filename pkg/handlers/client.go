@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"log"
 	"net/http"
@@ -78,9 +77,8 @@ func (h *handler) CreateClient(c *gin.Context) {
 	}
 	err := h.queries.CreateClient(c.Request.Context(), query)
 	if err != nil {
-		fmt.Println("Error in query", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic("Error in query", err)
 	}
 
 	c.Status(http.StatusCreated)
@@ -110,9 +108,8 @@ func (h *handler) UpdateClient(c *gin.Context) {
 	}
 	err = h.queries.UpdateClient(c.Request.Context(), query)
 	if err != nil {
-		fmt.Println("Error in query", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic("Error in query", err)
 	}
 
 	c.Status(http.StatusCreated)

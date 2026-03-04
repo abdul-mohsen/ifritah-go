@@ -5,7 +5,6 @@ import (
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
 	"log"
-	"math/big"
 	"net/http"
 	"slices"
 	"strconv"
@@ -31,21 +30,14 @@ func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, u
 	return bills
 }
 
-func (h *handler) addManualProductToPurchaseBill(products []model.ManualProduct, billId string) error {
-
-	query := `insert into bill_manual_purchase_product  (part_name, price, quantity, bill_id) values (?, ?, ?, ?)`
-	for _, product := range products {
-		_, err := h.DB.Exec(query, product.PartName, product.Price, product.Quantity, billId)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
-	id := c.Param("id")
+	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
 	request := model.AddPurchaseBillRequest{
 		State:         1,
 		PaymentMethod: 0,
@@ -75,62 +67,64 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		}
 	}
 
-	discount, success1 := stringToBigFloat(request.Discount)
-	paidAmount, success2 := stringToBigFloat(request.PaidAmount)
+	tx, err := h.DB.Begin()
 
-	if !(success1 && success2) {
-		c.Status(http.StatusBadRequest)
-		log.Panic("big float are bad")
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
 	}
 
-	subTotal := zeroBigFloat()
+	defer tx.Rollback()
+	qtx := h.queries.WithTx(tx)
 
-	totalWithOutVat := new(big.Float).Sub(subTotal, discount)
-	vatTotal := new(big.Float).Mul(totalWithOutVat, big.NewFloat(.15))
-	total := new(big.Float).Add(totalWithOutVat, vatTotal)
-
-	if paidAmount.Cmp(total) == 1 {
-		c.AbortWithStatus(http.StatusBadRequest)
-		log.Panic("invalid paid ammount")
+	args := db.UpdatePurchaseBillParams{
+		EffectiveDate:  time.Now(),
+		PaymentDueDate: paymentDueDate,
+		State:          request.State,
+		Discount:       0,
+		StoreID:        request.StoreId,
+		MerchantID:     int32(userSession.id),
+		SupplierID:     request.SupplierId,
+		SequenceNumber: request.SupplierSequenceNumber,
+		ID:             int32(id),
 	}
 
-	if total.Cmp(zeroBigFloat()) == 0 {
-		c.AbortWithStatus(http.StatusBadRequest)
-		log.Panic("invalid total")
-	}
-
-	query := `
-	update purchase_bill set effective_date = ?, payment_due_date = ?, state = ?, sub_total = ?, discount = ?, vat = ?, store_id = ?, merchant_id = ?, supplier_id = ?, sequence_number = ? where id = ?
-	`
-	_, err := h.DB.Exec(query, time.Now(), paymentDueDate, request.State, subTotal.Text('f', 10), discount.Text('f', 10), vatTotal.Text('f', 10),
-		request.StoreId, userSession.id, request.SupplierId, request.SupplierSequenceNumber, id)
+	err = qtx.UpdatePurchaseBill(c.Request.Context(), args)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
 
-	query = `DELETE FROM purchase_bill_product where bill_id = ?;`
-	if _, err = h.DB.Exec(query, id); err != nil {
+	if err = qtx.DeleteProductPurchaseBill(c.Request.Context(), int32(id)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
-	query = `DELETE FROM bill_manual_purchase_product where bill_id = ?;`
-	if _, err = h.DB.Exec(query, id); err != nil {
+	if err = qtx.DeleteManualProductPurchaseBill(c.Request.Context(), int32(id)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
-	if err := h.updateProductToBillPurchase(request.Products, id); err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
+
+	err = addProductToBillPurchase(qtx, c, request.Products, int32(id))
+	if err != nil {
+		c.Status(http.StatusBadRequest)
 		log.Panic(err)
 	}
-	if err := h.addManualProductToPurchaseBill(request.ManualProducts, id); err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
+
+	err = addManualProductToBillPurchase(qtx, c, request.ManualProducts, id)
+	if err != nil {
+		c.Status(http.StatusBadRequest)
+		log.Panic(err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)
 	}
 
 	c.Status(http.StatusOK)
 
 }
+
 func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	request := model.AddPurchaseBillRequest{
@@ -209,8 +203,17 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	addProductToBillPurchase(request.Products, id, qtx, c)
-	addManualProductToBillPurchase(request.ManualProducts, id, qtx, c)
+	err = addProductToBillPurchase(qtx, c, request.Products, int32(id))
+	if err != nil {
+		c.Status(http.StatusBadRequest)
+		log.Panic(err)
+	}
+
+	err = addManualProductToBillPurchase(qtx, c, request.ManualProducts, id)
+	if err != nil {
+		c.Status(http.StatusBadRequest)
+		log.Panic(err)
+	}
 
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -221,28 +224,17 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 }
 
-func (h *handler) updateProductToBillPurchase(products []model.Product, billId string) error {
-
-	query := `insert into purchase_bill_product  (product_id, price, quantity, bill_id) values (?, ?, ?, ?)`
-	for _, product := range products {
-		_, err := h.DB.Exec(query, product.Id, product.Price, product.Quantity, billId)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func addProductToBillPurchase(products []model.Product, billId int64, tx *db.Queries, c *gin.Context) error {
+func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.Product, billId int32) error {
 
 	for _, product := range products {
-		args := db.AddPurchaseProductParams{
+
+		args := db.AddProductToBillPurchaseParams{
 			ProductID: product.Id,
 			Price:     product.Price,
 			Quantity:  product.Quantity,
-			BillID:    int32(billId),
+			BillID:    billId,
 		}
-		err := tx.AddPurchaseProduct(c.Request.Context(), args)
+		err := tx.AddProductToBillPurchase(c.Request.Context(), args)
 		if err != nil {
 			return err
 		}
@@ -250,7 +242,7 @@ func addProductToBillPurchase(products []model.Product, billId int64, tx *db.Que
 	return nil
 }
 
-func addManualProductToBillPurchase(products []model.ManualProduct, billId int64, tx *db.Queries, c *gin.Context) error {
+func addManualProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.ManualProduct, billId int64) error {
 
 	for _, product := range products {
 		args := db.AddManualPurchaseProductParams{

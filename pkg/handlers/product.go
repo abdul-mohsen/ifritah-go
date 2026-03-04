@@ -29,10 +29,10 @@ type AddProduct struct {
 
 func (h *handler) AddQuantity(c *gin.Context) {
 
-	raw, err := httputil.DumpRequest(c.Request, true)
+	_, err := httputil.DumpRequest(c.Request, true)
 	if err != nil {
-		fmt.Println(raw)
-
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
 	}
 	var request AddQuantityRequest
 	if err := c.BindJSON(&request); err != nil {
@@ -89,18 +89,16 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 
 	rows, err := h.DB.Query(query, user.id)
 	if err != nil {
-		fmt.Println("Error in query", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic("Error in query", err)
 	}
 
 	var products []model.Product
 	for rows.Next() {
 		var product model.Product
-		if rows.Scan(&product.Id, &product.Price, &product.Quantity, &product.CostPrice, &product.ShelfNumber); err != nil {
-			fmt.Println("Error in query", err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
+		if err := rows.Scan(&product.Id, &product.Price, &product.Quantity, &product.CostPrice, &product.ShelfNumber); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			log.Panic("Error in query", err)
 		}
 
 		products = append(products, product)
@@ -121,9 +119,8 @@ func (h *handler) GetProduct(c *gin.Context) {
 
 	res, err := h.queries.GetProduct(c.Request.Context(), int32(id))
 	if err != nil {
-		fmt.Println("Error in query", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic("Error in query", err)
 	}
 
 	c.JSON(http.StatusOK, res)
@@ -140,9 +137,8 @@ func (h *handler) DeleteProduct(c *gin.Context) {
 
 	res, err := h.queries.GetProduct(c.Request.Context(), int32(id))
 	if err != nil {
-		fmt.Println("Error in query", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic("Error in query", err)
 	}
 
 	c.JSON(http.StatusOK, res)

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -57,7 +56,6 @@ func (h *handler) GetPart(c *gin.Context) {
 	limit ? offset ?
 	`
 
-	fmt.Println(request.Query)
 	rows, err := h.DB.Query(query, request.Query+"%", request.PageSize, request.Page)
 	if err != nil {
 		log.Panic(err)

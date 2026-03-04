@@ -156,3 +156,9 @@ insert into bill_manual_product (part_name, price, quantity, bill_id) values (?,
 
 -- name: DeleteManualProductToBill :exec
 DELETE FROM bill_manual_product where bill_id = ?;
+
+-- name: GetBillProductByBillID :many
+select * from bill_product where bill_id = ?;
+
+-- name: GetBillManualProductByBillID :many
+select * from bill_manual_product where bill_id = ?;

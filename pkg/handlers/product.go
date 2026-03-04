@@ -9,9 +9,11 @@ import (
 	"slices"
 	"strconv"
 
+	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/model"
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
-	"ifritah/web-service-gin/pkg/model"
 )
 
 type AddQuantityRequest struct {
@@ -79,34 +81,29 @@ func (h *handler) AddQuantity(c *gin.Context) {
 
 func (h *handler) GetAllProducts(c *gin.Context) {
 	user := GetSessionInfo(c)
-	query := `
-	select  p.article_id, p.price, p.quantity, p.cost_price, p.shelf_number
-	from user
-	join store s on s.company_id = user.company_id
-	join product p on p.store_id = s.id
-	where user.id = ?
-	`
 
-	rows, err := h.DB.Query(query, user.id)
+	request := model.PaginationRequest{
+		Page:     0,
+		PageSize: 10,
+	}
+
+	if err := c.BindJSON(&request); err != nil {
+		log.Panic(err)
+	}
+
+	args := db.GetAllProductParams{
+		ID:     int32(user.id),
+		Limit:  request.PageSize,
+		Offset: request.PageSize * request.Page,
+	}
+
+	products, err := h.queries.GetAllProduct(c.Request.Context(), args)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic("Error in query", err)
 	}
 
-	var products []model.Product
-	for rows.Next() {
-		var product model.Product
-		if err := rows.Scan(&product.Id, &product.Price, &product.Quantity, &product.CostPrice, &product.ShelfNumber); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			log.Panic("Error in query", err)
-		}
-
-		products = append(products, product)
-	}
-	defer rows.Close()
-
 	c.JSON(http.StatusOK, products)
-
 }
 
 func (h *handler) GetProduct(c *gin.Context) {

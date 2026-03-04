@@ -2,18 +2,13 @@ package handlers
 
 import (
 	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/model"
 	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
-
-type Pagination struct {
-	Query    string `json:"query"`
-	Page     int32  `json:"page"`
-	PageSize int32  `json:"page_size"`
-}
 
 func (h *handler) GetClient(c *gin.Context) {
 	// user := GetSessionInfo(c)
@@ -34,7 +29,7 @@ func (h *handler) GetClient(c *gin.Context) {
 }
 
 func (h *handler) GetAllClient(c *gin.Context) {
-	request := Pagination{
+	request := model.PaginationRequest{
 		Page:     0,
 		PageSize: 10,
 	}

@@ -4,7 +4,7 @@ select b.*
 	join store on store.id = b.store_id
 	join company on company.id = store.company_id
 	join user on user.id= ? and company.id=user.company_id
-	where state >= 0
+	where b.state >= 0
 	order by id desc limit ? offset ?;
 
 -- name: GetPurchaseBillDetail :one

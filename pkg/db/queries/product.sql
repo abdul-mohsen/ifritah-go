@@ -12,4 +12,4 @@ from user
 join store s on s.company_id = user.company_id
 join product p on p.store_id = s.id
 where user.id = ?
-ORDER BY id DESC LIMIT ? OFFSET ?;
+ORDER BY p.id DESC LIMIT ? OFFSET ?;

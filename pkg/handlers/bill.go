@@ -353,7 +353,7 @@ func (h *handler) getBillDetail(c *gin.Context) model.Bill {
 	for _, product := range products {
 		product := models.Product{
 			Name:      fmt.Sprint(product.ID),
-			Quantity:  product.Quantity,
+			Quantity:  product.Quantity[:len(product.Quantity)-4],
 			UnitPrice: product.Price,
 			Discount:  "0.0",
 			VATAmount: product.VatTotal.Round(2).String(),
@@ -366,7 +366,7 @@ func (h *handler) getBillDetail(c *gin.Context) model.Bill {
 	for _, product := range manualProducts {
 		product := models.Product{
 			Name:      product.PartName,
-			Quantity:  product.Quantity,
+			Quantity:  product.Quantity[:len(product.Quantity)-4],
 			UnitPrice: product.Price,
 			Discount:  "0.0",
 			VATAmount: product.VatTotal.Round(2).String(),

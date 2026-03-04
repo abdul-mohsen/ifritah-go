@@ -128,3 +128,31 @@ JOIN store on store.id = b.store_id
 JOIN company on company.id = store.company_id
 LEFT JOIN credit_note  cn on cn.bill_id = b.id
 WHERE b.id = ? LIMIT 1 ;
+
+-- name: UpdateBillByID :exec
+UPDATE bill SET
+effective_date = ?,
+payment_due_date = ?,
+state = ?,
+discount = ?,
+store_id = ?,
+sequence_number = ?,
+merchant_id = ?,
+maintenance_cost = ?,
+note = ?,
+userName = ?,
+buyer_id = ?,
+user_phone_number = ?
+WHERE id = ?;
+
+-- name: AddProductToBill :exec
+insert into bill_product (product_id, price, quantity, bill_id) values (?, ?, ?, ?);
+
+-- name: DeleteProductToBill :exec
+DELETE FROM bill_product where bill_id = ?;
+
+-- name: AddManualProductToBill :exec
+insert into bill_manual_product (part_name, price, quantity, bill_id) values (?, ?, ?, ?);
+
+-- name: DeleteManualProductToBill :exec
+DELETE FROM bill_manual_product where bill_id = ?;

@@ -35,7 +35,7 @@ func (h *handler) getStores(user userSession) []Store {
 
 }
 
-func (h *handler) getStoreIds(c *gin.Context) []int {
+func (h *handler) getStoreIds(c *gin.Context) []int32 {
 
 	userSession := GetSessionInfo(c)
 	rows, err := h.DB.Query(`select store.id from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, userSession.id)
@@ -44,10 +44,10 @@ func (h *handler) getStoreIds(c *gin.Context) []int {
 		log.Panic(err)
 	}
 
-	var ids []int
+	var ids []int32
 
 	for rows.Next() {
-		var id int
+		var id int32
 		if err := rows.Scan(&id); err != nil {
 			log.Panic(err)
 		}

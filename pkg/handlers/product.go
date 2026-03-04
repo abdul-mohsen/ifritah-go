@@ -15,7 +15,7 @@ import (
 )
 
 type AddQuantityRequest struct {
-	StoreId  int          `json:"store_id" binding:"required"`
+	StoreId  int32        `json:"store_id" binding:"required"`
 	Products []AddProduct `json:"products" binding:"required,dive"`
 }
 

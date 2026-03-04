@@ -21,7 +21,7 @@ type PurchaseBill struct {
 	ManualProducts json.RawMessage `json:"manual_products"`
 }
 type AddPurchaseBillRequest struct {
-	StoreId                int             `json:"store_id" binding:"required"`
+	StoreId                int32           `json:"store_id" binding:"required"`
 	State                  int32           `json:"state"`
 	PaymentDueDate         *string         `json:"payment_due_date" `
 	PaymentDate            *string         `json:"payment_date" `

@@ -21,29 +21,26 @@ type SupplierRequest struct {
 
 func (h *handler) GetAllSupplier(c *gin.Context) {
 
-	userSession := GetSessionInfo(c)
-
-	var id int
-	if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&id); err != nil {
-		log.Panic(err)
+	request := model.PaginationRequest{
+		PageSize: 10,
+		Page:     0,
 	}
 
-	rows, err := h.DB.Query("SELECT id, name, address, phone_number, number, vat_number, bank_account From supplier where company_id = ? and is_deleted = FALSE", id)
+	if err := c.BindJSON(&request); err != nil {
+		c.Status(http.StatusBadRequest)
+		log.Panic(err)
+	}
+	args := db.GetAllSupplierParams{
+		Limit:  request.PageSize,
+		Offset: request.Page * request.PageSize,
+	}
 
+	suppliers, err := h.queries.GetAllSupplier(c.Request.Context(), args)
 	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
-	var suppliers []model.Supplier
-	for rows.Next() {
-		var supplier model.Supplier
 
-		if err := rows.Scan(&supplier.Id, &supplier.Name, &supplier.Address, &supplier.PhoneNumber, &supplier.Number, &supplier.VatNumber, &supplier.BankAccount); err != nil {
-			log.Panic(err)
-		}
-
-		suppliers = append(suppliers, supplier)
-	}
-	defer rows.Close()
 	c.IndentedJSON(http.StatusOK, suppliers)
 }
 

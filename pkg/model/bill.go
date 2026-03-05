@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/models"
+	"github.com/shopspring/decimal"
 )
 
 type BillBase struct {
@@ -37,35 +37,40 @@ type AddBillRequest struct {
 	State           int32           `json:"state"`
 	PaymentDueDate  *string         `json:"payment_due_date" `
 	PaymentDate     *string         `json:"payment_date" `
-	Discount        string          `json:"discount" binding:"required"`
-	PaidAmount      string          `json:"paidAmount" `
-	MaintenanceCost string          `json:"maintenance_cost" binding:"required"`
+	Discount        decimal.Decimal `json:"discount" binding:"required"`
+	PaidAmount      decimal.Decimal `json:"paidAmount" `
+	MaintenanceCost decimal.Decimal `json:"maintenance_cost" binding:"required"`
 	PaymentMethod   int8            `json:"payment_method"`
 	UserName        *string         `json:"user_name"`
 	UserPhoneNumber *string         `json:"user_phone_number"`
 	Note            *string         `json:"note"`
-	Products        []Product       `json:"products" binding:"required,dive"`
-	ManualProducts  []ManualProduct `json:"manual_products" binding:"required,dive"`
+	Products        []BillProduct   `json:"products" binding:"required,dive"`
+	ManualProducts  []BillProduct   `json:"manual_products" binding:"required,dive"`
 }
 
-type Product struct {
-	Id          int32  `json:"id" binding:"required"`
-	Price       string `json:"price" binding:"required"`
-	CostPrice   string `json:"cost_price"`
-	ShelfNumber string `json:"shelf_number"`
-	Quantity    string `json:"quantity"`
+type BillProduct struct {
+	ProductId *int32          `json:"product_id" binding:"required"`
+	Name      string          `json:"name"`
+	Price     decimal.Decimal `json:"price" binding:"required"`
+	Quantity  decimal.Decimal `json:"quantity" binding:"required"`
 }
 
-type ManualProduct struct {
-	PartName string `json:"part_name" binding:"required"`
-	Price    string `json:"price" binding:"required"`
-	Quantity string `json:"quantity" binding:"required"`
+type BillProductResponse struct {
+	ProductId      *int32 `json:"product_id" binding:"required"`
+	Name           string `json:"name"`
+	Price          string `json:"price" binding:"required"`
+	Discount       string `json:"discount"`
+	Quantity       string `json:"quantity" binding:"required"`
+	TotalBeforeVAT string `json:"total_before_vat"`
+	TotalVAT       string `json:"total_vat"`
+	Total          string `json:"total"`
 }
 
-type TempProduct struct {
-	Id       int    `json:"id" binding:"required"`
-	Price    string `json:"price" binding:"required"`
-	Quantity string `json:"quantity" binding:"required"`
+type AddProductToBillParams struct {
+	ProductID *int32 `json:"product_id"`
+	Price     string `json:"price"`
+	Quantity  string `json:"quantity"`
+	BillID    int32  `json:"bill_id"`
 }
 
 type TempManualProduct struct {
@@ -84,30 +89,30 @@ type ProductDetails struct {
 }
 
 type Bill struct {
-	Id                           int32            `json:"id"`
-	EffectiveDate                time.Time        `json:"effective_date"`
-	PaymentDueDate               *time.Time       `json:"payment_due_date"`
-	State                        int32            `json:"state"`
-	Discount                     string           `json:"discount"`
-	VatRegistration              string           `json:"vat_registration"`
-	Address                      string           `json:"address"`
-	StoreName                    string           `json:"store_name"`
-	CompanyName                  string           `json:"company_name"`
-	SequenceNumber               int32            `json:"sequence_number"`
-	Type                         bool             `json:"type"`
-	StoreId                      int32            `json:"store_id"`
-	MerchantId                   int32            `json:"merchant_id"`
-	MaintenanceCost              string           `json:"maintenance_cost"`
-	Note                         *string          `json:"note"`
-	UserName                     *string          `json:"user_name"`
-	UserPhoneNumber              *string          `json:"user_phone_number"`
-	Products                     []models.Product `json:"products"`
-	ManualProducts               []models.Product `json:"manual_products"`
-	CreditState                  *int32           `json:"credit_state"`
-	CreditNote                   *string          `json:"credit_note"`
-	QRCode                       *string          `json:"qr_code"`
-	TotalBeforeVAT               string           `json:"total_before_vat"`
-	TotalVAT                     string           `json:"total_vat"`
-	Total                        string           `json:"total"`
+	Id                           int32                 `json:"id"`
+	EffectiveDate                time.Time             `json:"effective_date"`
+	PaymentDueDate               *time.Time            `json:"payment_due_date"`
+	State                        int32                 `json:"state"`
+	Discount                     string                `json:"discount"`
+	VatRegistration              string                `json:"vat_registration"`
+	Address                      string                `json:"address"`
+	StoreName                    string                `json:"store_name"`
+	CompanyName                  string                `json:"company_name"`
+	SequenceNumber               int32                 `json:"sequence_number"`
+	Type                         bool                  `json:"type"`
+	StoreId                      int32                 `json:"store_id"`
+	MerchantId                   int32                 `json:"merchant_id"`
+	MaintenanceCost              string                `json:"maintenance_cost"`
+	Note                         *string               `json:"note"`
+	UserName                     *string               `json:"user_name"`
+	UserPhoneNumber              *string               `json:"user_phone_number"`
+	Products                     []BillProductResponse `json:"products"`
+	ManualProducts               []BillProductResponse `json:"manual_products"`
+	CreditState                  *int32                `json:"credit_state"`
+	CreditNote                   *string               `json:"credit_note"`
+	QRCode                       *string               `json:"qr_code"`
+	TotalBeforeVAT               string                `json:"total_before_vat"`
+	TotalVAT                     string                `json:"total_vat"`
+	Total                        string                `json:"total"`
 	CommercialRegistrationNumber string
 }

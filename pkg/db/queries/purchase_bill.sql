@@ -19,18 +19,7 @@ select b.*,
 				)
 				FROM purchase_bill_product p
 				WHERE p.bill_id = b.id),
-				JSON_ARRAY()) AS products,
-			COALESCE(
-				(SELECT JSON_ARRAYAGG(
-					JSON_OBJECT(
-						'part_name', m.part_name,
-						'price', m.price,
-						'quantity', m.quantity
-					)
-				)
-				FROM bill_manual_purchase_product m
-				WHERE m.bill_id = b.id),
-				JSON_ARRAY()) AS manual_products
+				JSON_ARRAY()) AS products
 	from purchase_bill_totals as b
 	join store on store.id = b.store_id
 	join company on company.id = store.company_id
@@ -41,20 +30,11 @@ select b.*,
 insert into purchase_bill (effective_date, payment_due_date, state, discount, store_id, merchant_id, supplier_id, sequence_number)
 values (?, ?, ?, ?, ?, ?, ?, ?);
 
--- name: AddPurchaseProduct :exec
-insert into purchase_bill_product (product_id, price, quantity, bill_id) values (?, ?, ?, ?);
-
--- name: AddManualPurchaseProduct :exec
-insert into bill_manual_purchase_product (part_name, price, quantity, bill_id) values (?, ?, ?, ?);
-
 -- name: UpdatePurchaseBill :exec
 UPDATE purchase_bill set effective_date = ?, payment_due_date = ?, state = ?, discount = ?, store_id = ?, merchant_id = ?, supplier_id = ?, sequence_number = ? where id = ?;
 
 -- name: DeleteProductPurchaseBill :exec
 DELETE FROM purchase_bill_product where bill_id = ?;
 
--- name: DeleteManualProductPurchaseBill :exec
-DELETE FROM bill_manual_purchase_product where bill_id = ?;
-
 -- name: AddProductToBillPurchase :exec
-insert into purchase_bill_product  (product_id, price, quantity, bill_id) values (?, ?, ?, ?);
+insert into purchase_bill_product  (product_id, name, price, quantity, bill_id) values (?, ?, ?, ?, ?);

@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
+	"github.com/shopspring/decimal"
 )
 
 type AddQuantityRequest struct {
@@ -22,11 +23,11 @@ type AddQuantityRequest struct {
 }
 
 type AddProduct struct {
-	Id          int    `json:"product_id" binding:"required"`
-	Quantity    int    `json:"quantity" binding:"required"`
-	Price       int    `json:"price" binding:"required"`
-	ShelfNumber string `json:"shelf_number" binding:"required"`
-	CostPrice   int    `json:"cost_price" binding:"required"`
+	Id          int             `json:"product_id" binding:"required"`
+	Quantity    decimal.Decimal `json:"quantity" binding:"required"`
+	Price       decimal.Decimal `json:"price" binding:"required"`
+	CostPrice   decimal.Decimal `json:"cost_price" binding:"required"`
+	ShelfNumber string          `json:"shelf_number" binding:"required"`
 }
 
 func (h *handler) AddQuantity(c *gin.Context) {
@@ -49,24 +50,22 @@ func (h *handler) AddQuantity(c *gin.Context) {
 		log.Panic("ERR: missing required value")
 	}
 
-	for _, value := range request.Products {
-		if value.Quantity <= 0 {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("ERR: quantity can't be 0 or less"))
-			log.Panic("ERR: quantity can't be 0 or less")
-		}
-	}
-
 	if !slices.Contains(storeIds, request.StoreId) {
 		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("ERR: store id does not match"))
 		log.Panic("ERR: store id does not match")
 	}
 
-	query := `
-	INSERT INTO product (article_id, quantity, price, cost_price ,shelf_number, store_id) VALUES (?,?,?,?,?,?)
-	`
-
 	for _, value := range request.Products {
-		if _, err := h.DB.Exec(query, value.Id, value.Quantity, value.Price, value.CostPrice, value.ShelfNumber, request.StoreId); err != nil {
+
+		args := db.AddProductParams{
+			ArticleID:   int32(value.Id),
+			Quantity:    value.Quantity,
+			Price:       value.Price,
+			CostPrice:   value.CostPrice,
+			ShelfNumber: &value.ShelfNumber,
+			StoreID:     request.StoreId,
+		}
+		if _, err := h.queries.AddProduct(c.Request.Context(), args); err != nil {
 			var mysqlErr *mysql.MySQLError
 			if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
 				c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Product already exists in this store"))

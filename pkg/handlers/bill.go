@@ -75,7 +75,7 @@ func (h *handler) AddBill(c *gin.Context) {
 	request := model.AddBillRequest{
 		State:         1,
 		PaymentMethod: 0,
-		PaidAmount:    "0.0",
+		PaidAmount:    decimal.NewFromInt(0),
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -103,12 +103,6 @@ func (h *handler) AddBill(c *gin.Context) {
 	}
 	// discount, _:= decimal.NewFromString(request.Discount)
 	// paidAmount, success2 := stringToBigFloat(request.PaidAmount)
-	maintenanceCost, err := decimal.NewFromString(request.MaintenanceCost)
-
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
-	}
 
 	squenceNumber := 0
 	if request.State > 0 {
@@ -129,11 +123,11 @@ func (h *handler) AddBill(c *gin.Context) {
 		EffectiveDate:   time.Now(),
 		PaymentDueDate:  paymentDueDate,
 		State:           int32(request.State),
-		Discount:        request.Discount,
+		Discount:        request.Discount.String(),
 		StoreID:         int32(request.StoreId),
 		SequenceNumber:  int32(squenceNumber),
 		MerchantID:      int32(userSession.id),
-		MaintenanceCost: maintenanceCost,
+		MaintenanceCost: request.MaintenanceCost,
 		Note:            request.Note,
 		Username:        request.UserName,
 		BuyerID:         nil,
@@ -152,11 +146,18 @@ func (h *handler) AddBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	product := model.BillProduct{
+		Name:     model.MaintenanceCost,
+		Price:    request.MaintenanceCost,
+		Quantity: decimal.NewFromInt(1),
+	}
+
+	products := append(request.Products, request.ManualProducts...)
+	products = append(products, product)
+
 	if err := addProductToBill(qtx, c, request.Products, int32(id)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-	}
-	if err := addManualProductToBill(qtx, c, request.ManualProducts, int32(id)); err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -178,7 +179,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	request := model.AddBillRequest{
 		State:         1,
 		PaymentMethod: 0,
-		PaidAmount:    "0.0",
+		PaidAmount:    decimal.NewFromInt(0),
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -204,12 +205,6 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 			log.Panic("Error parsing date:", err)
 		}
 	}
-	// discount, err := decimal.NewFromString(request.Discount)
-	maintenanceCost, err := decimal.NewFromString(request.MaintenanceCost)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
-	}
 
 	squenceNumber := 0
 	if request.State > 0 {
@@ -230,11 +225,11 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		EffectiveDate:   time.Now(),
 		PaymentDueDate:  paymentDueDate,
 		State:           request.State,
-		Discount:        request.Discount,
+		Discount:        request.Discount.String(),
 		StoreID:         request.StoreId,
 		SequenceNumber:  int32(squenceNumber),
 		MerchantID:      int32(userSession.id),
-		MaintenanceCost: maintenanceCost,
+		MaintenanceCost: request.MaintenanceCost,
 		Note:            request.Note,
 		Username:        request.UserName,
 		BuyerID:         nil,
@@ -253,15 +248,17 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
-	if err = qtx.DeleteManualProductToBill(c.Request.Context(), int32(billID)); err != nil {
-		log.Panic(err)
-		c.AbortWithError(http.StatusBadRequest, err)
+
+	product := model.BillProduct{
+		Name:     model.MaintenanceCost,
+		Price:    request.MaintenanceCost,
+		Quantity: decimal.NewFromInt(1),
 	}
-	if err := addProductToBill(qtx, c, request.Products, int32(billID)); err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
-	}
-	if err := addManualProductToBill(qtx, c, request.ManualProducts, int32(billID)); err != nil {
+
+	products := append(request.Products, request.ManualProducts...)
+	products = append(products, product)
+
+	if err := addProductToBill(qtx, c, products, int32(billID)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
@@ -286,33 +283,17 @@ func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
 	return nil
 }
 
-func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.Product, billId int32) error {
+func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.BillProduct, billId int32) error {
 	for _, product := range products {
+
 		args := db.AddProductToBillParams{
-			ProductID: product.Id,
+			Name:      &product.Name,
+			ProductID: product.ProductId,
 			Price:     product.Price,
 			Quantity:  product.Quantity,
 			BillID:    billId,
 		}
 		err := qtx.AddProductToBill(c.Request.Context(), args)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func addManualProductToBill(qtx *db.Queries, c *gin.Context, products []model.ManualProduct, billId int32) error {
-
-	for _, product := range products {
-		args := db.AddManualProductToBillParams{
-			PartName: product.PartName,
-			Price:    product.Price,
-			Quantity: product.Quantity,
-			BillID:   billId,
-		}
-		err := qtx.AddManualProductToBill(c.Request.Context(), args)
 		if err != nil {
 			return err
 		}
@@ -337,7 +318,7 @@ func (h *handler) getNextSquenceNumber(id int64) int {
 	return maxSequenceNumber + 1
 }
 
-func (h *handler) getBillDetail(c *gin.Context) model.Bill {
+func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProductResponse) {
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 
@@ -347,8 +328,34 @@ func (h *handler) getBillDetail(c *gin.Context) model.Bill {
 	}
 
 	bill, err := h.queries.GetBillPDFByID(c.Request.Context(), int32(id))
-	products, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
-	manualProducts, err := h.queries.GetBillManualProductByBillID(c.Request.Context(), bill.ID)
+	dbProducts, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
+	var xProducts []model.BillProductResponse
+	for _, product := range dbProducts {
+		product := model.BillProductResponse{
+			Name:           fmt.Sprint(product.ID),
+			Quantity:       product.Quantity.Round(1).String(),
+			Price:          product.Price.Round(2).String(),
+			Discount:       "0.0",
+			TotalBeforeVAT: product.TotalBeforeVat.Round(2).String(),
+			TotalVAT:       product.VatTotal.Round(2).String(),
+			Total:          product.TotalIncludingVat.Round(2).String(),
+		}
+		xProducts = append(xProducts, product)
+	}
+	ManualProducts := slices.DeleteFunc(slices.Clone(xProducts), func(p model.BillProductResponse) bool {
+		return p.ProductId == nil && p.Name != model.MaintenanceCost
+	})
+	products := slices.DeleteFunc(slices.Clone(xProducts), func(p model.BillProductResponse) bool {
+		return p.ProductId != nil
+	})
+	MaintenanceCost := "0.0"
+	for i := range dbProducts {
+		if products[i].Name == model.MaintenanceCost {
+			MaintenanceCost = products[i].Price
+			break
+		}
+	}
+
 	// TODO: @ssda Review it
 	VatRegistrationNumber := ""
 	if bill.VatRegistrationNumber != nil {
@@ -370,32 +377,6 @@ func (h *handler) getBillDetail(c *gin.Context) model.Bill {
 		CommercialRegistrationNumber = *bill.CommercialRegistrationNumber
 	}
 
-	var xProducts []models.Product
-	for _, product := range products {
-		product := models.Product{
-			Name:      fmt.Sprint(product.ID),
-			Quantity:  product.Quantity[:len(product.Quantity)-4],
-			UnitPrice: product.Price,
-			Discount:  "0.0",
-			VATAmount: product.VatTotal.Round(2).String(),
-			Total:     product.TotalIncludingVat.Round(2).String(),
-		}
-		xProducts = append(xProducts, product)
-	}
-
-	var xManualProducts []models.Product
-	for _, product := range manualProducts {
-		product := models.Product{
-			Name:      product.PartName,
-			Quantity:  product.Quantity[:len(product.Quantity)-4],
-			UnitPrice: product.Price,
-			Discount:  "0.0",
-			VATAmount: product.VatTotal.Round(2).String(),
-			Total:     product.TotalIncludingVat.Round(2).String(),
-		}
-		xManualProducts = append(xManualProducts, product)
-	}
-
 	return model.Bill{
 		Id:                           bill.ID,
 		EffectiveDate:                bill.EffectiveDate,
@@ -409,12 +390,12 @@ func (h *handler) getBillDetail(c *gin.Context) model.Bill {
 		SequenceNumber:               bill.SequenceNumber,
 		StoreId:                      bill.StoreID,
 		MerchantId:                   bill.MerchantID,
-		MaintenanceCost:              bill.MaintenanceCost.Round(2).String(),
+		MaintenanceCost:              MaintenanceCost,
 		Note:                         bill.Note,
 		UserName:                     bill.Username,
 		UserPhoneNumber:              bill.UserPhoneNumber,
-		Products:                     xProducts,
-		ManualProducts:               xManualProducts,
+		Products:                     products,
+		ManualProducts:               ManualProducts,
 		CreditState:                  bill.CreditState,
 		CreditNote:                   bill.CreditNote,
 		QRCode:                       bill.QrCode,
@@ -422,12 +403,12 @@ func (h *handler) getBillDetail(c *gin.Context) model.Bill {
 		TotalVAT:                     bill.TotalVat.Round(2).String(),
 		Total:                        bill.Total.Round(2).String(),
 		CommercialRegistrationNumber: CommercialRegistrationNumber,
-	}
+	}, xProducts
 }
 
 func (h *handler) GetBillDetail(c *gin.Context) {
 
-	bill := h.getBillDetail(c)
+	bill, _ := h.getBillDetail(c)
 
 	c.JSON(http.StatusOK, bill)
 }
@@ -442,24 +423,20 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 	// Check if the file exists
 	// _, err := os.Stat(filename)
 	if true {
-		bill := h.getBillDetail(c)
-		products := append(bill.Products, bill.ManualProducts...)
-
-		maintenanceCost, err := decimal.NewFromString(bill.MaintenanceCost)
-
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			log.Panic(err)
-		}
-
-		if maintenanceCost.GreaterThan(decimal.NewFromInt(0)) {
+		bill, xProducts := h.getBillDetail(c)
+		var products []models.Product
+		name := "تكلفة الصيانة"
+		for _, p := range xProducts {
+			if p.Name != model.MaintenanceCost {
+				name = p.Name
+			}
 			product := models.Product{
-				Name:      "تكلفة الصيانة",
-				Quantity:  "1",
-				UnitPrice: maintenanceCost.Round(2).String(),
-				Discount:  "0.0",
-				VATAmount: maintenanceCost.Mul(decimal.NewFromFloat(.15)).Round(2).String(),
-				Total:     maintenanceCost.Mul(decimal.NewFromFloat(1.15)).Round(2).String(),
+				Name:      name,
+				Quantity:  p.Quantity,
+				UnitPrice: p.Price,
+				Discount:  p.Discount,
+				VATAmount: p.TotalVAT,
+				Total:     p.Total,
 			}
 			products = append(products, product)
 

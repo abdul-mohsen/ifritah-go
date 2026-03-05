@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
 	"log"
@@ -99,18 +98,10 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
-	if err = qtx.DeleteManualProductPurchaseBill(c.Request.Context(), int32(id)); err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
-	}
 
-	err = addProductToBillPurchase(qtx, c, request.Products, int32(id))
-	if err != nil {
-		c.Status(http.StatusBadRequest)
-		log.Panic(err)
-	}
+	products := append(request.Products, request.ManualProducts...)
 
-	err = addManualProductToBillPurchase(qtx, c, request.ManualProducts, id)
+	err = addProductToBillPurchase(qtx, c, products, int32(id))
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
@@ -135,12 +126,6 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	if err := c.BindJSON(&request); err != nil {
 		c.Status(http.StatusBadRequest)
-		log.Panic(err)
-	}
-
-	if len(request.Products)+len(request.ManualProducts) == 0 {
-		err := fmt.Errorf("product list should never be empty")
-		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
 
@@ -203,13 +188,9 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	err = addProductToBillPurchase(qtx, c, request.Products, int32(id))
-	if err != nil {
-		c.Status(http.StatusBadRequest)
-		log.Panic(err)
-	}
+	products := append(request.Products, request.ManualProducts...)
 
-	err = addManualProductToBillPurchase(qtx, c, request.ManualProducts, id)
+	err = addProductToBillPurchase(qtx, c, products, int32(id))
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
@@ -224,34 +205,18 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 }
 
-func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.Product, billId int32) error {
+func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.PurchaseBillProduct, billId int32) error {
 
 	for _, product := range products {
 
 		args := db.AddProductToBillPurchaseParams{
-			ProductID: product.Id,
+			ProductID: product.ProductId,
+			Name:      &product.Name,
 			Price:     product.Price,
 			Quantity:  product.Quantity,
 			BillID:    billId,
 		}
 		err := tx.AddProductToBillPurchase(c.Request.Context(), args)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func addManualProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.ManualProduct, billId int64) error {
-
-	for _, product := range products {
-		args := db.AddManualPurchaseProductParams{
-			PartName: product.PartName,
-			Price:    product.Price,
-			Quantity: product.Quantity,
-			BillID:   int32(billId),
-		}
-		err := tx.AddManualPurchaseProduct(c.Request.Context(), args)
 		if err != nil {
 			return err
 		}

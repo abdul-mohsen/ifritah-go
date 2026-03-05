@@ -26,6 +26,18 @@ sql:
               import: "github.com/shopspring/decimal"
               type : "Decimal"
               pointer: true
+          - column: "*.cost_price"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type : "Decimal"
+          - column: "*.quantity"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type : "Decimal"
+          - column: "*.price"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type : "Decimal"
           - column: "*.total"
             go_type:
               import: "github.com/shopspring/decimal"

@@ -3,6 +3,8 @@ package model
 import (
 	"database/sql"
 	"encoding/json"
+
+	"github.com/shopspring/decimal"
 )
 
 type PurchaseBill struct {
@@ -21,15 +23,24 @@ type PurchaseBill struct {
 	ManualProducts json.RawMessage `json:"manual_products"`
 }
 type AddPurchaseBillRequest struct {
-	StoreId                int32           `json:"store_id" binding:"required"`
-	State                  int32           `json:"state"`
-	PaymentDueDate         *string         `json:"payment_due_date" `
-	PaymentDate            *string         `json:"payment_date" `
-	Discount               string          `json:"discount"`
-	PaidAmount             string          `json:"paidAmount" `
-	PaymentMethod          int8            `json:"payment_method"`
-	Products               []Product       `json:"products" binding:"required,dive"`
-	ManualProducts         []ManualProduct `json:"manual_products" binding:"required,dive"`
-	SupplierId             int32           `json:"supplier_id" binding:"required"`
-	SupplierSequenceNumber int32           `json:"supplier_sequence_number" binding:"required"`
+	StoreId                int32                 `json:"store_id" binding:"required"`
+	State                  int32                 `json:"state"`
+	PaymentDueDate         *string               `json:"payment_due_date" `
+	PaymentDate            *string               `json:"payment_date" `
+	Discount               string                `json:"discount"`
+	PaidAmount             string                `json:"paidAmount" `
+	PaymentMethod          int8                  `json:"payment_method"`
+	Products               []PurchaseBillProduct `json:"products" binding:"required,dive"`
+	ManualProducts         []PurchaseBillProduct `json:"manual_products" binding:"required,dive"`
+	SupplierId             int32                 `json:"supplier_id" binding:"required"`
+	SupplierSequenceNumber int32                 `json:"supplier_sequence_number" binding:"required"`
+}
+
+type PurchaseBillProduct struct {
+	ProductId   *int32          `json:"product_id" binding:"required"`
+	Price       decimal.Decimal `json:"price" binding:"required"`
+	Name        string          `json:"name" binding:"required"`
+	CostPrice   decimal.Decimal `json:"cost_price" binding:"required"`
+	ShelfNumber *string         `json:"shelf_number"`
+	Quantity    decimal.Decimal `json:"quantity" binding:"required"`
 }

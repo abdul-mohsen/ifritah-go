@@ -49,18 +49,7 @@ COALESCE(
 	)
 	FROM bill_product p
 	WHERE p.bill_id = b.id),
-  JSON_ARRAY()) AS products,
-COALESCE(
-  (SELECT JSON_ARRAYAGG(
-	  JSON_OBJECT(
-		'part_name', m.part_name,
-		'price', m.price,
-		'quantity', m.quantity
-	  )
-	)
-	FROM bill_manual_product m
-	WHERE m.bill_id = b.id),
-  JSON_ARRAY()) AS manual_products
+  JSON_ARRAY()) AS products
 FROM bill_totals b
 JOIN store on store.id = b.store_id
 JOIN company on company.id = store.company_id
@@ -95,24 +84,12 @@ COALESCE(
 	)
 	FROM bill_product p
 	WHERE p.bill_id = b.id),
-  JSON_ARRAY()) AS products,
-COALESCE(
-  (SELECT JSON_ARRAYAGG(
-	  JSON_OBJECT(
-		'part_name', m.part_name,
-		'price', m.price,
-		'quantity', m.quantity
-	  )
-	)
-	FROM bill_manual_product m
-	WHERE m.bill_id = b.id),
-  JSON_ARRAY()) AS manual_products
+  JSON_ARRAY()) AS products
 FROM bill b
 JOIN store on store.id = b.store_id
 JOIN company on company.id = store.company_id
 JOIN credit_note  cn on cn.bill_id = b.id
 WHERE b.id = ? LIMIT 1;
-
 
 -- name: GetBillPDFByID :one
 SELECT b.*,
@@ -146,19 +123,10 @@ user_phone_number = ?
 WHERE id = ?;
 
 -- name: AddProductToBill :exec
-insert into bill_product (product_id, price, quantity, bill_id) values (?, ?, ?, ?);
+insert into bill_product (name, product_id, price, quantity, bill_id) values (?, ?, ?, ?, ?);
 
 -- name: DeleteProductToBill :exec
 DELETE FROM bill_product where bill_id = ?;
 
--- name: AddManualProductToBill :exec
-insert into bill_manual_product (part_name, price, quantity, bill_id) values (?, ?, ?, ?);
-
--- name: DeleteManualProductToBill :exec
-DELETE FROM bill_manual_product where bill_id = ?;
-
 -- name: GetBillProductByBillID :many
 select * from bill_product where bill_id = ?;
-
--- name: GetBillManualProductByBillID :many
-select * from bill_manual_product where bill_id = ?;

@@ -71,6 +71,7 @@ func main() {
 
 		authorized.GET("stores/all", h.GetStores)
 		authorized.POST("product", h.AddQuantity)
+		authorized.PUT("product/:id", h.UpdateProduct)
 		authorized.POST("product/all", h.GetAllProducts)
 		authorized.GET("product/:id", h.GetProduct)
 		authorized.DELETE("product/:id", h.GetProduct)

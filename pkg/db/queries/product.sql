@@ -22,3 +22,6 @@ price = values(price),
 cost_price = values(cost_price),
 shelf_number = Values(shelf_number),
 quantity = quantity + VALUES(quantity);
+
+-- name: UpdateProduct :exec
+update product  set price = ?, cost_price = ?, shelf_number = ?, quantity = ? where id = ?;

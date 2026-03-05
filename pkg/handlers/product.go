@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/httputil"
 	"slices"
 	"strconv"
 
@@ -22,6 +21,12 @@ type AddQuantityRequest struct {
 	Products []AddProduct `json:"products" binding:"required,dive"`
 }
 
+type UpdateProductRequest struct {
+	Quantity    decimal.Decimal `json:"quantity" binding:"required"`
+	Price       decimal.Decimal `json:"price" binding:"required"`
+	CostPrice   decimal.Decimal `json:"cost_price" binding:"required"`
+	ShelfNumber string          `json:"shelf_number" binding:"required"`
+}
 type AddProduct struct {
 	Id          int             `json:"product_id" binding:"required"`
 	Quantity    decimal.Decimal `json:"quantity" binding:"required"`
@@ -32,11 +37,6 @@ type AddProduct struct {
 
 func (h *handler) AddQuantity(c *gin.Context) {
 
-	_, err := httputil.DumpRequest(c.Request, true)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
-	}
 	var request AddQuantityRequest
 	if err := c.BindJSON(&request); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
@@ -72,6 +72,36 @@ func (h *handler) AddQuantity(c *gin.Context) {
 			}
 			log.Panic(err)
 		}
+	}
+
+	c.Status(http.StatusOK)
+
+}
+
+func (h *handler) UpdateProduct(c *gin.Context) {
+
+	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+	var request UpdateProductRequest
+	if err := c.BindJSON(&request); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
+
+	args := db.UpdateProductParams{
+		Quantity:    request.Quantity,
+		Price:       request.Price,
+		CostPrice:   request.CostPrice,
+		ShelfNumber: &request.ShelfNumber,
+		ID:          int32(id),
+	}
+	if err := h.queries.UpdateProduct(c.Request.Context(), args); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
 	}
 
 	c.Status(http.StatusOK)

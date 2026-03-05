@@ -37,7 +37,7 @@ func main() {
 	authorized.Use(handlers.JWTVerifyMiddleware)
 	{
 
-		authorized.GET("supplier/all", h.GetAllSupplier)
+		authorized.POST("supplier/all", h.GetAllSupplier)
 		authorized.GET("supplier/:id", h.GetSupplier)
 		authorized.POST("supplier", h.AddSupplier)
 		authorized.PUT("supplier/:id", h.EditSupplier)

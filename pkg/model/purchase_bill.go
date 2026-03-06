@@ -1,26 +1,26 @@
 package model
 
 import (
-	"database/sql"
-	"encoding/json"
+	db "ifritah/web-service-gin/pkg/db/gen"
+	"time"
 
 	"github.com/shopspring/decimal"
 )
 
 type PurchaseBill struct {
-	Id             int             `json:"id"`
-	EffectiveDate  sql.NullTime    `json:"effective_date"`
-	PaymentDueDate *sql.NullTime   `json:"payment_due_date"`
-	State          int             `json:"state"`
-	SubTotal       float64         `json:"subtotal"`
-	Discount       float64         `json:"discount"`
-	Vat            float64         `json:"vat"`
-	SequenceNumber int             `json:"sequence_number"`
-	Type           bool            `json:"type"`
-	StoreId        int             `json:"store_id"`
-	MerchantId     int             `json:"merchant_id"`
-	Products       json.RawMessage `json:"products"`
-	ManualProducts json.RawMessage `json:"manual_products"`
+	Id             int32                    `json:"id"`
+	EffectiveDate  time.Time                `json:"effective_date"`
+	PaymentDueDate *time.Time               `json:"payment_due_date"`
+	State          int32                    `json:"state"`
+	Discount       int64                    `json:"discount"`
+	SequenceNumber int32                    `json:"sequence_number"`
+	StoreId        int32                    `json:"store_id"`
+	MerchantId     int                      `json:"merchant_id"`
+	Products       []db.PurchaseBillProduct `json:"products"`
+	ManualProducts []db.PurchaseBillProduct `json:"manual_products"`
+	TotalBeforeVAT string                   `json:"total_before_vat"`
+	TotalVAT       string                   `json:"total_vat"`
+	Total          string                   `json:"total"`
 }
 type AddPurchaseBillRequest struct {
 	StoreId                int32                 `json:"store_id" binding:"required"`

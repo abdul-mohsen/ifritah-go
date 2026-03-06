@@ -8,23 +8,16 @@ select b.*
 	order by id desc limit ? offset ?;
 
 -- name: GetPurchaseBillDetail :one
-select b.*,
-			COALESCE(
-				(SELECT JSON_ARRAYAGG(
-					JSON_OBJECT(
-						'product_id', p.product_id,
-						'price', p.price,
-						'quantity', p.quantity
-					)
-				)
-				FROM purchase_bill_product p
-				WHERE p.bill_id = b.id),
-				JSON_ARRAY()) AS products
+select b.*
 	from purchase_bill_totals as b
 	join store on store.id = b.store_id
 	join company on company.id = store.company_id
 	join user on user.id = ? and company.id=user.company_id
 	where b.id = ? limit 1;
+
+-- name: GetPurchaseBillProducts :many
+select * from purchase_bill_product p
+	where p.bill_id = ?;
 
 -- name: AddPurchaseBill :execresult
 insert into purchase_bill (effective_date, payment_due_date, state, discount, store_id, merchant_id, supplier_id, sequence_number)

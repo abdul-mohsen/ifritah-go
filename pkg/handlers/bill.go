@@ -341,12 +341,12 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 			TotalBeforeVAT: product.TotalBeforeVat.Round(2).String(),
 			TotalVAT:       product.VatTotal.Round(2).String(),
 			Total:          product.TotalIncludingVat.Round(2).String(),
-			Type:           *product.Type,
+			Type:           product.Type,
 		}
 		xProducts = append(xProducts, product)
 	}
 
-	products := make(map[int16][]model.BillProductResponse)
+	products := make(map[int8][]model.BillProductResponse)
 	for _, p := range xProducts {
 		products[p.Type] = append(products[p.Type], p)
 	}

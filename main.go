@@ -64,11 +64,11 @@ func main() {
 
 		authorized.POST("bill/credit", h.CreditBill)
 
-		authorized.POST("purchase_bill", h.AddPurchaseBill)
-		authorized.PUT("purchase_bill/:id", h.UpdatePurchaseBill)
 		authorized.GET("purchase_bill/:id", h.GetPurchaseBillDetail)
-		authorized.DELETE("purchase_bill/:id", h.DeletePurchaseBillDetail)
+		authorized.POST("purchase_bill", h.AddPurchaseBill)
 		authorized.POST("purchase_bill/all", h.GetAllPurchaseBill)
+		authorized.PUT("purchase_bill/:id", h.UpdatePurchaseBill)
+		authorized.DELETE("purchase_bill/:id", h.DeletePurchaseBillDetail)
 
 		authorized.GET("stores/all", h.GetStores)
 		authorized.POST("product", h.AddQuantity)

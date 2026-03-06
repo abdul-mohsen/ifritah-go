@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
 	"log"
@@ -8,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-sql-driver/mysql"
 )
 
 func (h *handler) GetClient(c *gin.Context) {
@@ -72,7 +75,11 @@ func (h *handler) CreateClient(c *gin.Context) {
 	}
 	err := h.queries.CreateClient(c.Request.Context(), query)
 	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+		if IsDuplicate(err) {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Client vat number already exists in this store"))
+		} else {
+			c.AbortWithError(http.StatusInternalServerError, err)
+		}
 		log.Panic("Error in query", err)
 	}
 
@@ -108,4 +115,9 @@ func (h *handler) UpdateClient(c *gin.Context) {
 	}
 
 	c.Status(http.StatusCreated)
+}
+
+func IsDuplicate(err error) bool {
+	var mysqlErr *mysql.MySQLError
+	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
 }

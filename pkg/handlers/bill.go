@@ -346,20 +346,9 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		xProducts = append(xProducts, product)
 	}
 
-	products := slices.DeleteFunc(slices.Clone(xProducts), func(p model.BillProductResponse) bool {
-		return p.Type == 0
-	})
-
-	manualProducts := slices.DeleteFunc(slices.Clone(xProducts), func(p model.BillProductResponse) bool {
-		return p.Type == 1
-	})
-
-	maintenanceCost := "0.0"
+	products := make(map[int16][]model.BillProductResponse)
 	for _, p := range xProducts {
-		if p.Type == 2 {
-			maintenanceCost = p.Price
-			break
-		}
+		products[p.Type] = append(products[p.Type], p)
 	}
 
 	// TODO: @ssda Review it
@@ -396,12 +385,12 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		SequenceNumber:               bill.SequenceNumber,
 		StoreId:                      bill.StoreID,
 		MerchantId:                   bill.MerchantID,
-		MaintenanceCost:              maintenanceCost,
+		MaintenanceCost:              products[2][0].Price,
 		Note:                         bill.Note,
 		UserName:                     bill.Username,
 		UserPhoneNumber:              bill.UserPhoneNumber,
-		Products:                     products,
-		ManualProducts:               manualProducts,
+		Products:                     products[0],
+		ManualProducts:               products[1],
 		CreditState:                  bill.CreditState,
 		CreditNote:                   bill.CreditNote,
 		QRCode:                       bill.QrCode,

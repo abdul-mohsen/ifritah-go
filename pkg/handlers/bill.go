@@ -146,14 +146,16 @@ func (h *handler) AddBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	product := model.BillProduct{
-		Name:     model.MaintenanceCost,
-		Price:    request.MaintenanceCost,
-		Quantity: decimal.NewFromInt(1),
-	}
-
 	products := append(request.Products, request.ManualProducts...)
-	products = append(products, product)
+
+	if request.MaintenanceCost.GreaterThan(decimal.Zero) {
+		product := model.BillProduct{
+			Name:     model.MaintenanceCost,
+			Price:    request.MaintenanceCost,
+			Quantity: decimal.NewFromInt(1),
+		}
+		products = append(products, product)
+	}
 
 	if err := addProductToBill(qtx, c, request.Products, int32(id)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
@@ -198,7 +200,6 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 
 	var paymentDueDate *time.Time
 	if request.PaymentDueDate != nil {
-
 		parsedTime, err := time.Parse(time.RFC3339, *request.PaymentDueDate)
 		paymentDueDate = &parsedTime
 		if err != nil {
@@ -249,14 +250,15 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	product := model.BillProduct{
-		Name:     model.MaintenanceCost,
-		Price:    request.MaintenanceCost,
-		Quantity: decimal.NewFromInt(1),
-	}
-
 	products := append(request.Products, request.ManualProducts...)
-	products = append(products, product)
+	if request.MaintenanceCost.GreaterThan(decimal.Zero) {
+		product := model.BillProduct{
+			Name:     model.MaintenanceCost,
+			Price:    request.MaintenanceCost,
+			Quantity: decimal.NewFromInt(1),
+		}
+		products = append(products, product)
+	}
 
 	if err := addProductToBill(qtx, c, products, int32(billID)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)

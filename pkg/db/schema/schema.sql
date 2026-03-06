@@ -465,7 +465,7 @@ CREATE TABLE `bill` (
   `qr_code` varchar(1000) DEFAULT NULL,
   PRIMARY KEY (`id`),
   FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`)
-) ENGINE=InnoDB AUTO_INCREMENT=167 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=182 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -504,10 +504,11 @@ CREATE TABLE `bill_product` (
   `vat_total` decimal(12,2) GENERATED ALWAYS AS (round(((`total_before_vat` * `vat`) / 100),2)) STORED,
   `total_including_vat` decimal(12,2) GENERATED ALWAYS AS (round((`total_before_vat` + `vat_total`),2)) STORED,
   `name` varchar(255) DEFAULT NULL,
+  `type` tinyint GENERATED ALWAYS AS ((case when (`product_id` is not null) then 0 when (`name` = _utf8mb4'maintenance_cost') then 2 else 1 end)) VIRTUAL,
   PRIMARY KEY (`id`),
   CONSTRAINT `chk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=298 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=324 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -690,7 +691,7 @@ CREATE TABLE `client` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_vat_number` (`vat_number`),
   UNIQUE KEY `uq_email` (`email`)
-) ENGINE=InnoDB AUTO_INCREMENT=26 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=48 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1233,7 +1234,7 @@ CREATE TABLE `product` (
   UNIQUE KEY `id_UNIQUE` (`article_id`,`store_id`) /*!80000 INVISIBLE */,
   CONSTRAINT `ch_product_price` CHECK ((`price` > 0)),
   CONSTRAINT `ch_product_quantity` CHECK ((`quantity` >= 0))
-) ENGINE=InnoDB AUTO_INCREMENT=116 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=134 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1256,7 +1257,7 @@ CREATE TABLE `purchase_bill` (
   `store_id` int NOT NULL,
   `merchant_id` int NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=86 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=100 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1299,7 +1300,7 @@ CREATE TABLE `purchase_bill_product` (
   PRIMARY KEY (`id`),
   CONSTRAINT `chpk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chpk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=117 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=137 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1462,7 +1463,7 @@ CREATE TABLE `supplier` (
   PRIMARY KEY (`id`),
   KEY `company_id` (`company_id`),
   CONSTRAINT `supplier_ibfk_1` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=77 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=87 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1710,4 +1711,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-05 18:20:12
+-- Dump completed on 2026-03-06 16:21:09

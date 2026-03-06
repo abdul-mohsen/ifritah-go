@@ -64,6 +64,7 @@ type BillProductResponse struct {
 	TotalBeforeVAT string `json:"total_before_vat"`
 	TotalVAT       string `json:"total_vat"`
 	Total          string `json:"total"`
+	Type           int16
 }
 
 type AddProductToBillParams struct {

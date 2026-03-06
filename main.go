@@ -56,12 +56,13 @@ func main() {
 		authorized.GET("notification", h.GetNotificationAll)
 
 		// Bills
+		authorized.GET("bill/:id", h.GetBillDetail)
 		authorized.POST("bill/all", h.GetBills)
-		authorized.PUT("bill/:id", h.SubmitDraftBill)
 		authorized.POST("bill", h.AddBill)
+		authorized.PUT("bill/:id", h.SubmitDraftBill)
 		authorized.DELETE("bill/:id", h.DeleteBillDetail)
+
 		authorized.POST("bill/credit", h.CreditBill)
-		authorized.GET("bill/:id", h.GetBillDetail) // allow all user to get all bill details
 
 		authorized.POST("purchase_bill", h.AddPurchaseBill)
 		authorized.PUT("purchase_bill/:id", h.UpdatePurchaseBill)

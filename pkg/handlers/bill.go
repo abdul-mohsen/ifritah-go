@@ -372,6 +372,12 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		CommercialRegistrationNumber = *bill.CommercialRegistrationNumber
 	}
 
+	maintenanceCost := "0.0"
+	if len(products[2]) != 0 {
+		maintenanceCost = products[2][0].Price
+
+	}
+
 	return model.Bill{
 		Id:                           bill.ID,
 		EffectiveDate:                bill.EffectiveDate,
@@ -385,7 +391,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		SequenceNumber:               bill.SequenceNumber,
 		StoreId:                      bill.StoreID,
 		MerchantId:                   bill.MerchantID,
-		MaintenanceCost:              products[2][0].Price,
+		MaintenanceCost:              maintenanceCost,
 		Note:                         bill.Note,
 		UserName:                     bill.Username,
 		UserPhoneNumber:              bill.UserPhoneNumber,

@@ -142,13 +142,13 @@ func (h *handler) GetProduct(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	res, err := h.queries.GetProduct(c.Request.Context(), int32(id))
+	err = h.queries.DeleteProduct(c.Request.Context(), int32(id))
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic("Error in query", err)
 	}
 
-	c.JSON(http.StatusOK, res)
+	c.Status(http.StatusOK)
 
 }
 

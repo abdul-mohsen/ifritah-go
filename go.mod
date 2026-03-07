@@ -5,12 +5,13 @@ go 1.24.0
 toolchain go1.24.1
 
 require (
-	github.com/abdul-mohsen/go-arabic-pdf-lib v1.1.2
+	github.com/abdul-mohsen/go-arabic-pdf-lib v1.1.3
 	github.com/gin-contrib/cache v1.4.1
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/joho/godotenv v1.5.1
+	github.com/shopspring/decimal v1.4.0
 	golang.org/x/crypto v0.47.0
 )
 
@@ -49,7 +50,6 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/robfig/go-cache v0.0.0-20130306151617-9fc39e0dbf62 // indirect
-	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/signintech/gopdf v0.35.0 // indirect
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect

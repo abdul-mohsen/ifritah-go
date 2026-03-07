@@ -1,7 +1,7 @@
 filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
 filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
-github.com/abdul-mohsen/go-arabic-pdf-lib v1.1.2 h1:JAQBEpq8EKGqZPHqDDikxvqhJOj2AvbYnLcAfDg9Mlc=
-github.com/abdul-mohsen/go-arabic-pdf-lib v1.1.2/go.mod h1:pi7q0pZAQ3iXU7slxK46w0gbcu6fA83FTjlMEf13PD8=
+github.com/abdul-mohsen/go-arabic-pdf-lib v1.1.3 h1:NqV2jTTeESch1AgnrZJd5k7pVHD4QbT709ObzGc4GXQ=
+github.com/abdul-mohsen/go-arabic-pdf-lib v1.1.3/go.mod h1:pi7q0pZAQ3iXU7slxK46w0gbcu6fA83FTjlMEf13PD8=
 github.com/bradfitz/gomemcache v0.0.0-20230905024940-24af94b03874 h1:N7oVaKyGp8bttX0bfZGmcGkjz7DLQXhAn3DNd3T0ous=
 github.com/bradfitz/gomemcache v0.0.0-20230905024940-24af94b03874/go.mod h1:r5xuitiExdLAJ09PR7vBVENGvp4ZuTBeWTGtxuX3K+c=
 github.com/bradfitz/gomemcache v0.0.0-20250403215159-8d39553ac7cf h1:TqhNAT4zKbTdLa62d2HDBFdvgSbIGB3eJE8HqhgiL9I=

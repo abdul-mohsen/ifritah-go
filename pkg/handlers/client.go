@@ -117,6 +117,24 @@ func (h *handler) UpdateClient(c *gin.Context) {
 	c.Status(http.StatusCreated)
 }
 
+func (h *handler) DeleteClient(c *gin.Context) {
+	// user := GetSessionInfo(c)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
+
+	err = h.queries.DeleteClient(c.Request.Context(), uint32(id))
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+
+	c.Status(http.StatusOK)
+
+}
+
 func IsDuplicate(err error) bool {
 	var mysqlErr *mysql.MySQLError
 	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062

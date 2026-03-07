@@ -93,7 +93,7 @@ func main() {
 
 	nonAuthGroup := router.Group(baseUrl)
 	{
-		nonAuthGroup.GET("bill_pdf/:id", h.GetBillPDF)              // allow all user to get all bill details
+		nonAuthGroup.GET("bill/pdf/:id", h.GetBillPDF)              // allow all user to get all bill details
 		nonAuthGroup.GET("bill/credit/pdf/:id", h.GetCreditBillPDF) // allow all user to get all bill details
 		nonAuthGroup.POST("register", h.Register)
 		nonAuthGroup.POST("login", h.Login)

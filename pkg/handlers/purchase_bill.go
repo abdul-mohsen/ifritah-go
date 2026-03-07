@@ -1,15 +1,19 @@
 package handlers
 
 import (
+	"errors"
+	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
 	"log"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 )
 
 func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, userID int32) []db.PurchaseBillTotal {
@@ -44,7 +48,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
 		log.Panic(err)
 	}
 
@@ -125,7 +129,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		c.Status(http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
 		log.Panic(err)
 	}
 
@@ -240,8 +244,8 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
 		log.Panic(err)
-		c.Status(http.StatusBadRequest)
 	}
 
 	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds == nil || len(request.StoreIds) == 0 {
@@ -334,4 +338,18 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+func BindError(err error) string {
+	var ve validator.ValidationErrors
+	if errors.As(err, &ve) {
+		first := ve[0]
+		return fmt.Sprintf("%s, is %s", first.Field(), first.Tag())
+	}
+
+	msg := err.Error()
+	if idx := strings.IndexByte(msg, '\n'); idx != -1 {
+		msg = msg[:idx]
+	}
+	return msg
 }

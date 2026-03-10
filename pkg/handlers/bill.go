@@ -78,6 +78,8 @@ func (h *handler) AddBill(c *gin.Context) {
 		PaidAmount:    decimal.NewFromInt(0),
 	}
 
+	log.Print(request)
+
 	if err := c.BindJSON(&request); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
@@ -183,6 +185,8 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		PaymentMethod: 0,
 		PaidAmount:    decimal.NewFromInt(0),
 	}
+
+	log.Print(request)
 
 	if err := c.BindJSON(&request); err != nil {
 		c.Status(http.StatusBadRequest)

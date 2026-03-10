@@ -333,7 +333,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 	dbProducts, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
 	var xProducts []model.BillProductResponse
 	for _, product := range dbProducts {
-		name := fmt.Sprint(product.Name)
+		name := fmt.Sprint(product.ID)
 		if product.Name != nil {
 			name = *product.Name
 		}

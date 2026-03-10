@@ -333,8 +333,12 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 	dbProducts, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
 	var xProducts []model.BillProductResponse
 	for _, product := range dbProducts {
+		name := fmt.Sprint(product.Name)
+		if product.Name != nil {
+			name = *product.Name
+		}
 		product := model.BillProductResponse{
-			Name:           fmt.Sprint(product.ID),
+			Name:           name,
 			Quantity:       product.Quantity.Round(1).String(),
 			Price:          product.Price.Round(2).String(),
 			Discount:       "0.0",

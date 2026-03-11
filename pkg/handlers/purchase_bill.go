@@ -52,6 +52,8 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	log.Print(request)
+
 	userSession := GetSessionInfo(c)
 
 	storeIds := h.getStoreIds(c)

@@ -104,8 +104,8 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	}
 
 	// TODO @ssda work around when the frontend send id when he should not
-	for _, i := range request.ManualProducts {
-		i.ProductId = nil
+	for i := range request.ManualProducts {
+		request.ManualProducts[i].ProductId = nil
 	}
 
 	products := append(request.Products, request.ManualProducts...)
@@ -198,8 +198,8 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	}
 
 	// TODO @ssda work around when the frontend send id when he should not
-	for _, i := range request.ManualProducts {
-		i.ProductId = nil
+	for i := range request.ManualProducts {
+		request.ManualProducts[i].ProductId = nil
 	}
 
 	products := append(request.Products, request.ManualProducts...)

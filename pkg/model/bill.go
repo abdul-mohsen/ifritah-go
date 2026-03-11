@@ -49,7 +49,7 @@ type AddBillRequest struct {
 }
 
 type BillProduct struct {
-	ProductId *int32          `json:"product_id" binding:"required"`
+	ProductId *int32          `json:"product_id"`
 	Name      string          `json:"name"`
 	Price     decimal.Decimal `json:"price" binding:"required"`
 	Quantity  decimal.Decimal `json:"quantity" binding:"required"`

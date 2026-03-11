@@ -306,19 +306,21 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 	}
 
 	bill := model.PurchaseBill{
-		Id:             b.ID,
-		EffectiveDate:  b.EffectiveDate,
-		PaymentDueDate: b.PaymentDueDate,
-		State:          b.State,
-		Discount:       b.Discount,
-		SequenceNumber: b.SequenceNumber,
-		StoreId:        b.StoreID,
-		MerchantId:     int(b.MerchantID),
-		Products:       products[0],
-		ManualProducts: products[2],
-		TotalBeforeVAT: b.TotalBeforeVat.Round(2).String(),
-		TotalVAT:       b.TotalVat.Round(2).String(),
-		Total:          b.Total.Round(2).String(),
+		Id:                     b.ID,
+		SupplierId:             b.SupplierID,
+		SupplierSequenceNumber: *b.SupplierSequenceNumber,
+		EffectiveDate:          b.EffectiveDate,
+		PaymentDueDate:         b.PaymentDueDate,
+		State:                  b.State,
+		Discount:               b.Discount,
+		SequenceNumber:         b.SequenceNumber,
+		StoreId:                b.StoreID,
+		MerchantId:             int(b.MerchantID),
+		Products:               products[0],
+		ManualProducts:         products[2],
+		TotalBeforeVAT:         b.TotalBeforeVat.Round(2).String(),
+		TotalVAT:               b.TotalVat.Round(2).String(),
+		Total:                  b.Total.Round(2).String(),
 	}
 	c.JSON(http.StatusOK, bill)
 }

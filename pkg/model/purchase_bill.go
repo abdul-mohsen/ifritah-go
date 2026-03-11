@@ -8,19 +8,21 @@ import (
 )
 
 type PurchaseBill struct {
-	Id             int32                    `json:"id"`
-	EffectiveDate  time.Time                `json:"effective_date"`
-	PaymentDueDate *time.Time               `json:"payment_due_date"`
-	State          int32                    `json:"state"`
-	Discount       int64                    `json:"discount"`
-	SequenceNumber int32                    `json:"sequence_number"`
-	StoreId        int32                    `json:"store_id"`
-	MerchantId     int                      `json:"merchant_id"`
-	Products       []db.PurchaseBillProduct `json:"products"`
-	ManualProducts []db.PurchaseBillProduct `json:"manual_products"`
-	TotalBeforeVAT string                   `json:"total_before_vat"`
-	TotalVAT       string                   `json:"total_vat"`
-	Total          string                   `json:"total"`
+	Id                     int32                    `json:"id"`
+	EffectiveDate          time.Time                `json:"effective_date"`
+	PaymentDueDate         *time.Time               `json:"payment_due_date"`
+	State                  int32                    `json:"state"`
+	Discount               int64                    `json:"discount"`
+	SequenceNumber         int32                    `json:"sequence_number"`
+	SupplierId             int32                    `json:"supplier_id"`
+	SupplierSequenceNumber int32                    `json:"supplier_sequence_number"`
+	StoreId                int32                    `json:"store_id"`
+	MerchantId             int                      `json:"merchant_id"`
+	Products               []db.PurchaseBillProduct `json:"products"`
+	ManualProducts         []db.PurchaseBillProduct `json:"manual_products"`
+	TotalBeforeVAT         string                   `json:"total_before_vat"`
+	TotalVAT               string                   `json:"total_vat"`
+	Total                  string                   `json:"total"`
 }
 type AddPurchaseBillRequest struct {
 	StoreId                int32                 `json:"store_id" binding:"required"`

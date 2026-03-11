@@ -103,6 +103,11 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	// TODO @ssda work around when the frontend send id when he should not
+	for _, i := range request.ManualProducts {
+		i.ProductId = nil
+	}
+
 	products := append(request.Products, request.ManualProducts...)
 
 	err = addProductToBillPurchase(qtx, c, products, int32(id))
@@ -190,6 +195,11 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
+	}
+
+	// TODO @ssda work around when the frontend send id when he should not
+	for _, i := range request.ManualProducts {
+		i.ProductId = nil
 	}
 
 	products := append(request.Products, request.ManualProducts...)

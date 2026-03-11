@@ -148,6 +148,11 @@ func (h *handler) AddBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	// TODO @ssda work around when the frontend send id when he should not
+	for _, i := range request.ManualProducts {
+		i.ProductId = nil
+	}
+
 	products := append(request.Products, request.ManualProducts...)
 
 	if request.MaintenanceCost.GreaterThan(decimal.Zero) {
@@ -252,6 +257,11 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	if err = qtx.DeleteProductToBill(c.Request.Context(), int32(billID)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
+	}
+
+	// TODO @ssda work around when the frontend send id when he should not
+	for _, i := range request.ManualProducts {
+		i.ProductId = nil
 	}
 
 	products := append(request.Products, request.ManualProducts...)

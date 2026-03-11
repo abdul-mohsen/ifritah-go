@@ -322,7 +322,7 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 		StoreId:                b.StoreID,
 		MerchantId:             int(b.MerchantID),
 		Products:               products[0],
-		ManualProducts:         products[2],
+		ManualProducts:         products[1],
 		TotalBeforeVAT:         b.TotalBeforeVat.Round(2).String(),
 		TotalVAT:               b.TotalVat.Round(2).String(),
 		Total:                  b.Total.Round(2).String(),

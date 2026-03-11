@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
@@ -51,8 +52,8 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
 		log.Panic(err)
 	}
-
-	log.Print(request)
+	debbug, _ := json.MarshalIndent(request, "", "	")
+	log.Print(string(debbug))
 
 	userSession := GetSessionInfo(c)
 
@@ -112,6 +113,8 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	products := append(request.Products, request.ManualProducts...)
 
+	debbug, _ = json.MarshalIndent(products, "", "	")
+	log.Print(string(debbug))
 	err = addProductToBillPurchase(qtx, c, products, int32(id))
 	if err != nil {
 		c.Status(http.StatusBadRequest)

@@ -164,7 +164,7 @@ func (h *handler) AddBill(c *gin.Context) {
 		products = append(products, product)
 	}
 
-	if err := addProductToBill(qtx, c, request.Products, int32(id)); err != nil {
+	if err := addProductToBill(qtx, c, products, int32(id)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
@@ -347,10 +347,15 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 	dbProducts, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
 	var xProducts []model.BillProductResponse
 	for _, product := range dbProducts {
-		name := fmt.Sprint(product.ID)
+		name := "ERR"
 		if product.Name != nil {
 			name = *product.Name
+		} else if product.ProductID != nil {
+			name = fmt.Sprint(product.ProductID)
+		} else {
+			log.Panic("ERR")
 		}
+
 		product := model.BillProductResponse{
 			Name:           name,
 			Quantity:       product.Quantity.Round(1).String(),
@@ -446,11 +451,11 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		var products []models.Product
 		name := "تكلفة الصيانة"
 		for _, p := range xProducts {
-			if p.Name != model.MaintenanceCost {
-				name = p.Name
+			if p.Name == model.MaintenanceCost {
+				p.Name = name
 			}
 			product := models.Product{
-				Name:      name,
+				Name:      p.Name,
 				Quantity:  p.Quantity,
 				UnitPrice: p.Price,
 				Discount:  p.Discount,

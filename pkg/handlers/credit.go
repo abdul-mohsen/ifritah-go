@@ -75,7 +75,7 @@ func (h *handler) GetCreditBillPDF(c *gin.Context) {
 		}
 
 		invoice := models.Invoice{
-			Title:                        "فاتورة ضريبية مبسطة",
+			Title:                        "فاتورة دائن",
 			InvoiceNumber:                fmt.Sprintf("INV%d", bill.SequenceNumber),
 			StoreName:                    bill.StoreName,
 			StoreAddress:                 bill.Address,

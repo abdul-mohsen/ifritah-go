@@ -427,6 +427,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		TotalVAT:                     bill.TotalVat.Round(2).String(),
 		Total:                        bill.Total.Round(2).String(),
 		CommercialRegistrationNumber: CommercialRegistrationNumber,
+		CreditID:                     bill.CreditID,
 	}, xProducts
 }
 

@@ -76,7 +76,7 @@ func (h *handler) GetCreditBillPDF(c *gin.Context) {
 
 		invoice := models.Invoice{
 			Title:                        "فاتورة دائن",
-			InvoiceNumber:                fmt.Sprintf("INV%d", bill.SequenceNumber),
+			InvoiceNumber:                fmt.Sprintf("INV%d", *bill.CreditID),
 			StoreName:                    bill.StoreName,
 			StoreAddress:                 bill.Address,
 			Date:                         bill.EffectiveDate.Local().Format(time.DateTime),
@@ -103,7 +103,7 @@ func (h *handler) GetCreditBillPDF(c *gin.Context) {
 				VATAmountColumn:              "ضريبة القيمة المضافة",
 				TotalColumn:                  "السعر شامل الضريبة",
 				TotalDiscount:                "إجمالي الخصم",
-				Footer:                       fmt.Sprintf(">>>>>>>>>>>>>> إغلاق الفاتورة %d <<<<<<<<<<<<<<<", bill.SequenceNumber),
+				Footer:                       fmt.Sprintf(">>>>>>>>>>>>>>  إغلاق الفاتورة %d   <<<<<<<<<<<<<<< BILL REF %d |", *bill.CreditID, bill.SequenceNumber),
 				Vat:                          "ضريبة القيمة المضافة (%51)",
 				Reason:                       "ملاحظة:",
 			},

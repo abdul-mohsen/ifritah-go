@@ -115,5 +115,6 @@ type Bill struct {
 	TotalBeforeVAT               string                `json:"total_before_vat"`
 	TotalVAT                     string                `json:"total_vat"`
 	Total                        string                `json:"total"`
+	CreditID                     *int32
 	CommercialRegistrationNumber string
 }

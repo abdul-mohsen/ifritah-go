@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/model"
 	"math/big"
 	"os"
 	"strconv"
@@ -26,7 +27,7 @@ func New(db *sql.DB, queries *db.Queries) handler {
 
 func EnvSetup() {
 
-	JWTSettings = JWTConfig{
+	model.JWTSettings = model.JWTConfig{
 		JWTSecertKey:      os.Getenv("JWT_SECERT_KEY"),
 		SigningMethod:     "HS512",
 		AccessExpiration:  time.Minute * 15,   // Access token expires in 15 minutes

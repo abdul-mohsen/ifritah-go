@@ -463,9 +463,11 @@ CREATE TABLE `bill` (
   `buyer_id` int DEFAULT NULL,
   `user_phone_number` varchar(10) DEFAULT NULL,
   `qr_code` varchar(1000) DEFAULT NULL,
+  `invoice_uuid` char(36) DEFAULT NULL,
+  `invoice_hash` varchar(128) DEFAULT NULL,
   PRIMARY KEY (`id`),
   FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`)
-) ENGINE=InnoDB AUTO_INCREMENT=305 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=371 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -504,11 +506,12 @@ CREATE TABLE `bill_product` (
   `vat_total` decimal(12,2) GENERATED ALWAYS AS (round(((`total_before_vat` * `vat`) / 100),2)) STORED,
   `total_including_vat` decimal(12,2) GENERATED ALWAYS AS (round((`total_before_vat` + `vat_total`),2)) STORED,
   `name` varchar(255) DEFAULT NULL,
+  `part_name` varchar(255) DEFAULT NULL,
   `type` tinyint GENERATED ALWAYS AS ((case when (`product_id` is not null) then 0 when (`name` = _utf8mb4'maintenance_cost') then 2 else 1 end)) STORED NOT NULL,
   PRIMARY KEY (`id`),
   CONSTRAINT `chk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=471 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=683 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -519,7 +522,7 @@ DROP TABLE IF EXISTS `bill_totals`;
 /*!50001 DROP VIEW IF EXISTS `bill_totals`*/;
 SET @saved_cs_client     = @@character_set_client;
 /*!50503 SET character_set_client = utf8mb4 */;
-/*!50001 CREATE VIEW `bill_totals` AS SELECT
+/*!50001 CREATE VIEW `bill_totals` AS SELECT 
  1 AS `id`,
  1 AS `effective_date`,
  1 AS `payment_due_date`,
@@ -692,7 +695,7 @@ CREATE TABLE `client` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_vat_number` (`vat_number`),
   UNIQUE KEY `uq_email` (`email`)
-) ENGINE=InnoDB AUTO_INCREMENT=55 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=56 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -766,10 +769,13 @@ CREATE TABLE `credit_note` (
   `state` int DEFAULT NULL,
   `NOTE` text,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `invoice_uuid` char(36) DEFAULT NULL,
+  `invoice_hash` varchar(128) DEFAULT NULL,
+  `invoice_qr` mediumtext,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_bill_id` (`bill_id`),
   CONSTRAINT `credit_note_ibfk_1` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=80 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=84 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1236,7 +1242,7 @@ CREATE TABLE `product` (
   UNIQUE KEY `id_UNIQUE` (`article_id`,`store_id`) /*!80000 INVISIBLE */,
   CONSTRAINT `ch_product_price` CHECK ((`price` > 0)),
   CONSTRAINT `ch_product_quantity` CHECK ((`quantity` >= 0))
-) ENGINE=InnoDB AUTO_INCREMENT=176 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=181 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1259,7 +1265,7 @@ CREATE TABLE `purchase_bill` (
   `store_id` int NOT NULL,
   `merchant_id` int NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=147 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=185 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1303,7 +1309,7 @@ CREATE TABLE `purchase_bill_product` (
   PRIMARY KEY (`id`),
   CONSTRAINT `chpk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chpk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=212 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=362 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1314,7 +1320,7 @@ DROP TABLE IF EXISTS `purchase_bill_totals`;
 /*!50001 DROP VIEW IF EXISTS `purchase_bill_totals`*/;
 SET @saved_cs_client     = @@character_set_client;
 /*!50503 SET character_set_client = utf8mb4 */;
-/*!50001 CREATE VIEW `purchase_bill_totals` AS SELECT
+/*!50001 CREATE VIEW `purchase_bill_totals` AS SELECT 
  1 AS `id`,
  1 AS `effective_date`,
  1 AS `payment_due_date`,
@@ -1409,6 +1415,27 @@ CREATE TABLE `searchindex` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `settings`
+--
+
+DROP TABLE IF EXISTS `settings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `settings` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `setting_key` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `value` text COLLATE utf8mb4_unicode_ci,
+  `description` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `updated_by` int DEFAULT NULL,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_settings_key` (`setting_key`),
+  KEY `fk_settings_user` (`updated_by`),
+  CONSTRAINT `fk_settings_user` FOREIGN KEY (`updated_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=31 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `shortcuts`
 --
 
@@ -1466,7 +1493,7 @@ CREATE TABLE `supplier` (
   PRIMARY KEY (`id`),
   KEY `company_id` (`company_id`),
   CONSTRAINT `supplier_ibfk_1` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=94 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=112 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1502,8 +1529,30 @@ CREATE TABLE `user` (
   `last_login` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `role` enum('admin','manager','employee') NOT NULL DEFAULT 'employee',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `user_permission`
+--
+
+DROP TABLE IF EXISTS `user_permission`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_permission` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `resource` varchar(50) NOT NULL,
+  `can_view` tinyint(1) NOT NULL DEFAULT '1',
+  `can_add` tinyint(1) NOT NULL DEFAULT '0',
+  `can_edit` tinyint(1) NOT NULL DEFAULT '0',
+  `can_delete` tinyint(1) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_user_resource` (`user_id`,`resource`),
+  CONSTRAINT `fk_perm_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1714,4 +1763,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-07  3:47:20
+-- Dump completed on 2026-03-22 23:27:08

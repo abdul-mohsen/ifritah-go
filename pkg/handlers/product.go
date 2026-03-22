@@ -135,7 +135,7 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 	c.JSON(http.StatusOK, products)
 }
 
-func (h *handler) GetProduct(c *gin.Context) {
+func (h *handler) DeleteProduct(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
@@ -152,7 +152,7 @@ func (h *handler) GetProduct(c *gin.Context) {
 
 }
 
-func (h *handler) DeleteProduct(c *gin.Context) {
+func (h *handler) GetProduct(c *gin.Context) {
 	// user := GetSessionInfo(c)
 	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
 	if err != nil {

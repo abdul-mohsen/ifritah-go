@@ -53,7 +53,6 @@ func main() {
 		authorized.GET("vin/no_cache/:vin", h.SearchByVinSkipCache)
 		authorized.GET("vin/:vin", h.SearchByVin)
 		authorized.GET("car_part/:id", h.GetAllCachedVin)
-		authorized.GET("notification", h.GetNotificationAll)
 
 		// Bills
 		authorized.GET("bill/:id", h.GetBillDetail)
@@ -77,13 +76,26 @@ func main() {
 		authorized.POST("product/all", h.GetAllProducts)
 		authorized.POST("product", h.AddQuantity)
 		authorized.PUT("product/:id", h.UpdateProduct)
-		authorized.DELETE("product/:id", h.GetProduct)
+		authorized.DELETE("product/:id", h.DeleteProduct)
 
 		authorized.GET("client/:id", h.GetClient)
 		authorized.POST("client/all", h.GetAllClient)
 		authorized.POST("client", h.CreateClient)
 		authorized.PUT("client/:id", h.UpdateClient)
 		authorized.DELETE("client/:id", h.DeleteClient)
+
+		// Settings (admin only)
+		authorized.GET("settings", h.GetSettings)
+		authorized.PUT("settings", h.UpdateSettings)
+
+		// Notifications
+		authorized.GET("notification", h.GetNotifications)
+		authorized.GET("notification/config", h.GetNotificationConfig)
+		authorized.PUT("notification/config", h.UpdateNotificationConfig)
+		authorized.PUT("notification/:id/read", h.MarkNotificationRead)
+		authorized.PUT("notification/read-all", h.MarkAllNotificationsRead)
+
+		authorized.GET("dashboard", h.GetDashboard)
 
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))
 		authorized.POST("part/", h.GetPart)
@@ -97,7 +109,9 @@ func main() {
 		nonAuthGroup.GET("bill/credit/pdf/:id", h.GetCreditBillPDF) // allow all user to get all bill details
 		nonAuthGroup.POST("register", h.Register)
 		nonAuthGroup.POST("login", h.Login)
-		// nonAuthGroup.POST("refresh", h.Refresh)
+		nonAuthGroup.POST("refresh", h.Refresh)
+		nonAuthGroup.POST("forgot-password", h.ForgotPassword)
+		nonAuthGroup.POST("reset-password", h.ResetPassword)
 	}
 
 	router.Run("localhost:" + os.Getenv("SERVER_PORT"))

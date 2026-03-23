@@ -211,17 +211,17 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+
 	var attachment []string
 	for _, a := range request.Attachments {
 		attachment = append(attachment, a)
 
 	}
 	if err := h.SavePurchaseBillAttachments(h.DB, id, *request.PDFLink, attachment); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
-	}
-
-	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)
 	}

@@ -3,3 +3,4 @@
 web-service-gin
 pkg/db/gen/*
 main
+**/*.pdf

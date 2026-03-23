@@ -100,9 +100,9 @@ func (h *handler) Login(c *gin.Context) {
 	// Store refresh token hash in DB for revocation support
 	tokenHash := sha256Hex(refreshToken)
 	_, _ = h.DB.Exec(
-		"INSERT INTO sessions (id, user_id, access_token, refresh_token, ip_address, user_agent, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		generateSessionID(), userID, accessToken, tokenHash,
-		c.ClientIP(), c.GetHeader("User-Agent"),
+		"INSERT INTO refresh_token (user_id, token_hash, device_name, ip_address, expires_at) VALUES (?, ?, ?, ?, ?)",
+		userID, tokenHash,
+		c.GetHeader("User-Agent"), c.ClientIP(),
 		time.Now().Add(model.JWTSettings.RefreshExpiration),
 	)
 
@@ -228,7 +228,7 @@ func (h *handler) Refresh(c *gin.Context) {
 	tokenHash := sha256Hex(tokenString)
 	var sessionID string
 	err = h.DB.QueryRow(
-		"SELECT id FROM sessions WHERE refresh_token = ? AND expires_at > NOW() LIMIT 1",
+		"SELECT id FROM refresh_token WHERE token_hash = ? AND revoked = 0 AND expires_at > NOW() LIMIT 1",
 		tokenHash,
 	).Scan(&sessionID)
 	if err != nil {
@@ -263,8 +263,8 @@ func (h *handler) Refresh(c *gin.Context) {
 	// Rotate: update the session with new tokens
 	newHash := sha256Hex(newRefreshToken)
 	_, _ = h.DB.Exec(
-		"UPDATE sessions SET access_token = ?, refresh_token = ?, expires_at = ? WHERE id = ?",
-		newAccessToken, newHash,
+		"UPDATE refresh_token SET token_hash = ?, expires_at = ? WHERE id = ?",
+		newHash,
 		time.Now().Add(model.JWTSettings.RefreshExpiration),
 		sessionID,
 	)
@@ -464,7 +464,7 @@ func (h *handler) Logout(c *gin.Context) {
 	userID := c.GetInt64("userId") // from JWT middleware
 
 	// Delete all sessions for this user
-	_, _ = h.DB.Exec("DELETE FROM sessions WHERE user_id = ?", userID)
+	_, _ = h.DB.Exec("DELETE FROM refresh_token WHERE user_id = ?", userID)
 
 	c.JSON(http.StatusOK, gin.H{"detail": "logged out"})
 }

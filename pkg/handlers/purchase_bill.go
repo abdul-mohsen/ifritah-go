@@ -183,6 +183,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		MerchantID:     int32(userSession.id),
 		SupplierID:     request.SupplierId,
 		SequenceNumber: request.SupplierSequenceNumber,
+		PdfLink:        request.PDFLink,
 	}
 	res, err := qtx.AddPurchaseBill(c.Request.Context(), args)
 	if err != nil {
@@ -208,6 +209,18 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
+	}
+
+	for _, a := range request.Attachments {
+		arg := db.AddAttachmentsPurchaseBillParams{
+			PurchaseBillID: int32(id),
+			FileKey:        a,
+		}
+		if err := qtx.AddAttachmentsPurchaseBill(c.Request.Context(), arg); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			log.Panic(err)
+		}
+
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -300,9 +313,24 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
 	xProducts, err := h.queries.GetPurchaseBillProducts(c.Request.Context(), int32(id))
 
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+
 	products := make(map[int8][]db.PurchaseBillProduct)
 	for _, p := range xProducts {
 		products[p.Type] = append(products[p.Type], p)
+	}
+
+	a, err := h.queries.GetPurchaseBillAttachments(c.Request.Context(), int32(id))
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+	var attachments []string
+	for _, x := range a {
+		attachments = append(attachments, x.FileKey)
 	}
 
 	bill := model.PurchaseBill{
@@ -321,6 +349,8 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 		TotalBeforeVAT:         b.TotalBeforeVat.Round(2).String(),
 		TotalVAT:               b.TotalVat.Round(2).String(),
 		Total:                  b.Total.Round(2).String(),
+		PDFLink:                b.PdfLink,
+		Attachments:            attachments,
 	}
 	c.JSON(http.StatusOK, bill)
 }

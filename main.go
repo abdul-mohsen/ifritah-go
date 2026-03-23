@@ -100,6 +100,10 @@ func main() {
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))
 		authorized.POST("part/", h.GetPart)
 
+		// Purchase Bill File Uploads (filesystem storage)
+		authorized.POST("upload", h.UploadFile)
+		authorized.GET("files/:key", h.DownloadFile)
+		authorized.DELETE("files/:key", h.DeleteFile)
 		// router.GET(baseUrl + ":id", h.GetCarPartDetail)
 	}
 

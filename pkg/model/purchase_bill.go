@@ -23,6 +23,8 @@ type PurchaseBill struct {
 	TotalBeforeVAT         string                   `json:"total_before_vat"`
 	TotalVAT               string                   `json:"total_vat"`
 	Total                  string                   `json:"total"`
+	Attachments            []string                 `json:"attachments" binding:"required"`
+	PDFLink                *string                  `json:"pdf_link" binding:"required"`
 }
 type AddPurchaseBillRequest struct {
 	StoreId                int32                 `json:"store_id" binding:"required"`
@@ -36,6 +38,16 @@ type AddPurchaseBillRequest struct {
 	ManualProducts         []PurchaseBillProduct `json:"manual_products" binding:"required,dive"`
 	SupplierId             int32                 `json:"supplier_id" binding:"required"`
 	SupplierSequenceNumber int32                 `json:"supplier_sequence_number" binding:"required"`
+	Attachments            []string              `json:"attachments" binding:"required"`
+	PDFLink                *string               `json:"pdf_link" binding:"required"`
+}
+
+type UploadFileResponse struct {
+	FileKey      string `json:"file_key"`
+	OriginalName string `json:"original_name"`
+	FileSize     int64  `json:"file_size"`
+	MimeType     string `json:"mime_type"`
+	DownloadURL  string `json:"download_url"`
 }
 
 type PurchaseBillProduct struct {

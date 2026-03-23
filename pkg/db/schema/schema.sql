@@ -467,7 +467,7 @@ CREATE TABLE `bill` (
   `invoice_hash` varchar(128) DEFAULT NULL,
   PRIMARY KEY (`id`),
   FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`)
-) ENGINE=InnoDB AUTO_INCREMENT=371 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=373 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -511,7 +511,7 @@ CREATE TABLE `bill_product` (
   PRIMARY KEY (`id`),
   CONSTRAINT `chk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=683 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=685 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -688,6 +688,14 @@ CREATE TABLE `client` (
   `email` varchar(255) DEFAULT NULL,
   `phone` varchar(20) DEFAULT NULL,
   `address` varchar(500) DEFAULT NULL,
+  `street` varchar(255) DEFAULT NULL,
+  `building` varchar(50) DEFAULT NULL,
+  `district` varchar(255) DEFAULT NULL,
+  `city` varchar(255) DEFAULT NULL,
+  `postal_code` varchar(10) DEFAULT NULL,
+  `country` varchar(2) NOT NULL DEFAULT 'SA',
+  `scheme_id` varchar(10) DEFAULT 'CRN',
+  `registration_id` varchar(50) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `vat_number` varchar(15) NOT NULL,
@@ -1264,8 +1272,30 @@ CREATE TABLE `purchase_bill` (
   `vat_sequence_number` int DEFAULT NULL,
   `store_id` int NOT NULL,
   `merchant_id` int NOT NULL,
+  `pdf_link` varchar(255) DEFAULT NULL COMMENT 'file_key of the mandatory bill PDF',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=185 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=186 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `purchase_bill_attachments`
+--
+
+DROP TABLE IF EXISTS `purchase_bill_attachments`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `purchase_bill_attachments` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `purchase_bill_id` int NOT NULL,
+  `file_key` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_pba_file` (`purchase_bill_id`,`file_key`),
+  KEY `idx_pba_bill` (`purchase_bill_id`),
+  KEY `fk_pba_file` (`file_key`),
+  CONSTRAINT `fk_pba_bill` FOREIGN KEY (`purchase_bill_id`) REFERENCES `purchase_bill` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pba_file` FOREIGN KEY (`file_key`) REFERENCES `uploaded_files` (`file_key`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1309,7 +1339,7 @@ CREATE TABLE `purchase_bill_product` (
   PRIMARY KEY (`id`),
   CONSTRAINT `chpk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chpk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=362 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=363 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1332,6 +1362,7 @@ SET @saved_cs_client     = @@character_set_client;
  1 AS `vat_sequence_number`,
  1 AS `store_id`,
  1 AS `merchant_id`,
+ 1 AS `pdf_link`,
  1 AS `total_before_vat`,
  1 AS `total_vat`,
  1 AS `total`*/;
@@ -1432,7 +1463,7 @@ CREATE TABLE `settings` (
   UNIQUE KEY `uq_settings_key` (`setting_key`),
   KEY `fk_settings_user` (`updated_by`),
   CONSTRAINT `fk_settings_user` FOREIGN KEY (`updated_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=31 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=115 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1493,7 +1524,7 @@ CREATE TABLE `supplier` (
   PRIMARY KEY (`id`),
   KEY `company_id` (`company_id`),
   CONSTRAINT `supplier_ibfk_1` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=112 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=114 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1509,6 +1540,28 @@ CREATE TABLE `tradenumbers` (
   `legacyArticleId` bigint DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=1913184 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Spare Parts Trade Numbers';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `uploaded_files`
+--
+
+DROP TABLE IF EXISTS `uploaded_files`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `uploaded_files` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `file_key` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Random hex key + ext: abc123def456.pdf',
+  `original_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `file_size` bigint unsigned NOT NULL DEFAULT '0',
+  `mime_type` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `uploaded_by` int DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_file_key` (`file_key`),
+  KEY `idx_uploaded_by` (`uploaded_by`),
+  CONSTRAINT `fk_upload_user` FOREIGN KEY (`uploaded_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1749,7 +1802,7 @@ CREATE TABLE `vin_cache` (
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
-/*!50001 VIEW `purchase_bill_totals` AS select `b`.`id` AS `id`,`b`.`effective_date` AS `effective_date`,`b`.`payment_due_date` AS `payment_due_date`,`b`.`state` AS `state`,`b`.`discount` AS `discount`,`b`.`supplier_id` AS `supplier_id`,`b`.`sequence_number` AS `sequence_number`,`b`.`supplier_sequence_number` AS `supplier_sequence_number`,`b`.`vat_sequence_number` AS `vat_sequence_number`,`b`.`store_id` AS `store_id`,`b`.`merchant_id` AS `merchant_id`,round(coalesce(sum(`bp`.`total_before_vat`),0),2) AS `total_before_vat`,round(coalesce(sum(`bp`.`vat_total`),0),2) AS `total_vat`,round(coalesce(sum(`bp`.`total_including_vat`),0),2) AS `total` from (`purchase_bill` `b` left join `purchase_bill_product` `bp` on((`b`.`id` = `bp`.`bill_id`))) group by `b`.`id` */;
+/*!50001 VIEW `purchase_bill_totals` AS select `b`.`id` AS `id`,`b`.`effective_date` AS `effective_date`,`b`.`payment_due_date` AS `payment_due_date`,`b`.`state` AS `state`,`b`.`discount` AS `discount`,`b`.`supplier_id` AS `supplier_id`,`b`.`sequence_number` AS `sequence_number`,`b`.`supplier_sequence_number` AS `supplier_sequence_number`,`b`.`vat_sequence_number` AS `vat_sequence_number`,`b`.`store_id` AS `store_id`,`b`.`merchant_id` AS `merchant_id`,`b`.`pdf_link` AS `pdf_link`,round(coalesce(sum(`bp`.`total_before_vat`),0),2) AS `total_before_vat`,round(coalesce(sum(`bp`.`vat_total`),0),2) AS `total_vat`,round(coalesce(sum(`bp`.`total_including_vat`),0),2) AS `total` from (`purchase_bill` `b` left join `purchase_bill_product` `bp` on((`b`.`id` = `bp`.`bill_id`))) group by `b`.`id` */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
@@ -1763,4 +1816,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-22 23:27:08
+-- Dump completed on 2026-03-23 11:45:12

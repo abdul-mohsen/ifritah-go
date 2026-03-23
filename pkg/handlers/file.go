@@ -100,14 +100,14 @@ var mimeTypes = map[string]string{
 //     REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
 // ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 //
-// -- Then modify purchase_bills to include file references:
-// ALTER TABLE purchase_bills
+// -- Then modify purchase_bill to include file references:
+// ALTER TABLE purchase_bill
 //   ADD COLUMN pdf_link     VARCHAR(255) NULL COMMENT 'file_key of the mandatory bill PDF';
 //
 // -- Optional: a join table for multiple attachments per bill.
-// -- Or just store a JSON array in purchase_bills.attachments TEXT column.
+// -- Or just store a JSON array in purchase_bill.attachments TEXT column.
 // -- Option A: JSON column (simpler)
-// ALTER TABLE purchase_bills
+// ALTER TABLE purchase_bill
 //   ADD COLUMN attachments JSON NULL COMMENT 'JSON array of file_keys';
 //
 // -- Option B: Join table (normalized, better for queries)
@@ -122,7 +122,7 @@ var mimeTypes = map[string]string{
 //   UNIQUE KEY uq_pba_file (purchase_bill_id, file_key),
 //
 //   CONSTRAINT fk_pba_bill FOREIGN KEY (purchase_bill_id)
-//     REFERENCES purchase_bills(id) ON DELETE CASCADE,
+//     REFERENCES purchase_bill(id) ON DELETE CASCADE,
 //   CONSTRAINT fk_pba_file FOREIGN KEY (file_key)
 //     REFERENCES uploaded_files(file_key) ON DELETE CASCADE
 // ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -228,11 +228,11 @@ func (h *handler) UploadFile(c *gin.Context) {
 	}
 
 	// Record in database
-	userID := getUserIDFromContext(c)
+	userID := GetSessionInfo(c)
 	_, err = h.DB.Exec(`
 		INSERT INTO uploaded_files (file_key, original_name, file_size, mime_type, uploaded_by)
 		VALUES (?, ?, ?, ?, ?)
-	`, fileKey, header.Filename, written, mimeType, userID)
+	`, fileKey, header.Filename, written, mimeType, userID.id)
 	if err != nil {
 		os.Remove(dstPath)
 		log.Printf("[UPLOAD] Failed to insert file record: %v", err)
@@ -331,16 +331,16 @@ func (h *handler) DeleteFile(c *gin.Context) {
 //   2. Frontend submits purchase bill with:
 //        "pdf_link":    "/api/v2/files/abc123.pdf"        (mandatory)
 //        "attachments": ["/api/v2/files/xyz789.pdf", ...] (optional)
-//   3. Backend creates the purchase bill row (INSERT INTO purchase_bills)
+//   3. Backend creates the purchase bill row (INSERT INTO purchase_bill)
 //   4. Backend calls SavePurchaseBillAttachments(db, newBillID, pdfLink, attachments)
-//        → Updates purchase_bills.pdf_link
+//        → Updates purchase_bill.pdf_link
 //        → Inserts rows into purchase_bill_attachments join table
 //   5. When fetching a bill detail, call GetPurchaseBillAttachments(db, billID)
 //        → Returns the pdf_link + list of attachment URLs for the response JSON
 //
 // Tables involved:
 //   uploaded_files             — generic file storage (populated by POST /api/v2/upload)
-//   purchase_bills.pdf_link    — the mandatory bill PDF file_key
+//   purchase_bill.pdf_link    — the mandatory bill PDF file_key
 //   purchase_bill_attachments  — join table linking bill IDs to file_keys
 //
 // The FK constraint on purchase_bill_attachments.file_key → uploaded_files.file_key
@@ -354,7 +354,7 @@ func (h *handler) DeleteFile(c *gin.Context) {
 // attachments: array of download URLs (optional, can be empty)
 //
 // It extracts the file_key from each URL (last path segment) and:
-//  1. Updates purchase_bills.pdf_link with the file_key
+//  1. Updates purchase_bill.pdf_link with the file_key
 //  2. Inserts each attachment into purchase_bill_attachments
 func (h *handler) SavePurchaseBillAttachments(db *sql.DB, billID int64, pdfLink string, attachments []string) error {
 	// Extract file_key from URL: "/api/v2/files/abc123.pdf" → "abc123.pdf"
@@ -369,7 +369,7 @@ func (h *handler) SavePurchaseBillAttachments(db *sql.DB, billID int64, pdfLink 
 	}
 
 	// Update the purchase bill's pdf_link column
-	_, err = db.Exec("UPDATE purchase_bills SET pdf_link = ? WHERE id = ?", pdfKey, billID)
+	_, err = db.Exec("UPDATE purchase_bill SET pdf_link = ? WHERE id = ?", pdfKey, billID)
 	if err != nil {
 		log.Printf("[ATTACHMENTS] Failed to update pdf_link for bill %d: %v", billID, err)
 		return fmt.Errorf("فشل في ربط ملف PDF بالفاتورة: %v", err)
@@ -404,9 +404,9 @@ func (h *handler) SavePurchaseBillAttachments(db *sql.DB, billID int64, pdfLink 
 // Returns pdfLink (as download URL) and attachments (as download URL array).
 // Call this in your GetPurchaseBillById handler to include files in the response.
 func (h *handler) GetPurchaseBillAttachments(db *sql.DB, billID int64) (pdfLink string, attachments []string) {
-	// Get pdf_link from the purchase_bills table
+	// Get pdf_link from the purchase_bill table
 	var pdfKey sql.NullString
-	err := db.QueryRow("SELECT pdf_link FROM purchase_bills WHERE id = ?", billID).Scan(&pdfKey)
+	err := db.QueryRow("SELECT pdf_link FROM purchase_bill WHERE id = ?", billID).Scan(&pdfKey)
 	if err != nil {
 		log.Printf("[ATTACHMENTS] Failed to get pdf_link for bill %d: %v", billID, err)
 		return "", nil
@@ -465,7 +465,7 @@ func (h *handler) UpdatePurchaseBillAttachments(db *sql.DB, billID int64, pdfLin
 //
 // ── In AddPurchaseBill (create) handler: ─────────────────────────────────────
 //
-//   // After INSERT INTO purchase_bills → get newBillID
+//   // After INSERT INTO purchase_bill → get newBillID
 //   if req.PDFLink != "" {
 //       if err := h.SavePurchaseBillAttachments(h.DB, newBillID, req.PDFLink, req.Attachments); err != nil {
 //           // Bill was created but files couldn't be linked — log but don't fail
@@ -475,7 +475,7 @@ func (h *handler) UpdatePurchaseBillAttachments(db *sql.DB, billID int64, pdfLin
 //
 // ── In UpdatePurchaseBill handler: ───────────────────────────────────────────
 //
-//   // After UPDATE purchase_bills SET ... WHERE id = billID
+//   // After UPDATE purchase_bill SET ... WHERE id = billID
 //   if req.PDFLink != "" {
 //       if err := h.UpdatePurchaseBillAttachments(h.DB, billID, req.PDFLink, req.Attachments); err != nil {
 //           log.Printf("Warning: bill %d updated but attachment linking failed: %v", billID, err)
@@ -493,7 +493,7 @@ func (h *handler) UpdatePurchaseBillAttachments(db *sql.DB, billID int64, pdfLin
 //
 //   // CASCADE on FK handles this automatically, but you could also:
 //   h.DeletePurchaseBillAttachments(h.DB, billID)
-//   // Then DELETE FROM purchase_bills WHERE id = billID
+//   // Then DELETE FROM purchase_bill WHERE id = billID
 //
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -529,14 +529,14 @@ func getUserIDFromContext(c *gin.Context) int64 {
 // purchase bill. Run periodically (e.g. daily cron) to prevent disk bloat.
 //
 //	DELETE uf FROM uploaded_files uf
-//	LEFT JOIN purchase_bills pb ON pb.pdf_link = CONCAT('/api/v2/files/', uf.file_key)
+//	LEFT JOIN purchase_bill pb ON pb.pdf_link = CONCAT('/api/v2/files/', uf.file_key)
 //	LEFT JOIN purchase_bill_attachments pba ON pba.file_key = uf.file_key
 //	WHERE pb.id IS NULL AND pba.id IS NULL
 //	  AND uf.created_at < NOW() - INTERVAL 24 HOUR;
 func (h *handler) CleanupOrphanFiles() {
 	rows, err := h.DB.Query(`
 		SELECT uf.file_key FROM uploaded_files uf
-		LEFT JOIN purchase_bills pb ON pb.pdf_link = uf.file_key
+		LEFT JOIN purchase_bill pb ON pb.pdf_link = uf.file_key
 		LEFT JOIN purchase_bill_attachments pba ON pba.file_key = uf.file_key
 		WHERE pb.id IS NULL AND pba.id IS NULL
 		  AND uf.created_at < NOW() - INTERVAL 24 HOUR

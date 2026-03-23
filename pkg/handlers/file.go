@@ -323,53 +323,177 @@ func (h *handler) DeleteFile(c *gin.Context) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// PURCHASE BILL INTEGRATION
+// PURCHASE BILL ATTACHMENT HELPERS
 // ══════════════════════════════════════════════════════════════════════════════
 //
-// When creating/updating a purchase bill, the payload now includes:
+// Flow:
+//   1. Frontend uploads each file via POST /api/v2/upload → gets download_url per file
+//   2. Frontend submits purchase bill with:
+//        "pdf_link":    "/api/v2/files/abc123.pdf"        (mandatory)
+//        "attachments": ["/api/v2/files/xyz789.pdf", ...] (optional)
+//   3. Backend creates the purchase bill row (INSERT INTO purchase_bills)
+//   4. Backend calls SavePurchaseBillAttachments(db, newBillID, pdfLink, attachments)
+//        → Updates purchase_bills.pdf_link
+//        → Inserts rows into purchase_bill_attachments join table
+//   5. When fetching a bill detail, call GetPurchaseBillAttachments(db, billID)
+//        → Returns the pdf_link + list of attachment URLs for the response JSON
 //
-//   {
-//     "store_id": 1,
-//     "merchant_id": 5,
-//     "supplier_id": 5,
-//     "supplier_sequence_number": 1001,
-//     "effective_date": "2025-01-15",
-//     "products": [...],
-//     "discount": "5",
-//     "subtotal": 500.0,
-//     "pdf_link": "/api/v2/files/abc123def456.pdf",       ← NEW (mandatory)
-//     "attachments": [                                     ← NEW (optional)
-//       "/api/v2/files/789ghi012jkl.pdf",
-//       "/api/v2/files/mno345pqr678.jpg"
-//     ]
-//   }
+// Tables involved:
+//   uploaded_files             — generic file storage (populated by POST /api/v2/upload)
+//   purchase_bills.pdf_link    — the mandatory bill PDF file_key
+//   purchase_bill_attachments  — join table linking bill IDs to file_keys
 //
-// In your existing AddPurchaseBill handler, add this after creating the bill:
+// The FK constraint on purchase_bill_attachments.file_key → uploaded_files.file_key
+// ensures that only previously-uploaded files can be linked to a bill.
+// This is why the upload MUST succeed first (step 1) before the bill can reference it (step 4).
+
+// SavePurchaseBillAttachments links uploaded files to a purchase bill after creation.
+// Call this AFTER the bill row is inserted and you have the new bill ID.
 //
-//   // After INSERT INTO purchase_bills ... → get newBillID
+// pdfLink: download URL like "/api/v2/files/abc123.pdf" (mandatory)
+// attachments: array of download URLs (optional, can be empty)
 //
-//   // Save pdf_link (mandatory)
+// It extracts the file_key from each URL (last path segment) and:
+//  1. Updates purchase_bills.pdf_link with the file_key
+//  2. Inserts each attachment into purchase_bill_attachments
+func (h *handler) SavePurchaseBillAttachments(db *sql.DB, billID int64, pdfLink string, attachments []string) error {
+	// Extract file_key from URL: "/api/v2/files/abc123.pdf" → "abc123.pdf"
+	pdfKey := filepath.Base(pdfLink)
+
+	// Verify the file exists in uploaded_files before linking
+	var exists int
+	err := db.QueryRow("SELECT COUNT(*) FROM uploaded_files WHERE file_key = ?", pdfKey).Scan(&exists)
+	if err != nil || exists == 0 {
+		log.Printf("[ATTACHMENTS] pdf_link file_key %q not found in uploaded_files", pdfKey)
+		return fmt.Errorf("ملف PDF غير موجود: %s", pdfKey)
+	}
+
+	// Update the purchase bill's pdf_link column
+	_, err = db.Exec("UPDATE purchase_bills SET pdf_link = ? WHERE id = ?", pdfKey, billID)
+	if err != nil {
+		log.Printf("[ATTACHMENTS] Failed to update pdf_link for bill %d: %v", billID, err)
+		return fmt.Errorf("فشل في ربط ملف PDF بالفاتورة: %v", err)
+	}
+
+	// Insert each attachment into the join table
+	for _, att := range attachments {
+		attKey := filepath.Base(att) // "/api/v2/files/xyz789.pdf" → "xyz789.pdf"
+
+		// Verify the file exists first (FK will reject it anyway, but give a better error)
+		err := db.QueryRow("SELECT COUNT(*) FROM uploaded_files WHERE file_key = ?", attKey).Scan(&exists)
+		if err != nil || exists == 0 {
+			log.Printf("[ATTACHMENTS] attachment file_key %q not found in uploaded_files, skipping", attKey)
+			continue
+		}
+
+		_, err = db.Exec(
+			"INSERT IGNORE INTO purchase_bill_attachments (purchase_bill_id, file_key) VALUES (?, ?)",
+			billID, attKey,
+		)
+		if err != nil {
+			log.Printf("[ATTACHMENTS] Failed to insert attachment %s for bill %d: %v", attKey, billID, err)
+			// Don't fail the whole operation for optional attachments
+		}
+	}
+
+	log.Printf("[ATTACHMENTS] Linked bill %d: pdf=%s, %d attachments", billID, pdfKey, len(attachments))
+	return nil
+}
+
+// GetPurchaseBillAttachments retrieves file references for a purchase bill.
+// Returns pdfLink (as download URL) and attachments (as download URL array).
+// Call this in your GetPurchaseBillById handler to include files in the response.
+func (h *handler) GetPurchaseBillAttachments(db *sql.DB, billID int64) (pdfLink string, attachments []string) {
+	// Get pdf_link from the purchase_bills table
+	var pdfKey sql.NullString
+	err := db.QueryRow("SELECT pdf_link FROM purchase_bills WHERE id = ?", billID).Scan(&pdfKey)
+	if err != nil {
+		log.Printf("[ATTACHMENTS] Failed to get pdf_link for bill %d: %v", billID, err)
+		return "", nil
+	}
+	if pdfKey.Valid && pdfKey.String != "" {
+		pdfLink = "/api/v2/files/" + pdfKey.String
+	}
+
+	// Get attachments from the join table
+	rows, err := db.Query(
+		"SELECT file_key FROM purchase_bill_attachments WHERE purchase_bill_id = ? ORDER BY created_at",
+		billID,
+	)
+	if err != nil {
+		log.Printf("[ATTACHMENTS] Failed to get attachments for bill %d: %v", billID, err)
+		return pdfLink, nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err == nil {
+			attachments = append(attachments, "/api/v2/files/"+key)
+		}
+	}
+
+	return pdfLink, attachments
+}
+
+// DeletePurchaseBillAttachments removes all attachment links for a purchase bill.
+// Call this before deleting a bill (CASCADE handles it too, but explicit is cleaner),
+// or when updating a bill's attachments (delete old → insert new).
+func (h *handler) DeletePurchaseBillAttachments(db *sql.DB, billID int64) error {
+	_, err := db.Exec("DELETE FROM purchase_bill_attachments WHERE purchase_bill_id = ?", billID)
+	if err != nil {
+		log.Printf("[ATTACHMENTS] Failed to delete attachments for bill %d: %v", billID, err)
+	}
+	return err
+}
+
+// UpdatePurchaseBillAttachments replaces all attachments for a bill.
+// Deletes existing attachments then saves new ones.
+// Call this in your UpdatePurchaseBill handler.
+func (h *handler) UpdatePurchaseBillAttachments(db *sql.DB, billID int64, pdfLink string, attachments []string) error {
+	// Delete existing attachments
+	if err := h.DeletePurchaseBillAttachments(db, billID); err != nil {
+		return err
+	}
+	// Save new ones
+	return h.SavePurchaseBillAttachments(db, billID, pdfLink, attachments)
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INTEGRATION EXAMPLE — How to wire into your purchase bill handlers
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// ── In AddPurchaseBill (create) handler: ─────────────────────────────────────
+//
+//   // After INSERT INTO purchase_bills → get newBillID
 //   if req.PDFLink != "" {
-//       db.Exec("UPDATE purchase_bills SET pdf_link = ? WHERE id = ?", req.PDFLink, newBillID)
+//       if err := h.SavePurchaseBillAttachments(h.DB, newBillID, req.PDFLink, req.Attachments); err != nil {
+//           // Bill was created but files couldn't be linked — log but don't fail
+//           log.Printf("Warning: bill %d created but attachment linking failed: %v", newBillID, err)
+//       }
 //   }
 //
-//   // Save attachments (optional) — using join table approach
-//   for _, att := range req.Attachments {
-//       fileKey := filepath.Base(att) // extract key from URL
-//       db.Exec(`INSERT INTO purchase_bill_attachments (purchase_bill_id, file_key) VALUES (?, ?)`,
-//           newBillID, fileKey)
+// ── In UpdatePurchaseBill handler: ───────────────────────────────────────────
+//
+//   // After UPDATE purchase_bills SET ... WHERE id = billID
+//   if req.PDFLink != "" {
+//       if err := h.UpdatePurchaseBillAttachments(h.DB, billID, req.PDFLink, req.Attachments); err != nil {
+//           log.Printf("Warning: bill %d updated but attachment linking failed: %v", billID, err)
+//       }
 //   }
 //
-// In your GetPurchaseBillById handler, include the file data in the response:
+// ── In GetPurchaseBillById handler: ──────────────────────────────────────────
 //
-//   // After fetching the bill...
-//   bill.PDFLink = "/api/v2/files/" + bill.PDFLinkKey
-//   rows, _ := db.Query("SELECT file_key FROM purchase_bill_attachments WHERE purchase_bill_id = ?", billID)
-//   for rows.Next() {
-//       var key string
-//       rows.Scan(&key)
-//       bill.Attachments = append(bill.Attachments, "/api/v2/files/" + key)
-//   }
+//   // After fetching the bill from DB
+//   pdfLink, attachments := h.GetPurchaseBillAttachments(h.DB, billID)
+//   response["pdf_link"] = pdfLink
+//   response["attachments"] = attachments
+//
+// ── In DeletePurchaseBill handler: ───────────────────────────────────────────
+//
+//   // CASCADE on FK handles this automatically, but you could also:
+//   h.DeletePurchaseBillAttachments(h.DB, billID)
+//   // Then DELETE FROM purchase_bills WHERE id = billID
 //
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

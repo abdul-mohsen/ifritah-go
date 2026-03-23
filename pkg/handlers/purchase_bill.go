@@ -211,16 +211,14 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	var attachment []string
 	for _, a := range request.Attachments {
-		arg := db.AddAttachmentsPurchaseBillParams{
-			PurchaseBillID: int32(id),
-			FileKey:        a,
-		}
-		if err := qtx.AddAttachmentsPurchaseBill(c.Request.Context(), arg); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			log.Panic(err)
-		}
+		attachment = append(attachment, a)
 
+	}
+	if err := h.SavePurchaseBillAttachments(h.DB, id, *request.PDFLink, attachment); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -330,7 +328,11 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 	}
 	var attachments []string
 	for _, x := range a {
-		attachments = append(attachments, x.FileKey)
+		attachments = append(attachments, "/api/v2/files/"+x.FileKey)
+	}
+
+	if b.PdfLink != nil {
+		*b.PdfLink = "/api/v2/files/" + *b.PdfLink
 	}
 
 	bill := model.PurchaseBill{

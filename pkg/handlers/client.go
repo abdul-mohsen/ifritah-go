@@ -76,7 +76,7 @@ func (h *handler) CreateClient(c *gin.Context) {
 	err := h.queries.CreateClient(c.Request.Context(), query)
 	if err != nil {
 		if IsDuplicate(err) {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Client vat number already exists in this store"))
+			c.JSON(http.StatusBadRequest, fmt.Errorf("Client vat number already exists in this store"))
 		} else {
 			c.AbortWithError(http.StatusInternalServerError, err)
 		}

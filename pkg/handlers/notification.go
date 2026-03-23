@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"database/sql"
+	db "ifritah/web-service-gin/pkg/db/gen"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -32,13 +34,13 @@ func (h *handler) GetNotificationConfig(c *gin.Context) {
 	userID := c.GetInt64("userId")
 
 	var config struct {
-		LowStockAlert     bool `json:"low_stock_alert"`
-		LowStockThreshold int  `json:"low_stock_threshold"`
-		PendingDays       int  `json:"pending_invoice_days"`
-		NewOrderAlert     bool `json:"new_order_alert"`
-		PaymentDueAlert   bool `json:"payment_due_alert"`
-		DailySummary      bool `json:"daily_summary"`
-		EmailEnabled      bool `json:"email_enabled"`
+		LowStockAlert     bool   `json:"low_stock_alert"`
+		LowStockThreshold uint32 `json:"low_stock_threshold"`
+		PendingDays       uint32 `json:"pending_invoice_days"`
+		NewOrderAlert     bool   `json:"new_order_alert"`
+		PaymentDueAlert   bool   `json:"payment_due_alert"`
+		DailySummary      bool   `json:"daily_summary"`
+		EmailEnabled      bool   `json:"email_enabled"`
 	}
 
 	err := h.DB.QueryRow(
@@ -81,16 +83,16 @@ func (h *handler) GetNotificationConfig(c *gin.Context) {
 //
 // Response: {"detail": "success"}
 func (h *handler) UpdateNotificationConfig(c *gin.Context) {
-	userID := c.GetInt64("userId")
+	user := GetSessionInfo(c)
 
 	var req struct {
-		LowStockAlert     *bool `json:"low_stock_alert"`
-		LowStockThreshold *int  `json:"low_stock_threshold"`
-		PendingDays       *int  `json:"pending_invoice_days"`
-		NewOrderAlert     *bool `json:"new_order_alert"`
-		PaymentDueAlert   *bool `json:"payment_due_alert"`
-		DailySummary      *bool `json:"daily_summary"`
-		EmailEnabled      *bool `json:"email_enabled"`
+		LowStockAlert     *bool   `json:"low_stock_alert"`
+		LowStockThreshold *uint32 `json:"low_stock_threshold"`
+		PendingDays       *uint32 `json:"pending_invoice_days"`
+		NewOrderAlert     *bool   `json:"new_order_alert"`
+		PaymentDueAlert   *bool   `json:"payment_due_alert"`
+		DailySummary      *bool   `json:"daily_summary"`
+		EmailEnabled      *bool   `json:"email_enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request"})
@@ -98,30 +100,20 @@ func (h *handler) UpdateNotificationConfig(c *gin.Context) {
 	}
 
 	// Upsert: insert if not exists, update if exists
-	_, err := h.DB.Exec(
-		`INSERT INTO notification_settings
-		 (user_id, low_stock_alert, low_stock_threshold, pending_invoice_days, new_order_alert, payment_due_alert, daily_summary, email_enabled)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE
-		   low_stock_alert = COALESCE(VALUES(low_stock_alert), low_stock_alert),
-		   low_stock_threshold = COALESCE(VALUES(low_stock_threshold), low_stock_threshold),
-		   pending_invoice_days = COALESCE(VALUES(pending_invoice_days), pending_invoice_days),
-		   new_order_alert = COALESCE(VALUES(new_order_alert), new_order_alert),
-		   payment_due_alert = COALESCE(VALUES(payment_due_alert), payment_due_alert),
-		   daily_summary = COALESCE(VALUES(daily_summary), daily_summary),
-		   email_enabled = COALESCE(VALUES(email_enabled), email_enabled)`,
-		userID,
-		boolDefault(req.LowStockAlert, true),
-		intDefault(req.LowStockThreshold, 5),
-		intDefault(req.PendingDays, 7),
-		boolDefault(req.NewOrderAlert, true),
-		boolDefault(req.PaymentDueAlert, true),
-		boolDefault(req.DailySummary, false),
-		boolDefault(req.EmailEnabled, false),
-	)
+	args := db.UpsertNotificationSettingsParams{
+		UserID:             int32(user.id),
+		LowStockAlert:      boolDefault(req.LowStockAlert, true),
+		LowStockThreshold:  uint32Default(req.LowStockThreshold, 5),
+		PendingInvoiceDays: uint32Default(req.PendingDays, 7),
+		NewOrderAlert:      boolDefault(req.NewOrderAlert, true),
+		PaymentDueAlert:    boolDefault(req.PaymentDueAlert, true),
+		DailySummary:       boolDefault(req.DailySummary, false),
+		EmailEnabled:       boolDefault(req.EmailEnabled, false),
+	}
+	err := h.queries.UpsertNotificationSettings(c.Request.Context(), args)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to save notification config"})
-		return
+		log.Panic(err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"detail": "success"})
@@ -232,6 +224,20 @@ func boolDefault(ptr *bool, def bool) bool {
 }
 
 func intDefault(ptr *int, def int) int {
+	if ptr != nil {
+		return *ptr
+	}
+	return def
+}
+
+func uintDefault(ptr *uint, def uint) uint {
+	if ptr != nil {
+		return *ptr
+	}
+	return def
+}
+
+func uint32Default(ptr *uint32, def uint32) uint32 {
 	if ptr != nil {
 		return *ptr
 	}

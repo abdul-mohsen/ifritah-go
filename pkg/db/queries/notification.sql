@@ -24,14 +24,14 @@ UPDATE notifications SET is_read = 1 WHERE user_id = ?;
 SELECT * FROM notification_settings WHERE user_id = ?;
 
 -- name: UpsertNotificationSettings :exec
-INSERT INTO notification_settings (user_id, low_stock_alert, low_stock_threshold, 
-    pending_invoice_days, new_order_alert, paymen_due_alert, daily_summary, email_enabled)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-    low_stock_alert = VALUES(low_stock_alert),
-    low_stock_threshold = VALUES(low_stock_threshold),
-    pending_invoice_days = VALUES(pending_invoice_days),
-    new_order_alert = VALUES(new_order_alert),
-    paymen_due_alert = VALUES(paymen_due_alert),
-    daily_summary = VALUES(daily_summary),
-    email_enabled = VALUES(email_enabled);
+INSERT INTO notification_settings
+		 (user_id, low_stock_alert, low_stock_threshold, pending_invoice_days, new_order_alert, payment_due_alert, daily_summary, email_enabled)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		   low_stock_alert = COALESCE(VALUES(low_stock_alert), low_stock_alert),
+		   low_stock_threshold = COALESCE(VALUES(low_stock_threshold), low_stock_threshold),
+		   pending_invoice_days = COALESCE(VALUES(pending_invoice_days), pending_invoice_days),
+		   new_order_alert = COALESCE(VALUES(new_order_alert), new_order_alert),
+		   payment_due_alert = COALESCE(VALUES(payment_due_alert), payment_due_alert),
+		   daily_summary = COALESCE(VALUES(daily_summary), daily_summary),
+		   email_enabled = COALESCE(VALUES(email_enabled), email_enabled)

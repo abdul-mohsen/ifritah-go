@@ -34,7 +34,12 @@ func (h *handler) CreditBill(c *gin.Context) {
 	`
 	_, err := h.DB.Exec(query, request.BillId, 1, request.Note)
 	if err != nil {
-		log.Panic(err)
+		if IsDuplicate(err) {
+			c.JSON(http.StatusBadRequest, fmt.Errorf("Client vat number already exists in this store"))
+			log.Panic(err)
+		} else {
+			log.Panic(err)
+		}
 	}
 
 	c.Status(http.StatusCreated)

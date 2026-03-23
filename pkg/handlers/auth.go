@@ -107,7 +107,7 @@ func (h *handler) Login(c *gin.Context) {
 	)
 
 	// Update last_login
-	_, _ = h.DB.Exec("UPDATE users SET last_login = NOW() WHERE id = ?", userID)
+	_, _ = h.DB.Exec("UPDATE user SET last_login = NOW() WHERE id = ?", userID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  accessToken,
@@ -240,7 +240,7 @@ func (h *handler) Refresh(c *gin.Context) {
 	var role string
 	var isActive bool
 	err = h.DB.QueryRow(
-		"SELECT role, is_active FROM users WHERE id = ? LIMIT 1",
+		"SELECT role, is_active FROM user WHERE id = ? LIMIT 1",
 		userID,
 	).Scan(&role, &isActive)
 	if err != nil || !isActive {
@@ -302,14 +302,14 @@ func (h *handler) Register(c *gin.Context) {
 
 	// Check username not already taken
 	var exists int
-	h.DB.QueryRow("SELECT COUNT(*) FROM users WHERE username = ?", req.Username).Scan(&exists)
+	h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE username = ?", req.Username).Scan(&exists)
 	if exists > 0 {
 		c.JSON(http.StatusConflict, gin.H{"detail": "username already exists"})
 		return
 	}
 
 	// Check email not already taken
-	h.DB.QueryRow("SELECT COUNT(*) FROM users WHERE email = ?", req.Email).Scan(&exists)
+	h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE email = ?", req.Email).Scan(&exists)
 	if exists > 0 {
 		c.JSON(http.StatusConflict, gin.H{"detail": "email already exists"})
 		return
@@ -319,17 +319,17 @@ func (h *handler) Register(c *gin.Context) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to hash password"})
-		return
+		log.Panic(err)
 	}
 
 	// Insert user with default role "employee"
 	result, err := h.DB.Exec(
-		"INSERT INTO users (username, email, password_hash, full_name, phone, role, is_active) VALUES (?, ?, ?, ?, ?, 'employee', 1)",
+		"INSERT INTO user (username, email, password, full_name, phone, role, is_active) VALUES (?, ?, ?, ?, ?, 'employee', 1)",
 		req.Username, req.Email, string(hash), req.FullName, req.Phone,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create user"})
-		return
+		log.Panic(err)
 	}
 
 	userID, _ := result.LastInsertId()
@@ -371,7 +371,7 @@ func (h *handler) ForgotPassword(c *gin.Context) {
 
 	// Look up user — but always return 200 regardless
 	var userID int64
-	err := h.DB.QueryRow("SELECT id FROM users WHERE email = ? AND is_active = 1", req.Email).Scan(&userID)
+	err := h.DB.QueryRow("SELECT id FROM user WHERE email = ? AND is_active = 1", req.Email).Scan(&userID)
 	if err != nil {
 		// User not found — still return 200 to prevent email enumeration
 		c.JSON(http.StatusOK, gin.H{"detail": "if the email exists, a reset link has been sent"})
@@ -436,7 +436,7 @@ func (h *handler) ResetPassword(c *gin.Context) {
 	}
 
 	// Update password
-	_, err = h.DB.Exec("UPDATE users SET password_hash = ? WHERE id = ?", string(hash), userID)
+	_, err = h.DB.Exec("UPDATE user SET password = ? WHERE id = ?", string(hash), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update password"})
 		return
@@ -494,7 +494,7 @@ func (h *handler) GetMe(c *gin.Context) {
 		IsActive bool   `json:"is_active"`
 	}
 	err := h.DB.QueryRow(
-		"SELECT id, username, email, COALESCE(full_name,'') as full_name, COALESCE(phone,'') as phone, role, is_active FROM users WHERE id = ?",
+		"SELECT id, username, email, COALESCE(full_name,'') as full_name, COALESCE(phone,'') as phone, role, is_active FROM user WHERE id = ?",
 		userID,
 	).Scan(&user.ID, &user.Username, &user.Email, &user.FullName, &user.Phone, &user.Role, &user.IsActive)
 	if err != nil {

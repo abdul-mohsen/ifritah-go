@@ -214,13 +214,12 @@ func (h *handler) GetDashboard(c *gin.Context) {
 		pbArgs = append(pbArgs, endDate+"T23:59:59Z")
 	}
 
-	var totalPurchases float64
+	var totalPurchases, totalPurchaseVAT float64
 	var totalPurchaseBills int
 	h.DB.QueryRow(`
-		SELECT COUNT(*), COALESCE(SUM(pbt.total), 0)
+		SELECT COUNT(*), COALESCE(SUM(pbt.total), 0), COALESCE(SUM(pbt.total_vat), 0)
 		FROM purchase_bill_totals pbt `+pbWhere,
-		pbArgs...).Scan(&totalPurchaseBills, &totalPurchases)
-
+		pbArgs...).Scan(&totalPurchaseBills, &totalPurchases, &totalPurchaseVAT)
 	grossProfit := totalRevenue - totalPurchases
 	grossMargin := 0.0
 	if totalRevenue > 0 {
@@ -702,6 +701,7 @@ func (h *handler) GetDashboard(c *gin.Context) {
 			"pending_amount":       fmt.Sprintf("%.2f", pendingAmount),
 			"total_purchases":      fmt.Sprintf("%.2f", totalPurchases),
 			"total_purchase_bills": totalPurchaseBills,
+			"total_purchase_vat":   fmt.Sprintf("%.2f", totalPurchaseVAT),
 			"gross_profit":         fmt.Sprintf("%.2f", grossProfit),
 			"gross_margin":         fmt.Sprintf("%.1f", grossMargin),
 			"avg_invoice_value":    fmt.Sprintf("%.2f", avgInvoiceValue),

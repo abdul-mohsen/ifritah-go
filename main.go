@@ -129,6 +129,13 @@ func main() {
 		authorized.POST("upload", h.UploadFile)
 		authorized.GET("files/:key", h.DownloadFile)
 		authorized.DELETE("files/:key", h.DeleteFile)
+
+		// ── NEW: Orders CRUD ────────────────────────────────────────
+		authorized.POST("order/all", h.GetOrders)
+		authorized.GET("order/:id", h.GetOrder)
+		authorized.POST("order", h.CreateOrder)
+		authorized.PUT("order/:id", h.UpdateOrder)
+		authorized.DELETE("order/:id", h.DeleteOrder)
 	}
 
 	nonAuthGroup := router.Group(baseUrl)

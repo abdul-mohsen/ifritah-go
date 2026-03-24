@@ -69,8 +69,6 @@ func main() {
 		authorized.PUT("purchase_bill/:id", h.UpdatePurchaseBill)
 		authorized.DELETE("purchase_bill/:id", h.DeletePurchaseBillDetail)
 
-		authorized.GET("stores/all", h.GetStores)
-
 		authorized.GET("product/:id", h.GetProduct)
 		authorized.POST("product/all", h.GetAllProducts)
 		authorized.POST("product", h.AddQuantity)
@@ -82,6 +80,25 @@ func main() {
 		authorized.POST("client", h.CreateClient)
 		authorized.PUT("client/:id", h.UpdateClient)
 		authorized.DELETE("client/:id", h.DeleteClient)
+
+		// ── Branches ────────────────────────────────────────────────────
+		authorized.POST("branch/all", h.ListBranches)
+		authorized.GET("branch/:id", h.GetBranch)
+		authorized.POST("branch", h.CreateBranch)
+		authorized.PUT("branch/:id", h.UpdateBranch)
+		authorized.DELETE("branch/:id", h.DeleteBranch)
+
+		// ── Branch ZATCA Config ─────────────────────────────────────────
+		authorized.GET("branch/:id/zatca", h.GetBranchZatcaConfig)
+		authorized.PUT("branch/:id/zatca", h.UpdateBranchZatcaConfig)
+
+		// ── Stores (new CRUD — keep existing GET stores/all) ────────────
+		// authorized.GET("stores/all", h.GetStores)   ← already exists, keep it
+		authorized.GET("stores/all", h.GetStores)
+		authorized.GET("store/:id", h.GetStore)
+		authorized.POST("store", h.CreateStore)
+		authorized.PUT("store/:id", h.UpdateStore)
+		authorized.DELETE("store/:id", h.DeleteStore)
 
 		// Settings (admin only)
 		authorized.GET("settings", h.GetSettings)

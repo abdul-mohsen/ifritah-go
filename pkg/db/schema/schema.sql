@@ -465,8 +465,11 @@ CREATE TABLE `bill` (
   `qr_code` varchar(1000) DEFAULT NULL,
   `invoice_uuid` char(36) DEFAULT NULL,
   `invoice_hash` varchar(128) DEFAULT NULL,
+  `branch_id` int unsigned DEFAULT NULL,
   PRIMARY KEY (`id`),
-  FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`)
+  KEY `fk_bill_branch` (`branch_id`),
+  FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`),
+  CONSTRAINT `fk_bill_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=380 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -578,6 +581,42 @@ CREATE TABLE `bodymarkcarids` (
   KEY `fk_bodyMarkCarIds_cars_1` (`carId`) USING BTREE,
   KEY `fk_bodyMarkCarIds_bodyMark_1` (`markId`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=46397 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `branch_zatca_config`
+--
+
+DROP TABLE IF EXISTS `branch_zatca_config`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `branch_zatca_config` (
+  `branch_id` int unsigned NOT NULL,
+  `csr_org_identifier` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `csr_org_unit` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `csr_org_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `csr_country` varchar(2) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'SA',
+  `csr_location` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `business_category` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Supply activities',
+  `seller_vat` varchar(15) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `seller_crn` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `street` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `building` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `district` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `postal_code` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `zatca_otp` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `zatca_csr` text COLLATE utf8mb4_unicode_ci,
+  `zatca_private_key` text COLLATE utf8mb4_unicode_ci,
+  `zatca_compliance_certificate` text COLLATE utf8mb4_unicode_ci,
+  `zatca_compliance_secret` text COLLATE utf8mb4_unicode_ci,
+  `zatca_compliance_request_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `zatca_production_username` text COLLATE utf8mb4_unicode_ci,
+  `zatca_production_password` text COLLATE utf8mb4_unicode_ci,
+  `zatca_production_request_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `zatca_registered_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`branch_id`),
+  CONSTRAINT `fk_bzc_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -746,6 +785,8 @@ CREATE TABLE `company` (
   `vat_number` varchar(255) NOT NULL,
   `vat_registration_number` varchar(15) DEFAULT NULL,
   `commercial_registration_number` varchar(10) DEFAULT NULL,
+  `name_ar` varchar(255) DEFAULT NULL,
+  `business_category` varchar(255) DEFAULT 'Supply activities',
   PRIMARY KEY (`id`),
   CONSTRAINT `chk_vat_registration_number` CHECK (regexp_like(`vat_registration_number`,_utf8mb4'^3[0-9]{13}3$'))
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -1489,7 +1530,7 @@ CREATE TABLE `settings` (
   UNIQUE KEY `uq_settings_key` (`setting_key`),
   KEY `fk_settings_user` (`updated_by`),
   CONSTRAINT `fk_settings_user` FOREIGN KEY (`updated_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=137 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=478 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1558,6 +1599,15 @@ CREATE TABLE `store` (
   `address_name` text,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `building_number` varchar(10) DEFAULT '',
+  `street_name` varchar(100) DEFAULT '',
+  `district` varchar(100) DEFAULT '',
+  `city` varchar(100) DEFAULT '',
+  `region` varchar(100) DEFAULT '',
+  `postal_code` varchar(10) DEFAULT '',
+  `additional_number` varchar(10) DEFAULT '',
+  `unit_number` varchar(10) DEFAULT '',
+  `country` varchar(3) DEFAULT 'SA',
   PRIMARY KEY (`id`),
   KEY `companyID_idx` (`company_id`),
   KEY `fk_store_branch` (`branch_id`),
@@ -1882,4 +1932,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-24  5:40:45
+-- Dump completed on 2026-03-24 17:36:52

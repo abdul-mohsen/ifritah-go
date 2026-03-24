@@ -1,90 +1,124 @@
 package handlers
 
+// ============================================================================
+// Settings CRUD — Key-value store grouped by category
+// ============================================================================
+// Copy to: pkg/handlers/handler_settings.go
+//
+// Endpoints:
+//   GET    /api/v2/settings           → GetSettings (all settings grouped)
+//   PUT    /api/v2/settings           → UpdateSettings (per category)
+//
+// DATABASE:
+//   - `settings` table (already exists):
+//       id INT UNSIGNED PK, setting_key VARCHAR(100) UNIQUE,
+//       value TEXT, description VARCHAR(255),
+//       updated_by INT, updated_at DATETIME
+//
+// Settings are organized into 7 categories (42 keys total):
+//   1. company (9)    — company_name, company_vat, company_cr, etc.
+//   2. invoice (12)   — currency, vat_rate, invoice_prefix, etc.
+//   3. print (7)      — paper_size, print_copies, show_logo_print, etc.
+//   4. appearance (4) — theme, language, date_format, number_format
+//   5. notifications (5) — notif_invoices, notif_stock, etc.
+//   6. security (4)   — session_duration, max_login_attempts, etc.
+//   7. inventory (6)  — low_stock_threshold, default_unit, etc.
+//
+// ZATCA config is NOT in settings — it's per-branch in branch_zatca_config.
+// Stock enforcement (stock_enforcement key) is read separately by stock handlers.
+// ============================================================================
+
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-// ============================================================================
-// Settings CRUD — 42 config fields across 7 categories
-// ============================================================================
-//
-// DATABASE TABLE UPDATE: If upgrading from an older schema, run this migration
-// to ensure all 42 settings keys exist with proper defaults:
-//
-//   -- Add missing settings keys (idempotent — INSERT IGNORE skips existing)
-//   INSERT IGNORE INTO settings (setting_key, value, description) VALUES
-//     -- Section 2: Invoice & Tax (new keys)
-//     ('payment_terms',            '30',      'Default payment terms in days'),
-//     -- Section 4: Appearance (new category)
-//     ('theme',                    'light',   'UI theme: light or dark'),
-//     ('language',                 'ar',      'UI language: ar or en'),
-//     ('date_format',              'dd/mm/yyyy', 'Date display format'),
-//     ('number_format',            'en',      'Number format locale: en or ar'),
-//     -- Section 5: Notifications (new category)
-//     ('notif_invoices',           'true',    'Notify on invoice events'),
-//     ('notif_stock',              'true',    'Notify on low stock alerts'),
-//     ('notif_payments',           'false',   'Notify on payment events'),
-//     ('notif_orders',             'false',   'Notify on new order events'),
-//     ('notif_session',            'true',    'Notify on session/login events'),
-//     -- Section 6: Security (new keys if missing)
-//     ('session_duration',         '60',      'Session timeout in minutes'),
-//     ('max_login_attempts',       '5',       'Max failed login attempts'),
-//     ('require_strong_password',  'true',    'Enforce strong password policy'),
-//     ('auto_logout_inactive',     'true',    'Auto-logout on inactivity'),
-//     -- Section 7: Inventory (new keys if missing)
-//     ('default_unit',             'piece',   'Default unit of measure'),
-//     ('track_inventory',          'true',    'Enable inventory tracking'),
-//     ('allow_negative_stock',     'false',   'Allow stock below zero'),
-//     ('show_cost_price',          'false',   'Show cost price in product lists'),
-//     -- Other
-//     ('company_description',      '',        'Company description text'),
-//     ('invoice_footer',           '',        'Text printed at bottom of invoices'),
-//     ('show_vat_breakdown',       'true',    'Show VAT breakdown on invoices'),
-//     ('auto_calculate_vat',       'true',    'Auto-calculate VAT on line items'),
-//     ('prices_include_vat',       'false',   'Prices entered are VAT-inclusive'),
-//     ('paper_size',               'A4',      'Default print paper size'),
-//     ('print_copies',             '1',       'Default number of print copies'),
-//     ('show_logo_print',          'true',    'Show logo on printed invoices'),
-//     ('show_company_info_print',  'true',    'Show company info on prints'),
-//     ('show_qr_print',            'true',    'Show QR code on printed invoices'),
-//     ('show_bank_details',        'false',   'Show bank details on invoices'),
-//     ('bank_details',             '',        'Bank account details text');
-//
-// Full settings table schema (if creating from scratch):
-//
-//   CREATE TABLE IF NOT EXISTS settings (
-//     id          INT UNSIGNED    NOT NULL AUTO_INCREMENT,
-//     setting_key VARCHAR(100)    NOT NULL,
-//     value       TEXT            NULL,
-//     description VARCHAR(255)    NULL,
-//     updated_by  INT UNSIGNED    NULL,
-//     updated_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-//     PRIMARY KEY (id),
-//     UNIQUE KEY uq_settings_key (setting_key),
-//     CONSTRAINT fk_settings_user FOREIGN KEY (updated_by)
-//       REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
-//   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-//
-// ============================================================================
+// settingCategories maps each setting_key to its category name.
+// Used by both GetSettings (to group) and UpdateSettings (to whitelist).
+var settingCategories = map[string]string{
+	// ── Section 1: Company Info (9 keys) ──
+	"company_name":        "company",
+	"company_name_en":     "company",
+	"company_vat":         "company",
+	"company_cr":          "company",
+	"company_address":     "company",
+	"company_phone":       "company",
+	"company_email":       "company",
+	"company_logo_url":    "company",
+	"company_description": "company",
 
-// GetSettings returns all settings grouped by category.
-// GET /api/v2/settings
+	// ── Section 2: Invoice & Tax (12 keys) ──
+	"currency":           "invoice",
+	"vat_rate":           "invoice",
+	"invoice_prefix":     "invoice",
+	"pb_prefix":          "invoice",
+	"order_prefix":       "invoice",
+	"credit_prefix":      "invoice",
+	"payment_terms":      "invoice",
+	"invoice_due_days":   "invoice",
+	"invoice_footer":     "invoice",
+	"show_vat_breakdown": "invoice",
+	"auto_calculate_vat": "invoice",
+	"prices_include_vat": "invoice",
+
+	// ── Section 3: Print & PDF (7 keys) ──
+	"paper_size":              "print",
+	"print_copies":            "print",
+	"show_logo_print":         "print",
+	"show_company_info_print": "print",
+	"show_qr_print":           "print",
+	"show_bank_details":       "print",
+	"bank_details":            "print",
+
+	// ── Section 4: Appearance (4 keys) ──
+	"theme":         "appearance",
+	"language":      "appearance",
+	"date_format":   "appearance",
+	"number_format": "appearance",
+
+	// ── Section 5: Notifications (5 keys) ──
+	"notif_invoices": "notifications",
+	"notif_stock":    "notifications",
+	"notif_payments": "notifications",
+	"notif_orders":   "notifications",
+	"notif_session":  "notifications",
+
+	// ── Section 6: Security & Sessions (4 keys) ──
+	"session_duration":        "security",
+	"max_login_attempts":      "security",
+	"require_strong_password": "security",
+	"auto_logout_inactive":    "security",
+
+	// ── Section 7: Inventory & Products (6 keys) ──
+	"low_stock_threshold":  "inventory",
+	"default_unit":         "inventory",
+	"track_inventory":      "inventory",
+	"allow_negative_stock": "inventory",
+	"show_cost_price":      "inventory",
+	"pagination_per_page":  "inventory",
+
+	// ── Stock enforcement (read by stock handlers, editable via inventory) ──
+	"stock_enforcement": "inventory",
+}
+
+// ── GET /api/v2/settings ────────────────────────────────────────────────────
+// Returns all settings grouped by category.
 //
-// Response (7 categories, 42 keys total):
+// Response:
 //
 //	{
 //	  "data": {
-//	    "company":       {"company_name": "...", "company_vat": "...", ...},          // 9 keys
-//	    "invoice":       {"currency": "SAR", "vat_rate": "15", ...},                 // 12 keys
-//	    "print":         {"paper_size": "A4", ...},                                  // 7 keys
-//	    "appearance":    {"theme": "light", "language": "ar", ...},                  // 4 keys
-//	    "notifications": {"notif_invoices": "true", ...},                            // 5 keys
-//	    "security":      {"session_duration": "60", ...},                            // 4 keys
-//	    "inventory":     {"low_stock_threshold": "5", ...}                           // 6 keys
+//	    "company":       {"company_name": "...", "company_vat": "...", ...},
+//	    "invoice":       {"currency": "SAR", "vat_rate": "15", ...},
+//	    "print":         {"paper_size": "A4", ...},
+//	    "appearance":    {"theme": "light", "language": "ar", ...},
+//	    "notifications": {"notif_invoices": "true", ...},
+//	    "security":      {"session_duration": "60", ...},
+//	    "inventory":     {"low_stock_threshold": "5", "stock_enforcement": "disable", ...}
 //	  }
 //	}
+
 func (h *handler) GetSettings(c *gin.Context) {
 	rows, err := h.DB.Query("SELECT setting_key, COALESCE(value,'') FROM settings ORDER BY setting_key")
 	if err != nil {
@@ -93,76 +127,15 @@ func (h *handler) GetSettings(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	// Categorize by prefix — 7 categories matching frontend sections
-	company := make(map[string]string)
-	invoice := make(map[string]string)
-	print_ := make(map[string]string)
-	appearance := make(map[string]string)
-	notifications := make(map[string]string)
-	security := make(map[string]string)
-	inventory := make(map[string]string)
-
-	categoryMap := map[string]map[string]string{
-		// ── Section 1: Company Info (9 keys) ──
-		"company_name":        company,
-		"company_name_en":     company,
-		"company_vat":         company,
-		"company_cr":          company,
-		"company_address":     company,
-		"company_phone":       company,
-		"company_email":       company,
-		"company_logo_url":    company,
-		"company_description": company,
-
-		// ── Section 2: Invoice & Tax (12 keys) ──
-		"currency":           invoice,
-		"vat_rate":           invoice,
-		"invoice_prefix":     invoice,
-		"pb_prefix":          invoice,
-		"order_prefix":       invoice,
-		"credit_prefix":      invoice,
-		"payment_terms":      invoice,
-		"invoice_due_days":   invoice,
-		"invoice_footer":     invoice,
-		"show_vat_breakdown": invoice,
-		"auto_calculate_vat": invoice,
-		"prices_include_vat": invoice,
-
-		// ── Section 3: Print & PDF (7 keys) ──
-		"paper_size":              print_,
-		"print_copies":            print_,
-		"show_logo_print":         print_,
-		"show_company_info_print": print_,
-		"show_qr_print":           print_,
-		"show_bank_details":       print_,
-		"bank_details":            print_,
-
-		// ── Section 4: Appearance (4 keys) ──
-		"theme":         appearance,
-		"language":      appearance,
-		"date_format":   appearance,
-		"number_format": appearance,
-
-		// ── Section 5: Notifications (5 keys) ──
-		"notif_invoices": notifications,
-		"notif_stock":    notifications,
-		"notif_payments": notifications,
-		"notif_orders":   notifications,
-		"notif_session":  notifications,
-
-		// ── Section 6: Security & Sessions (4 keys) ──
-		"session_duration":        security,
-		"max_login_attempts":      security,
-		"require_strong_password": security,
-		"auto_logout_inactive":    security,
-
-		// ── Section 7: Inventory & Products (6 keys) ──
-		"low_stock_threshold":  inventory,
-		"default_unit":         inventory,
-		"track_inventory":      inventory,
-		"allow_negative_stock": inventory,
-		"show_cost_price":      inventory,
-		"pagination_per_page":  inventory,
+	// Initialize all category maps
+	grouped := map[string]map[string]string{
+		"company":       {},
+		"invoice":       {},
+		"print":         {},
+		"appearance":    {},
+		"notifications": {},
+		"security":      {},
+		"inventory":     {},
 	}
 
 	for rows.Next() {
@@ -170,37 +143,28 @@ func (h *handler) GetSettings(c *gin.Context) {
 		if err := rows.Scan(&key, &value); err != nil {
 			continue
 		}
-		if cat, ok := categoryMap[key]; ok {
-			cat[key] = value
+		if cat, ok := settingCategories[key]; ok {
+			grouped[cat][key] = value
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"company":       company,
-			"invoice":       invoice,
-			"print":         print_,
-			"appearance":    appearance,
-			"notifications": notifications,
-			"security":      security,
-			"inventory":     inventory,
-		},
-	})
+	c.JSON(http.StatusOK, gin.H{"data": grouped})
 }
 
-// UpdateSettings updates settings for one category.
-// PUT /api/v2/settings
+// ── PUT /api/v2/settings ────────────────────────────────────────────────────
+// Updates settings for one category.
 //
 // Request:
 //
 //	{
 //	  "category": "company",
-//	  "settings": {"company_name": "New Name", "company_vat": "123456789012345"}
+//	  "settings": {"company_name": "عفريته", "company_vat": "123456789012345"}
 //	}
 //
 // Valid categories: company, invoice, print, appearance, notifications, security, inventory
 //
 // Response: {"detail": "success"}
+
 func (h *handler) UpdateSettings(c *gin.Context) {
 	var req struct {
 		Category string            `json:"category" binding:"required"`
@@ -211,60 +175,101 @@ func (h *handler) UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	// Whitelist keys per category to prevent arbitrary key injection
-	allowedKeys := map[string]map[string]bool{
-		"company": {
-			"company_name": true, "company_name_en": true, "company_vat": true,
-			"company_cr": true, "company_address": true, "company_phone": true,
-			"company_email": true, "company_logo_url": true, "company_description": true,
-		},
-		"invoice": {
-			"currency": true, "vat_rate": true, "invoice_prefix": true,
-			"pb_prefix": true, "order_prefix": true, "credit_prefix": true,
-			"payment_terms": true, "invoice_due_days": true, "invoice_footer": true,
-			"show_vat_breakdown": true, "auto_calculate_vat": true, "prices_include_vat": true,
-		},
-		"print": {
-			"paper_size": true, "print_copies": true, "show_logo_print": true,
-			"show_company_info_print": true, "show_qr_print": true,
-			"show_bank_details": true, "bank_details": true,
-		},
-		"appearance": {
-			"theme": true, "language": true, "date_format": true, "number_format": true,
-		},
-		"notifications": {
-			"notif_invoices": true, "notif_stock": true, "notif_payments": true,
-			"notif_orders": true, "notif_session": true,
-		},
-		"security": {
-			"session_duration": true, "max_login_attempts": true,
-			"require_strong_password": true, "auto_logout_inactive": true,
-		},
-		"inventory": {
-			"low_stock_threshold": true, "default_unit": true, "track_inventory": true,
-			"allow_negative_stock": true, "show_cost_price": true, "pagination_per_page": true,
-		},
+	// Validate category
+	validCategories := map[string]bool{
+		"company": true, "invoice": true, "print": true,
+		"appearance": true, "notifications": true, "security": true, "inventory": true,
 	}
-
-	allowed, validCategory := allowedKeys[req.Category]
-	if !validCategory {
+	if !validCategories[req.Category] {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid category"})
 		return
 	}
 
-	userID := c.GetInt64("userId")
+	userID := GetSessionInfo(c).id
 
+	updated := 0
 	for key, value := range req.Settings {
-		if !allowed[key] {
-			continue // silently skip unknown keys
+		// Only allow keys that belong to the requested category (whitelist)
+		cat, known := settingCategories[key]
+		if !known || cat != req.Category {
+			continue
 		}
-		_, _ = h.DB.Exec(
+
+		_, err := h.DB.Exec(
 			`INSERT INTO settings (setting_key, value, updated_by)
 			 VALUES (?, ?, ?)
 			 ON DUPLICATE KEY UPDATE value = VALUES(value), updated_by = VALUES(updated_by)`,
 			key, value, userID,
 		)
+		if err == nil {
+			updated++
+		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"detail": "success"})
+	c.JSON(http.StatusOK, gin.H{
+		"detail":  "success",
+		"updated": updated,
+	})
 }
+
+// ============================================================================
+// Seed SQL — Run once to ensure all 42+ settings keys exist with defaults
+// ============================================================================
+//
+// INSERT IGNORE INTO settings (setting_key, value, description) VALUES
+//   -- Company
+//   ('company_name',             '',         'اسم الشركة'),
+//   ('company_name_en',          '',         'Company name (English)'),
+//   ('company_vat',              '',         'الرقم الضريبي'),
+//   ('company_cr',               '',         'السجل التجاري'),
+//   ('company_address',          '',         'عنوان الشركة'),
+//   ('company_phone',            '',         'هاتف الشركة'),
+//   ('company_email',            '',         'البريد الإلكتروني'),
+//   ('company_logo_url',         '',         'رابط الشعار'),
+//   ('company_description',      '',         'وصف الشركة'),
+//   -- Invoice & Tax
+//   ('currency',                 'SAR',      'العملة'),
+//   ('vat_rate',                 '15',       'نسبة الضريبة %'),
+//   ('invoice_prefix',           'INV',      'بادئة رقم الفاتورة'),
+//   ('pb_prefix',                'PB',       'بادئة فاتورة المشتريات'),
+//   ('order_prefix',             'ORD',      'بادئة الطلب'),
+//   ('credit_prefix',            'CN',       'بادئة إشعار دائن'),
+//   ('payment_terms',            '30',       'شروط الدفع (أيام)'),
+//   ('invoice_due_days',         '30',       'مدة استحقاق الفاتورة'),
+//   ('invoice_footer',           '',         'نص ذيل الفاتورة'),
+//   ('show_vat_breakdown',       'true',     'عرض تفاصيل الضريبة'),
+//   ('auto_calculate_vat',       'true',     'حساب الضريبة تلقائياً'),
+//   ('prices_include_vat',       'false',    'الأسعار شاملة الضريبة'),
+//   -- Print & PDF
+//   ('paper_size',               'A4',       'حجم الورق'),
+//   ('print_copies',             '1',        'عدد النسخ'),
+//   ('show_logo_print',          'true',     'عرض الشعار في الطباعة'),
+//   ('show_company_info_print',  'true',     'عرض بيانات الشركة'),
+//   ('show_qr_print',            'true',     'عرض رمز QR'),
+//   ('show_bank_details',        'false',    'عرض البيانات البنكية'),
+//   ('bank_details',             '',         'تفاصيل الحساب البنكي'),
+//   -- Appearance
+//   ('theme',                    'light',    'المظهر'),
+//   ('language',                 'ar',       'اللغة'),
+//   ('date_format',              'dd/mm/yyyy','تنسيق التاريخ'),
+//   ('number_format',            'en',       'تنسيق الأرقام'),
+//   -- Notifications
+//   ('notif_invoices',           'true',     'إشعارات الفواتير'),
+//   ('notif_stock',              'true',     'إشعارات المخزون'),
+//   ('notif_payments',           'false',    'إشعارات الدفع'),
+//   ('notif_orders',             'false',    'إشعارات الطلبات'),
+//   ('notif_session',            'true',     'إشعارات الجلسات'),
+//   -- Security
+//   ('session_duration',         '60',       'مدة الجلسة (دقائق)'),
+//   ('max_login_attempts',       '5',        'محاولات الدخول القصوى'),
+//   ('require_strong_password',  'true',     'فرض كلمة مرور قوية'),
+//   ('auto_logout_inactive',     'true',     'تسجيل خروج تلقائي'),
+//   -- Inventory
+//   ('low_stock_threshold',      '5',        'حد المخزون المنخفض'),
+//   ('default_unit',             'piece',    'وحدة القياس الافتراضية'),
+//   ('track_inventory',          'true',     'تتبع المخزون'),
+//   ('allow_negative_stock',     'false',    'السماح بمخزون سالب'),
+//   ('show_cost_price',          'false',    'عرض سعر التكلفة'),
+//   ('pagination_per_page',      '20',       'عدد العناصر في الصفحة'),
+//   ('stock_enforcement',        'disable',  'وضع إنفاذ المخزون');
+//

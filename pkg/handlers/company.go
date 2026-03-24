@@ -33,16 +33,15 @@ func (h *handler) GetAllCompanies(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, companyResponses)
 }
 
-func (h *handler) getUserCompany(c *gin.Context) (int, error) {
+func (h *handler) getUserCompany(c *gin.Context) int {
 	// Get company_id from authenticated user's profile (NOT from request body)
 	session := GetSessionInfo(c)
 	var companyID int
 	err := h.DB.QueryRow("SELECT COALESCE(company_id,1) FROM user WHERE id = ?", session.id).Scan(&companyID)
 	if err != nil {
-		log.Printf("ERROR CreateBranch: could not get user company: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to resolve company"})
-		return -1, err
+		log.Panic("ERROR CreateBranch: could not get user company: %v", err)
 	}
-	return companyID, nil
+	return companyID
 
 }

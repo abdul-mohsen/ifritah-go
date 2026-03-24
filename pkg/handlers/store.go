@@ -153,12 +153,7 @@ func (h *handler) CreateStore(c *gin.Context) {
 	}
 
 	// Get company_id from authenticated user's session (set in JWT claims)
-	companyID, err := h.getUserCompany(c)
-	if err != nil {
-		log.Printf("ERROR CreateBranch: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create branch"})
-		return
-	}
+	companyID := h.getUserCompany(c)
 
 	country := req.Country
 	if country == "" {
@@ -218,12 +213,7 @@ func (h *handler) UpdateStore(c *gin.Context) {
 	}
 
 	// Get company_id from authenticated user's session (set in JWT claims)
-	companyID, err := h.getUserCompany(c)
-	if err != nil {
-		log.Printf("ERROR CreateBranch: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create branch"})
-		return
-	}
+	companyID := h.getUserCompany(c)
 
 	// Validate branch_id if provided
 	if req.BranchID != nil {
@@ -240,7 +230,7 @@ func (h *handler) UpdateStore(c *gin.Context) {
 		country = "SA"
 	}
 
-	res, err := h.DB.Exec(`
+	_, err = h.DB.Exec(`
 		UPDATE store SET name=?, company_id=?, branch_id=?, address_name=?,
 		       building_number=?, street_name=?, district=?, city=?, region=?,
 		       postal_code=?, additional_number=?, unit_number=?, country=?
@@ -252,12 +242,6 @@ func (h *handler) UpdateStore(c *gin.Context) {
 	if err != nil {
 		log.Printf("ERROR UpdateStore: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update store"})
-		return
-	}
-
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"detail": "store not found"})
 		return
 	}
 

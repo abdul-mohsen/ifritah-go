@@ -38,8 +38,8 @@ type AddPurchaseBillRequest struct {
 	ManualProducts         []PurchaseBillProduct `json:"manual_products" binding:"required,dive"`
 	SupplierId             int32                 `json:"supplier_id" binding:"required"`
 	SupplierSequenceNumber int32                 `json:"supplier_sequence_number" binding:"required"`
-	Attachments            []string              `json:"attachments" binding:"required"`
-	PDFLink                *string               `json:"pdf_link" binding:"required"`
+	Attachments            []string              `json:"attachments"`
+	PDFLink                *string               `json:"pdf_link"`
 }
 
 type UploadFileResponse struct {

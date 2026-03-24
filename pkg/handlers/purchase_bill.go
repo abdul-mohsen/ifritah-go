@@ -250,6 +250,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 				"detail": err.Error(),
 				"type":   "stock_error",
 			})
+			log.Panic(err)
 			return
 		}
 	}

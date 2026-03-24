@@ -190,12 +190,7 @@ func (h *handler) CreateBranch(c *gin.Context) {
 	}
 
 	// Get company_id from authenticated user's session (set in JWT claims)
-	companyID, err := h.getUserCompany(c)
-	if err != nil {
-		log.Printf("ERROR CreateBranch: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create branch"})
-		return
-	}
+	companyID := h.getUserCompany(c)
 
 	isActive := true
 	if req.IsActive != nil {
@@ -207,6 +202,9 @@ func (h *handler) CreateBranch(c *gin.Context) {
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`, req.Name, req.Address, req.City, req.Phone, companyID, req.ManagerID, isActive)
 	if err != nil {
+		if IsDuplicate(err) {
+			c.JSON(http.StatusConflict, gin.H{"detail": "اسم الفرع موجود بالفعل"})
+		}
 		log.Printf("ERROR CreateBranch: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create branch"})
 		return
@@ -249,19 +247,14 @@ func (h *handler) UpdateBranch(c *gin.Context) {
 	}
 
 	// Get company_id from authenticated user's session (set in JWT claims)
-	companyID, err := h.getUserCompany(c)
-	if err != nil {
-		log.Printf("ERROR CreateBranch: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create branch"})
-		return
-	}
+	companyID := h.getUserCompany(c)
 
 	isActive := true
 	if req.IsActive != nil {
 		isActive = *req.IsActive
 	}
 
-	res, err := h.DB.Exec(`
+	_, err = h.DB.Exec(`
 		UPDATE branches SET name=?, address=?, city=?, phone=?,
 		       company_id=?, manager_id=?, is_active=?
 		WHERE id=?
@@ -270,12 +263,6 @@ func (h *handler) UpdateBranch(c *gin.Context) {
 	if err != nil {
 		log.Printf("ERROR UpdateBranch: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update branch"})
-		return
-	}
-
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"detail": "branch not found"})
 		return
 	}
 

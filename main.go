@@ -117,7 +117,10 @@ func main() {
 		authorized.PUT("notification/:id/read", h.MarkNotificationRead)
 		authorized.PUT("notification/read-all", h.MarkAllNotificationsRead)
 
+		// Dashboard API (GET endpoints — read-only, no CSRF needed)
 		authorized.GET("dashboard", h.GetDashboard)
+		authorized.GET("dashboard/analytics", h.GetDashboardAnalytics)
+		authorized.GET("dashboard/compare", h.GetDashboardCompare)
 
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))
 		authorized.POST("part/", h.GetPart)

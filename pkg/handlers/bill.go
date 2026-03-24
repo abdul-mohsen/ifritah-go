@@ -169,6 +169,28 @@ func (h *handler) AddBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	// ── Stock tracking: deduct stock for catalog products ──
+	enforcement := h.getStockEnforcementMode()
+	if enforcement != model.StockEnforcementDisable && request.State > 0 {
+		warnings, err := recordSaleMovements(
+			tx, int32(id), int32(request.StoreId),
+			request.Products, int32(squenceNumber),
+			enforcement, int32(userSession.id),
+		)
+		if err != nil {
+			// enforce mode: block if insufficient stock
+			c.JSON(http.StatusBadRequest, gin.H{
+				"detail": err.Error(),
+				"type":   "stock_insufficient",
+			})
+			return
+		}
+		if len(warnings) > 0 {
+			// warn mode: set header with stock warnings
+			c.Header("X-Stock-Warning", "true")
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)
@@ -277,6 +299,28 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	if err := addProductToBill(qtx, c, products, int32(billID)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
+	}
+
+	// ── Stock tracking: deduct stock for catalog products ──
+	enforcement := h.getStockEnforcementMode()
+	if enforcement != model.StockEnforcementDisable && request.State > 0 {
+		warnings, err := recordSaleMovements(
+			tx, int32(billID), int32(request.StoreId),
+			request.Products, int32(squenceNumber),
+			enforcement, int32(userSession.id),
+		)
+		if err != nil {
+			// enforce mode: block if insufficient stock
+			c.JSON(http.StatusBadRequest, gin.H{
+				"detail": err.Error(),
+				"type":   "stock_insufficient",
+			})
+			return
+		}
+		if len(warnings) > 0 {
+			// warn mode: set header with stock warnings
+			c.Header("X-Stock-Warning", "true")
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -572,26 +616,52 @@ func (h *handler) getProducts(billId int) []model.ProductDetails {
 
 func (h *handler) DeleteBillDetail(c *gin.Context) {
 
-	var id string = c.Param("id")
-
-	// TODO check if the user has right to delete and is the owner of the bill
-	res, err := h.DB.Exec("update bill set state = -1 where id = ?", id)
+	idStr := c.Param("id")
+	billID, err := strconv.ParseInt(idStr, 10, 32)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
+		return
 	}
 
-	if res == nil {
-		c.AbortWithStatus(http.StatusInternalServerError)
+	userSession := GetSessionInfo(c)
+
+	tx, err := h.DB.Begin()
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+	defer tx.Rollback()
+
+	// Restore stock BEFORE deleting the bill (need bill data intact)
+	if err := h.reverseSaleMovements(tx, int32(billID), int32(userSession.id)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"detail": err.Error(),
+			"type":   "stock_error",
+		})
+		return
+	}
+
+	// Soft-delete the bill
+	res, err := tx.Exec("UPDATE bill SET state = -1 WHERE id = ?", billID)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
 	}
 
 	affectedRows, err := res.RowsAffected()
-
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
 	}
 
 	if affectedRows == 0 {
 		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
 	}
 
 	c.Status(http.StatusOK)

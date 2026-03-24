@@ -26,20 +26,49 @@ func (h *handler) CreditBill(c *gin.Context) {
 	if err := c.BindJSON(&request); err != nil {
 		log.Panic(err)
 		c.Status(http.StatusBadRequest)
+		return
 	}
 
-	query := `
-	insert into credit_note (bill_id, state, note)
-	values (?, ?, ?); 
-	`
-	_, err := h.DB.Exec(query, request.BillId, 1, request.Note)
+	userSession := GetSessionInfo(c)
+
+	// Use a transaction so credit note creation + stock restoration are atomic
+	tx, err := h.DB.Begin()
 	if err != nil {
-		if IsDuplicate(err) {
-			c.JSON(http.StatusBadRequest, fmt.Errorf("Client vat number already exists in this store"))
-			log.Panic(err)
-		} else {
-			log.Panic(err)
-		}
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+	defer tx.Rollback()
+
+	// Insert the credit note
+	res, err := tx.Exec(
+		"INSERT INTO credit_note (bill_id, state, note) VALUES (?, ?, ?)",
+		request.BillId, 1, request.Note,
+	)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
+	}
+
+	creditNoteID, err := res.LastInsertId()
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+
+	// ── Stock tracking: restore stock for all catalog items on the original bill ──
+	if err := h.recordCreditNoteMovements(
+		tx, int32(creditNoteID), int32(request.BillId), int32(userSession.id),
+	); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"detail": err.Error(),
+			"type":   "stock_error",
+		})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
 	}
 
 	c.Status(http.StatusCreated)

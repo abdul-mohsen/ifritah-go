@@ -98,6 +98,18 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	// ── Stock tracking: reverse old stock before deleting products ──
+	enforcement := h.getStockEnforcementMode()
+	if enforcement != model.StockEnforcementDisable {
+		if err := h.reversePurchaseMovements(tx, int32(id), int32(userSession.id)); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"detail": err.Error(),
+				"type":   "stock_error",
+			})
+			return
+		}
+	}
+
 	if err = qtx.DeleteProductPurchaseBill(c.Request.Context(), int32(id)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
@@ -114,6 +126,22 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
+	}
+
+	// ── Stock tracking: add stock for catalog products ──
+	enforcement = h.getStockEnforcementMode()
+	if enforcement != model.StockEnforcementDisable && request.State > 0 {
+		if err := recordPurchaseMovements(
+			tx, int32(id), int32(request.StoreId),
+			request.Products, request.SupplierSequenceNumber,
+			enforcement, int32(userSession.id),
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"detail": err.Error(),
+				"type":   "stock_error",
+			})
+			return
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -209,6 +237,22 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
+	}
+
+	// ── Stock tracking: add stock for catalog products ──
+	enforcement := h.getStockEnforcementMode()
+	if enforcement != model.StockEnforcementDisable && request.State > 0 {
+		if err := recordPurchaseMovements(
+			tx, int32(id), int32(request.StoreId),
+			request.Products, request.SupplierSequenceNumber,
+			enforcement, int32(userSession.id),
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"detail": err.Error(),
+				"type":   "stock_error",
+			})
+			return
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -359,26 +403,52 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
 func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 
-	var id string = c.Param("id")
-
-	// TODO check if the user has right to delete and is the owner of the bill
-	res, err := h.DB.Exec("update purchase_bill set state = -1 where id = ?", id)
+	idStr := c.Param("id")
+	pbID, err := strconv.ParseInt(idStr, 10, 32)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
+		return
 	}
 
-	if res == nil {
-		c.AbortWithStatus(http.StatusInternalServerError)
+	userSession := GetSessionInfo(c)
+
+	tx, err := h.DB.Begin()
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+	defer tx.Rollback()
+
+	// Reverse stock BEFORE deleting (need PB data intact)
+	if err := h.reversePurchaseMovements(tx, int32(pbID), int32(userSession.id)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"detail": err.Error(),
+			"type":   "stock_error",
+		})
+		return
+	}
+
+	// Soft-delete the purchase bill
+	res, err := tx.Exec("UPDATE purchase_bill SET state = -1 WHERE id = ?", pbID)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		log.Panic(err)
 	}
 
 	affectedRows, err := res.RowsAffected()
-
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
 	}
 
 	if affectedRows == 0 {
 		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
 	}
 
 	c.Status(http.StatusOK)

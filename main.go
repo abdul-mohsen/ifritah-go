@@ -64,7 +64,12 @@ func main() {
 		authorized.GET("credit_bill/:id", h.GetBillCreditDetail)
 		authorized.POST("bill/credit", h.CreditBill)
 
-		authorized.GET("purchase_bill/:id", h.GetPurchaseBillDetail)
+		// Stock / Inventory Management
+		authorized.POST("stock/adjust", h.StockAdjust)
+		authorized.POST("stock/check", h.StockCheck)
+		authorized.GET("stock/movements/:product_id", h.GetStockMovements)
+		authorized.GET("stock/enforcement", h.GetStockEnforcement)
+
 		authorized.POST("purchase_bill", h.AddPurchaseBill)
 		authorized.POST("purchase_bill/all", h.GetAllPurchaseBill)
 		authorized.PUT("purchase_bill/:id", h.UpdatePurchaseBill)

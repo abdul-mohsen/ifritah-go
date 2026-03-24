@@ -181,12 +181,19 @@ func (h *handler) CreateBranch(c *gin.Context) {
 		Address   string `json:"address"`
 		City      string `json:"city"`
 		Phone     string `json:"phone"`
-		CompanyID *int   `json:"company_id"`
 		ManagerID *int   `json:"manager_id"`
 		IsActive  *bool  `json:"is_active"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "الاسم مطلوب"})
+		return
+	}
+
+	// Get company_id from authenticated user's session (set in JWT claims)
+	companyID, err := h.getUserCompany(c)
+	if err != nil {
+		log.Printf("ERROR CreateBranch: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create branch"})
 		return
 	}
 
@@ -198,7 +205,7 @@ func (h *handler) CreateBranch(c *gin.Context) {
 	result, err := h.DB.Exec(`
 		INSERT INTO branches (name, address, city, phone, company_id, manager_id, is_active)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, req.Name, req.Address, req.City, req.Phone, req.CompanyID, req.ManagerID, isActive)
+	`, req.Name, req.Address, req.City, req.Phone, companyID, req.ManagerID, isActive)
 	if err != nil {
 		log.Printf("ERROR CreateBranch: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create branch"})
@@ -233,12 +240,19 @@ func (h *handler) UpdateBranch(c *gin.Context) {
 		Address   string `json:"address"`
 		City      string `json:"city"`
 		Phone     string `json:"phone"`
-		CompanyID *int   `json:"company_id"`
 		ManagerID *int   `json:"manager_id"`
 		IsActive  *bool  `json:"is_active"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request"})
+		return
+	}
+
+	// Get company_id from authenticated user's session (set in JWT claims)
+	companyID, err := h.getUserCompany(c)
+	if err != nil {
+		log.Printf("ERROR CreateBranch: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create branch"})
 		return
 	}
 
@@ -252,7 +266,7 @@ func (h *handler) UpdateBranch(c *gin.Context) {
 		       company_id=?, manager_id=?, is_active=?
 		WHERE id=?
 	`, req.Name, req.Address, req.City, req.Phone,
-		req.CompanyID, req.ManagerID, isActive, id)
+		companyID, req.ManagerID, isActive, id)
 	if err != nil {
 		log.Printf("ERROR UpdateBranch: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update branch"})

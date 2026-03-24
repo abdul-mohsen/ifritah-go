@@ -125,7 +125,6 @@ func (h *handler) GetStore(c *gin.Context) {
 func (h *handler) CreateStore(c *gin.Context) {
 	var req struct {
 		Name           string `json:"name" binding:"required"`
-		CompanyID      *int   `json:"company_id"`
 		BranchID       *int   `json:"branch_id"`
 		AddressName    string `json:"address_name"`
 		BuildingNumber string `json:"building_number"`
@@ -153,6 +152,14 @@ func (h *handler) CreateStore(c *gin.Context) {
 		}
 	}
 
+	// Get company_id from authenticated user's session (set in JWT claims)
+	companyID, err := h.getUserCompany(c)
+	if err != nil {
+		log.Printf("ERROR CreateBranch: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create branch"})
+		return
+	}
+
 	country := req.Country
 	if country == "" {
 		country = "SA"
@@ -163,7 +170,7 @@ func (h *handler) CreateStore(c *gin.Context) {
 		       building_number, street_name, district, city, region,
 		       postal_code, additional_number, unit_number, country)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, req.Name, req.CompanyID, req.BranchID, req.AddressName,
+	`, req.Name, companyID, req.BranchID, req.AddressName,
 		req.BuildingNumber, req.StreetName, req.District, req.City,
 		req.Region, req.PostalCode, req.AdditionalNum, req.UnitNumber, country)
 	if err != nil {
@@ -193,7 +200,6 @@ func (h *handler) UpdateStore(c *gin.Context) {
 
 	var req struct {
 		Name           string `json:"name" binding:"required"`
-		CompanyID      *int   `json:"company_id"`
 		BranchID       *int   `json:"branch_id"`
 		AddressName    string `json:"address_name"`
 		BuildingNumber string `json:"building_number"`
@@ -208,6 +214,14 @@ func (h *handler) UpdateStore(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request"})
+		return
+	}
+
+	// Get company_id from authenticated user's session (set in JWT claims)
+	companyID, err := h.getUserCompany(c)
+	if err != nil {
+		log.Printf("ERROR CreateBranch: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create branch"})
 		return
 	}
 
@@ -231,7 +245,7 @@ func (h *handler) UpdateStore(c *gin.Context) {
 		       building_number=?, street_name=?, district=?, city=?, region=?,
 		       postal_code=?, additional_number=?, unit_number=?, country=?
 		WHERE id=?
-	`, req.Name, req.CompanyID, req.BranchID, req.AddressName,
+	`, req.Name, companyID, req.BranchID, req.AddressName,
 		req.BuildingNumber, req.StreetName, req.District, req.City,
 		req.Region, req.PostalCode, req.AdditionalNum, req.UnitNumber,
 		country, id)

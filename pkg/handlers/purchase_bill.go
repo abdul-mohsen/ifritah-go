@@ -128,8 +128,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	// ── Stock tracking: add stock for catalog products ──
-	enforcement = h.getStockEnforcementMode()
+	// ── Stock tracking: add new stock for updated products ──
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		if err := recordPurchaseMovements(
 			tx, int32(id), int32(request.StoreId),
@@ -419,7 +418,7 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 	}
 	defer tx.Rollback()
 
-	// Reverse stock BEFORE deleting (need PB data intact)
+	// ── Stock tracking: reverse stock BEFORE deleting (need PB data intact) ──
 	if err := h.reversePurchaseMovements(tx, int32(pbID), int32(userSession.id)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"detail": err.Error(),

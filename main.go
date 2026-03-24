@@ -36,7 +36,6 @@ func main() {
 	authorized := router.Group(baseUrl)
 	authorized.Use(handlers.JWTVerifyMiddleware)
 	{
-
 		authorized.POST("supplier/all", h.GetAllSupplier)
 		authorized.GET("supplier/:id", h.GetSupplier)
 		authorized.POST("supplier", h.AddSupplier)
@@ -64,12 +63,7 @@ func main() {
 		authorized.GET("credit_bill/:id", h.GetBillCreditDetail)
 		authorized.POST("bill/credit", h.CreditBill)
 
-		// Stock / Inventory Management
-		authorized.POST("stock/adjust", h.StockAdjust)
-		authorized.POST("stock/check", h.StockCheck)
-		authorized.GET("stock/movements/:product_id", h.GetStockMovements)
-		authorized.GET("stock/enforcement", h.GetStockEnforcement)
-
+		authorized.GET("purchase_bill/:id", h.GetPurchaseBillDetail)
 		authorized.POST("purchase_bill", h.AddPurchaseBill)
 		authorized.POST("purchase_bill/all", h.GetAllPurchaseBill)
 		authorized.PUT("purchase_bill/:id", h.UpdatePurchaseBill)
@@ -93,6 +87,12 @@ func main() {
 		authorized.GET("settings", h.GetSettings)
 		authorized.PUT("settings", h.UpdateSettings)
 
+		// Stock / Inventory Management
+		authorized.POST("stock/adjust", h.StockAdjust)
+		authorized.POST("stock/check", h.StockCheck)
+		authorized.GET("stock/movements/:product_id", h.GetStockMovements)
+		authorized.GET("stock/enforcement", h.GetStockEnforcement)
+
 		// Notifications
 		authorized.GET("notification", h.GetNotifications)
 		authorized.GET("notification/config", h.GetNotificationConfig)
@@ -109,13 +109,12 @@ func main() {
 		authorized.POST("upload", h.UploadFile)
 		authorized.GET("files/:key", h.DownloadFile)
 		authorized.DELETE("files/:key", h.DeleteFile)
-		// router.GET(baseUrl + ":id", h.GetCarPartDetail)
 	}
 
 	nonAuthGroup := router.Group(baseUrl)
 	{
-		nonAuthGroup.GET("bill/pdf/:id", h.GetBillPDF)              // allow all user to get all bill details
-		nonAuthGroup.GET("bill/credit/pdf/:id", h.GetCreditBillPDF) // allow all user to get all bill details
+		nonAuthGroup.GET("bill/pdf/:id", h.GetBillPDF)
+		nonAuthGroup.GET("bill/credit/pdf/:id", h.GetCreditBillPDF)
 		nonAuthGroup.POST("register", h.Register)
 		nonAuthGroup.POST("login", h.Login)
 		nonAuthGroup.POST("refresh", h.Refresh)

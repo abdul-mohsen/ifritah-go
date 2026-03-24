@@ -1,5 +1,16 @@
 package handlers
 
+// ============================================================================
+// COMPLETE FILE: pkg/handlers/credit.go (with stock tracking integrated)
+// ============================================================================
+// Copy this file to replace: pkg/handlers/credit.go
+//
+// Stock changes vs original:
+//   1. CreditBill — wrapped in transaction, calls recordCreditNoteMovements()
+//
+// GetCreditBillPDF is unchanged from the original.
+// ============================================================================
+
 import (
 	"fmt"
 	"ifritah/web-service-gin/pkg/model"
@@ -76,13 +87,9 @@ func (h *handler) CreditBill(c *gin.Context) {
 
 func (h *handler) GetCreditBillPDF(c *gin.Context) {
 
-	// userSession := GetSessionInfo(c) // to allow users to use this feature
-
 	var id string = c.Param("id")
 
 	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
-	// Check if the file exists
-	// _, err := os.Stat(filename)
 	if true {
 		bill, xProducts := h.getBillDetail(c)
 		var products []models.Product
@@ -160,7 +167,6 @@ func (h *handler) GetCreditBillPDF(c *gin.Context) {
 	}
 	c.Header("X-Cache", "HIT")
 
-	// Upload the file to specific dst.
 	c.File(filename)
 
 }

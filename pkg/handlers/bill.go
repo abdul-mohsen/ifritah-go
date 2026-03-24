@@ -1,5 +1,18 @@
 package handlers
 
+// ============================================================================
+// COMPLETE FILE: pkg/handlers/bill.go (with stock tracking integrated)
+// ============================================================================
+// Copy this file to replace: pkg/handlers/bill.go
+//
+// Stock changes vs original:
+//   1. AddBill        — calls recordSaleMovements() before tx.Commit
+//   2. SubmitDraftBill — calls recordSaleMovements() before tx.Commit
+//   3. DeleteBillDetail — wrapped in tx, calls reverseSaleMovements() before soft-delete
+//
+// All other functions are unchanged from the original.
+// ============================================================================
+
 import (
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
@@ -66,7 +79,6 @@ func (h *handler) GetBills(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
-	// , , pageSize, page*pageSize)
 	c.JSON(http.StatusOK, bills)
 }
 
@@ -103,10 +115,9 @@ func (h *handler) AddBill(c *gin.Context) {
 			log.Panic("Error parsing date:", err)
 		}
 	}
-	// discount, _:= decimal.NewFromString(request.Discount)
-	// paidAmount, success2 := stringToBigFloat(request.PaidAmount)
 
 	squenceNumber := 0
+
 	if request.State > 0 {
 		squenceNumber = h.getNextSquenceNumber(userSession.id)
 	}
@@ -310,7 +321,6 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 			enforcement, int32(userSession.id),
 		)
 		if err != nil {
-			// enforce mode: block if insufficient stock
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
 				"type":   "stock_insufficient",
@@ -318,7 +328,6 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 			return
 		}
 		if len(warnings) > 0 {
-			// warn mode: set header with stock warnings
 			c.Header("X-Stock-Warning", "true")
 		}
 	}
@@ -484,13 +493,9 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 func (h *handler) GetBillPDF(c *gin.Context) {
 
-	// userSession := GetSessionInfo(c) // to allow users to use this feature
-
 	var id string = c.Param("id")
 
 	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
-	// Check if the file exists
-	// _, err := os.Stat(filename)
 	if true {
 		bill, xProducts := h.getBillDetail(c)
 		var products []models.Product
@@ -566,14 +571,11 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 	}
 	c.Header("X-Cache", "HIT")
 
-	// Upload the file to specific dst.
 	c.File(filename)
 
 }
 
 func (h *handler) GetBillCreditDetail(c *gin.Context) {
-
-	// userSession := GetSessionInfo(c) // to allow users to use this feature
 
 	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
 	if err != nil {
@@ -592,10 +594,9 @@ func (h *handler) GetBillCreditDetail(c *gin.Context) {
 
 func (h *handler) getProducts(billId int) []model.ProductDetails {
 	query := `
-	select product_id, price, quantity , articles.id, articles.articleNumber, articles.genericArticleDescription from bill_product 
+	select product_id, price, quantity , articles.id, articles.articleNumber, articles.genericArticleDescription from bill_product
 	left join articles on articles.id = product_id where bill_id = ?
 	`
-
 	rows, err := h.DB.Query(query, billId)
 	if err != nil {
 		log.Panic(err)
@@ -632,7 +633,7 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	}
 	defer tx.Rollback()
 
-	// Restore stock BEFORE deleting the bill (need bill data intact)
+	// ── Stock tracking: restore stock BEFORE deleting the bill (need bill data intact) ──
 	if err := h.reverseSaleMovements(tx, int32(billID), int32(userSession.id)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"detail": err.Error(),

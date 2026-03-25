@@ -90,6 +90,7 @@ func (h *handler) AddBill(c *gin.Context) {
 		PaidAmount:    decimal.NewFromInt(0),
 	}
 
+	log.Print(request.BuyerId)
 	log.Print(request)
 
 	if err := c.BindJSON(&request); err != nil {
@@ -143,7 +144,7 @@ func (h *handler) AddBill(c *gin.Context) {
 		MaintenanceCost: request.MaintenanceCost,
 		Note:            request.Note,
 		Username:        request.UserName,
-		BuyerID:         nil,
+		BuyerID:         request.BuyerId,
 		UserPhoneNumber: request.UserPhoneNumber,
 	}
 

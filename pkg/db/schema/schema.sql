@@ -460,7 +460,7 @@ CREATE TABLE `bill` (
   `maintenance_cost` decimal(30,10) NOT NULL,
   `note` text,
   `userName` varchar(45) DEFAULT NULL,
-  `buyer_id` int DEFAULT NULL,
+  `client_id` int DEFAULT NULL,
   `user_phone_number` varchar(10) DEFAULT NULL,
   `qr_code` varchar(1000) DEFAULT NULL,
   `invoice_uuid` char(36) DEFAULT NULL,
@@ -472,7 +472,7 @@ CREATE TABLE `bill` (
   KEY `idx_bill_merchant_state` (`merchant_id`,`state`),
   FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`),
   CONSTRAINT `fk_bill_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=389 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=420 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -507,16 +507,18 @@ CREATE TABLE `bill_product` (
   `vat` decimal(5,2) DEFAULT '15.00',
   `price` decimal(12,2) NOT NULL,
   `quantity` decimal(10,3) NOT NULL,
-  `total_before_vat` decimal(12,2) GENERATED ALWAYS AS (round((`price` * `quantity`),2)) STORED,
-  `vat_total` decimal(12,2) GENERATED ALWAYS AS (round(((`total_before_vat` * `vat`) / 100),2)) STORED,
-  `total_including_vat` decimal(12,2) GENERATED ALWAYS AS (round((`total_before_vat` + `vat_total`),2)) STORED,
   `name` varchar(255) DEFAULT NULL,
   `part_name` varchar(255) DEFAULT NULL,
   `type` tinyint GENERATED ALWAYS AS ((case when (`product_id` is not null) then 0 when (`name` = _utf8mb4'maintenance_cost') then 2 else 1 end)) STORED NOT NULL,
+  `discount` decimal(12,2) NOT NULL,
+  `total_before_discount` decimal(12,2) GENERATED ALWAYS AS (round((`price` * `quantity`),2)) STORED,
+  `total_before_vat` decimal(12,2) GENERATED ALWAYS AS (round((`total_before_discount` - `discount`),2)) STORED,
+  `vat_total` decimal(12,2) GENERATED ALWAYS AS (round(((`total_before_vat` * `vat`) / 100),2)) STORED,
+  `total_including_vat` decimal(12,2) GENERATED ALWAYS AS (round((`total_before_vat` + `vat_total`),2)) STORED,
   PRIMARY KEY (`id`),
   CONSTRAINT `chk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=709 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=741 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -539,7 +541,7 @@ SET @saved_cs_client     = @@character_set_client;
  1 AS `maintenance_cost`,
  1 AS `note`,
  1 AS `userName`,
- 1 AS `buyer_id`,
+ 1 AS `client_id`,
  1 AS `user_phone_number`,
  1 AS `total_before_vat`,
  1 AS `total_vat`,
@@ -1322,7 +1324,7 @@ CREATE TABLE `order_items` (
   CONSTRAINT `chk_oi_price` CHECK ((`unit_price` >= 0)),
   CONSTRAINT `chk_oi_qty` CHECK ((`quantity` > 0)),
   CONSTRAINT `chk_oi_total` CHECK ((`line_total` >= 0))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1356,7 +1358,7 @@ CREATE TABLE `orders` (
   CONSTRAINT `fk_order_user` FOREIGN KEY (`created_by`) REFERENCES `user` (`id`) ON UPDATE CASCADE,
   CONSTRAINT `chk_order_seq` CHECK ((char_length(trim(`sequence_number`)) >= 1)),
   CONSTRAINT `chk_order_total` CHECK ((`total` >= 0))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1409,7 +1411,7 @@ CREATE TABLE `purchase_bill` (
   PRIMARY KEY (`id`),
   KEY `idx_pb_merchant_date` (`merchant_id`,`effective_date`),
   KEY `idx_pb_supplier_merchant` (`supplier_id`,`merchant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=210 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=211 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1474,7 +1476,7 @@ CREATE TABLE `purchase_bill_product` (
   PRIMARY KEY (`id`),
   CONSTRAINT `chpk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chpk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=389 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=390 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1598,7 +1600,7 @@ CREATE TABLE `settings` (
   UNIQUE KEY `uq_settings_key` (`setting_key`),
   KEY `fk_settings_user` (`updated_by`),
   CONSTRAINT `fk_settings_user` FOREIGN KEY (`updated_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=709 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=746 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1647,7 +1649,7 @@ CREATE TABLE `stock_movements` (
   CONSTRAINT `fk_sm_user` FOREIGN KEY (`created_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `chk_sm_movement_type` CHECK ((`movement_type` in (_utf8mb4'purchase',_utf8mb4'sale',_utf8mb4'credit_note',_utf8mb4'adjustment',_utf8mb4'transfer_out',_utf8mb4'transfer_in',_utf8mb4'initial_balance',_utf8mb4'deletion'))),
   CONSTRAINT `chk_sm_reference_type` CHECK (((`reference_type` is null) or (`reference_type` in (_utf8mb4'purchase_bill',_utf8mb4'bill',_utf8mb4'credit_note',_utf8mb4'transfer',_utf8mb4'manual'))))
-) ENGINE=InnoDB AUTO_INCREMENT=409 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=411 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1708,7 +1710,7 @@ CREATE TABLE `supplier` (
   KEY `company_id` (`company_id`),
   KEY `idx_supplier_company` (`company_id`),
   CONSTRAINT `supplier_ibfk_1` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=125 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=126 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1745,7 +1747,7 @@ CREATE TABLE `uploaded_files` (
   UNIQUE KEY `uq_file_key` (`file_key`),
   KEY `idx_uploaded_by` (`uploaded_by`),
   CONSTRAINT `fk_upload_user` FOREIGN KEY (`uploaded_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1969,7 +1971,7 @@ CREATE TABLE `vin_cache` (
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
-/*!50001 VIEW `bill_totals` AS select `b`.`id` AS `id`,`b`.`effective_date` AS `effective_date`,`b`.`payment_due_date` AS `payment_due_date`,`b`.`state` AS `state`,`b`.`discount` AS `discount`,`b`.`store_id` AS `store_id`,`b`.`sequence_number` AS `sequence_number`,`b`.`merchant_id` AS `merchant_id`,`b`.`maintenance_cost` AS `maintenance_cost`,`b`.`note` AS `note`,`b`.`userName` AS `userName`,`b`.`buyer_id` AS `buyer_id`,`b`.`user_phone_number` AS `user_phone_number`,round(coalesce(sum(`bp`.`total_before_vat`),0),2) AS `total_before_vat`,round(coalesce(sum(`bp`.`vat_total`),0),2) AS `total_vat`,round(coalesce(sum(`bp`.`total_including_vat`),0),2) AS `total`,`b`.`qr_code` AS `qr_code` from (`bill` `b` left join `bill_product` `bp` on((`b`.`id` = `bp`.`bill_id`))) group by `b`.`id` */;
+/*!50001 VIEW `bill_totals` AS select `b`.`id` AS `id`,`b`.`effective_date` AS `effective_date`,`b`.`payment_due_date` AS `payment_due_date`,`b`.`state` AS `state`,`b`.`discount` AS `discount`,`b`.`store_id` AS `store_id`,`b`.`sequence_number` AS `sequence_number`,`b`.`merchant_id` AS `merchant_id`,`b`.`maintenance_cost` AS `maintenance_cost`,`b`.`note` AS `note`,`b`.`userName` AS `userName`,`b`.`client_id` AS `client_id`,`b`.`user_phone_number` AS `user_phone_number`,round(coalesce(sum(`bp`.`total_before_vat`),0),2) AS `total_before_vat`,round(coalesce(sum(`bp`.`vat_total`),0),2) AS `total_vat`,round(coalesce(sum(`bp`.`total_including_vat`),0),2) AS `total`,`b`.`qr_code` AS `qr_code` from (`bill` `b` left join `bill_product` `bp` on((`b`.`id` = `bp`.`bill_id`))) group by `b`.`id` */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
@@ -2001,4 +2003,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-24 21:39:59
+-- Dump completed on 2026-03-25 18:21:54

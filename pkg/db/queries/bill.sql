@@ -1,5 +1,5 @@
 -- name: CreateBill :execresult
-  insert into bill (effective_date, payment_due_date, state, discount, store_id, sequence_number, merchant_id, maintenance_cost, note, userName, buyer_id, user_phone_number)
+  insert into bill (effective_date, payment_due_date, state, discount, store_id, sequence_number, merchant_id, maintenance_cost, note, userName, client_id, user_phone_number)
   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetAllBill :many
@@ -86,7 +86,7 @@ merchant_id = ?,
 maintenance_cost = ?,
 note = ?,
 userName = ?,
-buyer_id = ?,
+client_id = ?,
 user_phone_number = ?
 WHERE id = ?;
 

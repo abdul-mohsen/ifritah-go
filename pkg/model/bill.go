@@ -47,7 +47,7 @@ type AddBillRequest struct {
 	Note            *string         `json:"note"`
 	Products        []BillProduct   `json:"products" binding:"required,dive"`
 	ManualProducts  []BillProduct   `json:"manual_products" binding:"required,dive"`
-	BuyerId         *int32          `json:"buyer_id" `
+	BuyerId         *int32          `json:"client_id" `
 }
 
 type BillProduct struct {

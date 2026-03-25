@@ -454,6 +454,8 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 
 	}
 
+	client, _ := h.queries.GetClientByID(c.Request.Context(), uint32(bill.ID))
+
 	return model.Bill{
 		Id:                           bill.ID,
 		EffectiveDate:                bill.EffectiveDate,
@@ -481,6 +483,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		Total:                        bill.Total.Round(2).String(),
 		CommercialRegistrationNumber: CommercialRegistrationNumber,
 		CreditID:                     bill.CreditID,
+		Client:                       &client,
 	}, xProducts
 }
 

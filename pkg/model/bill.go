@@ -2,6 +2,7 @@ package model
 
 import (
 	"database/sql"
+	db "ifritah/web-service-gin/pkg/db/gen"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -55,6 +56,7 @@ type BillProduct struct {
 	PartName  string          `json:"part_name"` // ← add this
 	Price     decimal.Decimal `json:"price" binding:"required"`
 	Quantity  decimal.Decimal `json:"quantity" binding:"required"`
+	Discount  decimal.Decimal `json:"discount" binding:"required"`
 }
 
 type BillProductResponse struct {
@@ -117,6 +119,7 @@ type Bill struct {
 	TotalBeforeVAT               string                `json:"total_before_vat"`
 	TotalVAT                     string                `json:"total_vat"`
 	Total                        string                `json:"total"`
+	Client                       *db.Client            `json:"client"`
 	CreditID                     *int32
 	CommercialRegistrationNumber string
 }

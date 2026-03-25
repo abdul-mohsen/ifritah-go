@@ -644,7 +644,7 @@ func (h *handler) GetDashboard(c *gin.Context) {
 		       COALESCE(SUM(bt.total), 0) AS total_value,
 		       COALESCE(MAX(DATE_FORMAT(bt.effective_date, '%Y-%m-%d')), '-') AS last_inv
 		FROM client c
-		INNER JOIN bill_totals bt ON bt.buyer_id = c.id AND bt.merchant_id = ?
+		INNER JOIN bill_totals bt ON bt.client_id= c.id AND bt.merchant_id = ?
 		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
 		WHERE cn.id IS NULL AND c.is_deleted = 0
 		GROUP BY c.id, c.name
@@ -670,10 +670,10 @@ func (h *handler) GetDashboard(c *gin.Context) {
 	// Active = has at least one invoice via buyer_id
 	var activeClients int
 	h.DB.QueryRow(`
-		SELECT COUNT(DISTINCT bt.buyer_id)
+		SELECT COUNT(DISTINCT bt.client_id)
 		FROM bill_totals bt
 		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		WHERE bt.merchant_id = ? AND bt.buyer_id IS NOT NULL AND cn.id IS NULL
+		WHERE bt.merchant_id = ? AND bt.client IS NOT NULL AND cn.id IS NULL
 	`, companyID).Scan(&activeClients)
 	inactiveClients := totalClients - activeClients
 	if inactiveClients < 0 {

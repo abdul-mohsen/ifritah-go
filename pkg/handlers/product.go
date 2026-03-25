@@ -169,3 +169,37 @@ func (h *handler) GetProduct(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 
 }
+
+type SearchProductRequest struct {
+	Query string `json:"query" binding:"required"`
+	Limit int32  `json:"limit"`
+}
+
+func (h *handler) SearchProducts(c *gin.Context) {
+	user := GetSessionInfo(c)
+
+	var request SearchProductRequest
+	if err := c.BindJSON(&request); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+
+	if request.Limit <= 0 || request.Limit > 50 {
+		request.Limit = 30
+	}
+
+	args := db.SearchProductParams{
+		ID:       int32(user.id),
+		CONCAT:   request.Query,
+		CONCAT_2: request.Query,
+		Limit:    request.Limit,
+	}
+
+	products, err := h.queries.SearchProduct(c.Request.Context(), args)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic("Error in query", err)
+	}
+
+	c.JSON(http.StatusOK, products)
+}

@@ -23,3 +23,14 @@ update product  set price = ?, cost_price = ?, shelf_number = ?, quantity = ? wh
 
 -- name: DeleteProduct :exec
 update product set is_deleted = TRUE where id = ?;
+
+-- name: SearchProduct :many
+SELECT p.article_id, p.price, p.quantity, p.cost_price, p.shelf_number
+FROM user
+JOIN store s ON s.company_id = user.company_id
+JOIN product p ON p.store_id = s.id
+WHERE user.id = ? AND p.is_deleted = FALSE
+  AND (CAST(p.id AS CHAR) LIKE CONCAT('%', ?, '%')
+       OR COALESCE(p.shelf_number, '') LIKE CONCAT('%', ?, '%'))
+ORDER BY p.id DESC
+LIMIT ?;

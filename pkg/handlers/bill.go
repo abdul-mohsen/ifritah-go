@@ -361,6 +361,7 @@ func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.BillProd
 			ProductID: product.ProductId,
 			Price:     product.Price,
 			Quantity:  product.Quantity,
+			PartName:  &product.PartName,
 			BillID:    billId,
 		}
 		err := qtx.AddProductToBill(c.Request.Context(), args)
@@ -454,8 +455,11 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		maintenanceCost = products[2][0].Price
 
 	}
+	var client db.Client
 
-	client, _ := h.queries.GetClientByID(c.Request.Context(), uint32(bill.ID))
+	if bill.ClientID != nil {
+		client, _ = h.queries.GetClientByID(c.Request.Context(), uint32(*bill.ClientID))
+	}
 
 	return model.Bill{
 		Id:                           bill.ID,

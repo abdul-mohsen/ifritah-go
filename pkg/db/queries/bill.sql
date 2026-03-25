@@ -91,7 +91,7 @@ user_phone_number = ?
 WHERE id = ?;
 
 -- name: AddProductToBill :exec
-insert into bill_product (name, product_id, price, quantity, bill_id) values (?, ?, ?, ?, ?);
+insert into bill_product (name, product_id, price, quantity, bill_id, part_name) values (?, ?, ?, ?, ?, ?);
 
 -- name: DeleteProductToBill :exec
 DELETE FROM bill_product where bill_id = ?;

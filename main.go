@@ -137,6 +137,16 @@ func main() {
 		authorized.POST("order", h.CreateOrder)
 		authorized.PUT("order/:id", h.UpdateOrder)
 		authorized.DELETE("order/:id", h.DeleteOrder)
+
+		// Cash Vouchers (سندات الصرف والقبض)
+		authorized.POST("cash_voucher/all", h.ListCashVouchers)
+		authorized.GET("cash_voucher/summary", h.GetCashVoucherSummary)
+		authorized.GET("cash_voucher/:id", h.GetCashVoucher)
+		authorized.POST("cash_voucher", h.CreateCashVoucher)
+		authorized.PUT("cash_voucher/:id", h.UpdateCashVoucher)
+		authorized.DELETE("cash_voucher/:id", h.DeleteCashVoucher)
+		authorized.POST("cash_voucher/:id/approve", h.ApproveCashVoucher) // manager+ only
+		authorized.POST("cash_voucher/:id/post", h.PostCashVoucher)
 	}
 
 	nonAuthGroup := router.Group(baseUrl)

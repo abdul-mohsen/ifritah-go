@@ -472,7 +472,7 @@ CREATE TABLE `bill` (
   KEY `idx_bill_merchant_state` (`merchant_id`,`state`),
   FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`),
   CONSTRAINT `fk_bill_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=420 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=446 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -510,7 +510,7 @@ CREATE TABLE `bill_product` (
   `name` varchar(255) DEFAULT NULL,
   `part_name` varchar(255) DEFAULT NULL,
   `type` tinyint GENERATED ALWAYS AS ((case when (`product_id` is not null) then 0 when (`name` = _utf8mb4'maintenance_cost') then 2 else 1 end)) STORED NOT NULL,
-  `discount` decimal(12,2) NOT NULL,
+  `discount` decimal(12,2) NOT NULL DEFAULT '0.00',
   `total_before_discount` decimal(12,2) GENERATED ALWAYS AS (round((`price` * `quantity`),2)) STORED,
   `total_before_vat` decimal(12,2) GENERATED ALWAYS AS (round((`total_before_discount` - `discount`),2)) STORED,
   `vat_total` decimal(12,2) GENERATED ALWAYS AS (round(((`total_before_vat` * `vat`) / 100),2)) STORED,
@@ -518,7 +518,7 @@ CREATE TABLE `bill_product` (
   PRIMARY KEY (`id`),
   CONSTRAINT `chk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=741 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=759 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -742,6 +742,78 @@ CREATE TABLE `carsbodies` (
   KEY `manuId_4` (`manuId`,`BodyId`,`carType`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=91787 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `cash_voucher`
+--
+
+DROP TABLE IF EXISTS `cash_voucher`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `cash_voucher` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `voucher_number` int NOT NULL COMMENT 'Sequential number per merchant, auto-generated',
+  `voucher_type` enum('disbursement','receipt') NOT NULL COMMENT 'disbursement=سند صرف, receipt=سند قبض',
+  `effective_date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `amount` decimal(12,2) NOT NULL,
+  `payment_method` enum('cash','bank_transfer') NOT NULL DEFAULT 'cash',
+  `state` int NOT NULL DEFAULT '0' COMMENT '0=draft, 1=approved, 2=posted',
+  `reference_type` varchar(30) DEFAULT NULL COMMENT 'purchase_bill, bill, expense, refund, other',
+  `reference_id` int DEFAULT NULL COMMENT 'ID of the related entity (bill.id, purchase_bill.id, etc.)',
+  `recipient_type` enum('supplier','client','employee','other') NOT NULL DEFAULT 'other',
+  `recipient_id` int DEFAULT NULL COMMENT 'FK depends on recipient_type: supplier.id, client.id, user.id, or NULL',
+  `recipient_name` varchar(255) NOT NULL COMMENT 'Denormalized name for display and search',
+  `description` text COMMENT 'Purpose/reason for the payment or receipt',
+  `note` text COMMENT 'Additional internal notes',
+  `bank_name` varchar(255) DEFAULT NULL,
+  `bank_account` varchar(50) DEFAULT NULL,
+  `transaction_reference` varchar(100) DEFAULT NULL COMMENT 'Bank transaction/transfer number',
+  `store_id` int NOT NULL,
+  `merchant_id` int NOT NULL,
+  `branch_id` int unsigned DEFAULT NULL,
+  `created_by` int NOT NULL COMMENT 'FK to user.id — who created the voucher',
+  `approved_by` int DEFAULT NULL COMMENT 'FK to user.id — who approved (NULL if draft)',
+  `approved_at` datetime DEFAULT NULL COMMENT 'Timestamp of approval',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_cv_type` (`voucher_type`),
+  KEY `idx_cv_state` (`state`),
+  KEY `idx_cv_date` (`effective_date`),
+  KEY `idx_cv_merchant_date` (`merchant_id`,`effective_date`),
+  KEY `idx_cv_merchant_type` (`merchant_id`,`voucher_type`),
+  KEY `idx_cv_recipient` (`recipient_type`,`recipient_id`),
+  KEY `idx_cv_reference` (`reference_type`,`reference_id`),
+  KEY `fk_cv_store` (`store_id`),
+  KEY `fk_cv_branch` (`branch_id`),
+  KEY `fk_cv_created_by` (`created_by`),
+  KEY `fk_cv_approved_by` (`approved_by`),
+  CONSTRAINT `fk_cv_approved_by` FOREIGN KEY (`approved_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_cv_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_cv_created_by` FOREIGN KEY (`created_by`) REFERENCES `user` (`id`) ON UPDATE CASCADE,
+  CONSTRAINT `fk_cv_store` FOREIGN KEY (`store_id`) REFERENCES `store` (`id`) ON UPDATE CASCADE,
+  CONSTRAINT `chk_cv_amount` CHECK ((`amount` > 0)),
+  CONSTRAINT `chk_cv_bank_fields` CHECK (((`payment_method` <> _utf8mb4'bank_transfer') or ((`bank_name` is not null) and (`bank_account` is not null)))),
+  CONSTRAINT `chk_cv_state` CHECK ((`state` in (0,1,2)))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Temporary view structure for view `cash_voucher_summary`
+--
+
+DROP TABLE IF EXISTS `cash_voucher_summary`;
+/*!50001 DROP VIEW IF EXISTS `cash_voucher_summary`*/;
+SET @saved_cs_client     = @@character_set_client;
+/*!50503 SET character_set_client = utf8mb4 */;
+/*!50001 CREATE VIEW `cash_voucher_summary` AS SELECT 
+ 1 AS `voucher_type`,
+ 1 AS `state`,
+ 1 AS `merchant_id`,
+ 1 AS `voucher_count`,
+ 1 AS `total_amount`,
+ 1 AS `month`*/;
+SET character_set_client = @saved_cs_client;
 
 --
 -- Table structure for table `client`
@@ -1411,7 +1483,7 @@ CREATE TABLE `purchase_bill` (
   PRIMARY KEY (`id`),
   KEY `idx_pb_merchant_date` (`merchant_id`,`effective_date`),
   KEY `idx_pb_supplier_merchant` (`supplier_id`,`merchant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=211 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=219 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1476,7 +1548,7 @@ CREATE TABLE `purchase_bill_product` (
   PRIMARY KEY (`id`),
   CONSTRAINT `chpk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chpk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=390 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=400 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1710,7 +1782,7 @@ CREATE TABLE `supplier` (
   KEY `company_id` (`company_id`),
   KEY `idx_supplier_company` (`company_id`),
   CONSTRAINT `supplier_ibfk_1` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=126 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=127 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1747,7 +1819,7 @@ CREATE TABLE `uploaded_files` (
   UNIQUE KEY `uq_file_key` (`file_key`),
   KEY `idx_uploaded_by` (`uploaded_by`),
   CONSTRAINT `fk_upload_user` FOREIGN KEY (`uploaded_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1977,6 +2049,24 @@ CREATE TABLE `vin_cache` (
 /*!50001 SET collation_connection      = @saved_col_connection */;
 
 --
+-- Final view structure for view `cash_voucher_summary`
+--
+
+/*!50001 DROP VIEW IF EXISTS `cash_voucher_summary`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8mb4 */;
+/*!50001 SET character_set_results     = utf8mb4 */;
+/*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
+/*!50001 VIEW `cash_voucher_summary` AS select `cash_voucher`.`voucher_type` AS `voucher_type`,`cash_voucher`.`state` AS `state`,`cash_voucher`.`merchant_id` AS `merchant_id`,count(0) AS `voucher_count`,sum(`cash_voucher`.`amount`) AS `total_amount`,date_format(`cash_voucher`.`effective_date`,'%Y-%m') AS `month` from `cash_voucher` group by `cash_voucher`.`voucher_type`,`cash_voucher`.`state`,`cash_voucher`.`merchant_id`,date_format(`cash_voucher`.`effective_date`,'%Y-%m') */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+
+--
 -- Final view structure for view `purchase_bill_totals`
 --
 
@@ -2003,4 +2093,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-25 18:21:54
+-- Dump completed on 2026-03-26 17:25:15

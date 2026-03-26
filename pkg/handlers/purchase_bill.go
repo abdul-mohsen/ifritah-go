@@ -70,6 +70,15 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		}
 	}
 
+	effectiveDate := time.Now()
+	if request.EffectiveDate != nil {
+		parsedTime, err := time.Parse(time.DateOnly, *request.EffectiveDate)
+		effectiveDate = parsedTime
+		if err != nil {
+			log.Panic("Error parsing date:", err)
+		}
+	}
+
 	tx, err := h.DB.Begin()
 
 	if err != nil {
@@ -81,7 +90,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	qtx := h.queries.WithTx(tx)
 
 	args := db.UpdatePurchaseBillParams{
-		EffectiveDate:  time.Now(),
+		EffectiveDate:  effectiveDate,
 		PaymentDueDate: paymentDueDate,
 		State:          request.State,
 		Discount:       0,
@@ -183,6 +192,15 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		}
 	}
 
+	effectiveDate := time.Now()
+	if request.EffectiveDate != nil {
+		parsedTime, err := time.Parse(time.DateOnly, *request.EffectiveDate)
+		effectiveDate = parsedTime
+		if err != nil {
+			log.Panic("Error parsing date:", err)
+		}
+	}
+
 	_, success1 := stringToBigFloat(request.Discount)
 	_, success2 := stringToBigFloat(request.PaidAmount)
 
@@ -202,7 +220,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	qtx := h.queries.WithTx(tx)
 
 	args := db.AddPurchaseBillParams{
-		EffectiveDate:  time.Now(),
+		EffectiveDate:  effectiveDate,
 		PaymentDueDate: paymentDueDate,
 		State:          request.State,
 		Discount:       0,

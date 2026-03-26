@@ -117,6 +117,15 @@ func (h *handler) AddBill(c *gin.Context) {
 		}
 	}
 
+	effectiveDate := time.Now()
+	if request.EffectiveDate != nil {
+		parsedTime, err := time.Parse(time.RFC3339, *request.EffectiveDate)
+		effectiveDate = parsedTime
+		if err != nil {
+			log.Panic("Error parsing date:", err)
+		}
+	}
+
 	squenceNumber := 0
 
 	if request.State > 0 {
@@ -134,7 +143,7 @@ func (h *handler) AddBill(c *gin.Context) {
 	qtx := h.queries.WithTx(tx)
 
 	args := db.CreateBillParams{
-		EffectiveDate:   time.Now(),
+		EffectiveDate:   effectiveDate,
 		PaymentDueDate:  paymentDueDate,
 		State:           int32(request.State),
 		Discount:        request.Discount.String(),

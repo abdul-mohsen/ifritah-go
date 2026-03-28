@@ -466,13 +466,17 @@ CREATE TABLE `bill` (
   `invoice_uuid` char(36) DEFAULT NULL,
   `invoice_hash` varchar(128) DEFAULT NULL,
   `branch_id` int unsigned DEFAULT NULL,
+  `payment_method` int NOT NULL DEFAULT '10' COMMENT 'ZATCA payment method: 10=Cash, 30=Credit, 42=Bank, 48=Card',
+  `deliver_date` date DEFAULT NULL COMMENT 'Expected delivery date',
   PRIMARY KEY (`id`),
   KEY `fk_bill_branch` (`branch_id`),
   KEY `idx_bill_merchant_date` (`merchant_id`,`effective_date`),
   KEY `idx_bill_merchant_state` (`merchant_id`,`state`),
+  KEY `idx_bill_payment_method` (`payment_method`),
+  KEY `idx_bill_deliver_date` (`deliver_date`),
   FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`),
   CONSTRAINT `fk_bill_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=452 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=469 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -518,7 +522,7 @@ CREATE TABLE `bill_product` (
   PRIMARY KEY (`id`),
   CONSTRAINT `chk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=769 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=786 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1480,10 +1484,14 @@ CREATE TABLE `purchase_bill` (
   `store_id` int NOT NULL,
   `merchant_id` int NOT NULL,
   `pdf_link` varchar(255) DEFAULT NULL COMMENT 'file_key of the mandatory bill PDF',
+  `payment_method` int NOT NULL DEFAULT '10' COMMENT 'ZATCA payment method: 10=Cash, 30=Credit, 42=Bank, 48=Card',
+  `deliver_date` date DEFAULT NULL COMMENT 'Expected delivery date',
   PRIMARY KEY (`id`),
   KEY `idx_pb_merchant_date` (`merchant_id`,`effective_date`),
-  KEY `idx_pb_supplier_merchant` (`supplier_id`,`merchant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=224 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  KEY `idx_pb_supplier_merchant` (`supplier_id`,`merchant_id`),
+  KEY `idx_pb_payment_method` (`payment_method`),
+  KEY `idx_pb_deliver_date` (`deliver_date`)
+) ENGINE=InnoDB AUTO_INCREMENT=253 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1548,7 +1556,7 @@ CREATE TABLE `purchase_bill_product` (
   PRIMARY KEY (`id`),
   CONSTRAINT `chpk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chpk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=407 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=440 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1672,7 +1680,7 @@ CREATE TABLE `settings` (
   UNIQUE KEY `uq_settings_key` (`setting_key`),
   KEY `fk_settings_user` (`updated_by`),
   CONSTRAINT `fk_settings_user` FOREIGN KEY (`updated_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=1336 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1798 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1781,12 +1789,13 @@ CREATE TABLE `supplier` (
   `is_postpaid` tinyint(1) NOT NULL DEFAULT '0',
   `credit_limit` decimal(12,2) NOT NULL DEFAULT '0.00',
   `payment_terms_days` int NOT NULL DEFAULT '0',
+  `preferred_payment_method` int NOT NULL DEFAULT '10' COMMENT 'Default ZATCA payment method for this supplier',
   PRIMARY KEY (`id`),
   KEY `company_id` (`company_id`),
   KEY `idx_supplier_company` (`company_id`),
   KEY `idx_supplier_postpaid` (`is_postpaid`),
   CONSTRAINT `supplier_ibfk_1` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=132 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=149 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1823,7 +1832,7 @@ CREATE TABLE `uploaded_files` (
   UNIQUE KEY `uq_file_key` (`file_key`),
   KEY `idx_uploaded_by` (`uploaded_by`),
   CONSTRAINT `fk_upload_user` FOREIGN KEY (`uploaded_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=55 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2097,4 +2106,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-28  6:15:57
+-- Dump completed on 2026-03-28 19:05:29

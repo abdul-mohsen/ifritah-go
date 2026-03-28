@@ -284,8 +284,9 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	}
 	if err := h.SavePurchaseBillAttachments(h.DB, id, *request.PDFLink, attachment); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		// TODO @ssda review this to force pdf upload now it is blocked by the ui
+		// c.AbortWithError(http.StatusInternalServerError, err)
+		// log.Panic(err)
 	}
 
 	c.Status(http.StatusCreated)

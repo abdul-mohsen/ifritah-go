@@ -11,12 +11,15 @@ import (
 )
 
 type SupplierRequest struct {
-	Name        *string `json:"name"`
-	Address     *string `json:"address"`
-	PhoneNumber *string `json:"phone_number"`
-	Number      *string `json:"number"`
-	VatNumber   *string `json:"vat_number"`
-	BankAccount *string `json:"bank_account"`
+	Name             *string `json:"name"`
+	Address          *string `json:"address"`
+	PhoneNumber      *string `json:"phone_number"`
+	Number           *string `json:"number"`
+	VatNumber        *string `json:"vat_number"`
+	BankAccount      *string `json:"bank_account"`
+	IsPostPaid       bool    `json:"is_postpaid"`
+	CreditLimit      float64 `json:"credit_limit"`
+	PaymentTermsDays int     `json:"payment_terms_days"`
 }
 
 func (h *handler) GetAllSupplier(c *gin.Context) {
@@ -87,7 +90,7 @@ func (h *handler) AddSupplier(c *gin.Context) {
 	}
 
 	if _, err := h.DB.Exec(
-		"INSERT INTO supplier (company_id, name, address, phone_number, number, vat_number, bank_account) VALUES (?, ?, ?, ?, ?, ?, ?)", id, request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber, request.BankAccount); err != nil {
+		"INSERT INTO supplier (company_id, name, address, phone_number, number, vat_number, bank_account, is_postpaid, credit_limit, payment_terms_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", id, request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber, request.BankAccount, request.IsPostPaid, request.CreditLimit, request.PaymentTermsDays); err != nil {
 		log.Panic(err)
 	}
 

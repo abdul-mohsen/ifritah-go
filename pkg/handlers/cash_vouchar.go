@@ -13,7 +13,7 @@ import (
 )
 
 // ============================================================================
-// Cash Voucher CRUD + Workflow (سند صرف / سند قبض)
+// Cash Voucher CRUD + Workflow (سند صرف / سند قبض / سند صرف صندوق)
 // ============================================================================
 //
 // Endpoints:
@@ -138,7 +138,7 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 
 	// Filter by voucher_type
 	if req.VoucherType != "" {
-		if req.VoucherType != "disbursement" && req.VoucherType != "receipt" {
+		if req.VoucherType != "disbursement" && req.VoucherType != "receipt" && req.VoucherType != "cash_box" {
 			c.JSON(http.StatusBadRequest, gin.H{"detail": "نوع السند غير صالح"})
 			return
 		}
@@ -648,8 +648,8 @@ func validateCashVoucherRequest(req *cashVoucherCreateRequest) error {
 	}
 
 	// Voucher type
-	if req.VoucherType != "disbursement" && req.VoucherType != "receipt" {
-		return &validationError{"نوع السند يجب أن يكون سند صرف أو سند قبض"}
+	if req.VoucherType != "disbursement" && req.VoucherType != "receipt" && req.VoucherType != "cash_box" {
+		return &validationError{"نوع السند يجب أن يكون سند صرف أو سند قبض أو سند صرف صندوق"}
 	}
 
 	// Recipient type

@@ -694,18 +694,8 @@ func (e *validationError) Error() string {
 
 // getMerchantID extracts the merchant_id from the JWT context.
 // The JWT middleware sets this from the token claims.
-func getMerchantID(c *gin.Context) int {
-	if id, exists := c.Get("merchant_id"); exists {
-		switch v := id.(type) {
-		case int:
-			return v
-		case float64:
-			return int(v)
-		case int64:
-			return int(v)
-		}
-	}
-	return 0
+func getMerchantID(c *gin.Context) int64 {
+	return GetSessionInfo(c).id
 }
 
 // getUserID extracts the user_id from the JWT context.

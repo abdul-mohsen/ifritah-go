@@ -547,6 +547,9 @@ SET @saved_cs_client     = @@character_set_client;
  1 AS `userName`,
  1 AS `client_id`,
  1 AS `user_phone_number`,
+ 1 AS `payment_method`,
+ 1 AS `branch_id`,
+ 1 AS `deliver_date`,
  1 AS `total_before_vat`,
  1 AS `total_vat`,
  1 AS `total`,
@@ -1580,6 +1583,8 @@ SET @saved_cs_client     = @@character_set_client;
  1 AS `store_id`,
  1 AS `merchant_id`,
  1 AS `pdf_link`,
+ 1 AS `payment_method`,
+ 1 AS `deliver_date`,
  1 AS `total_before_vat`,
  1 AS `total_vat`,
  1 AS `total`*/;
@@ -2056,7 +2061,7 @@ CREATE TABLE `vin_cache` (
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
-/*!50001 VIEW `bill_totals` AS select `b`.`id` AS `id`,`b`.`effective_date` AS `effective_date`,`b`.`payment_due_date` AS `payment_due_date`,`b`.`state` AS `state`,`b`.`discount` AS `discount`,`b`.`store_id` AS `store_id`,`b`.`sequence_number` AS `sequence_number`,`b`.`merchant_id` AS `merchant_id`,`b`.`maintenance_cost` AS `maintenance_cost`,`b`.`note` AS `note`,`b`.`userName` AS `userName`,`b`.`client_id` AS `client_id`,`b`.`user_phone_number` AS `user_phone_number`,round(coalesce(sum(`bp`.`total_before_vat`),0),2) AS `total_before_vat`,round(coalesce(sum(`bp`.`vat_total`),0),2) AS `total_vat`,round(coalesce(sum(`bp`.`total_including_vat`),0),2) AS `total`,`b`.`qr_code` AS `qr_code` from (`bill` `b` left join `bill_product` `bp` on((`b`.`id` = `bp`.`bill_id`))) group by `b`.`id` */;
+/*!50001 VIEW `bill_totals` AS select `b`.`id` AS `id`,`b`.`effective_date` AS `effective_date`,`b`.`payment_due_date` AS `payment_due_date`,`b`.`state` AS `state`,`b`.`discount` AS `discount`,`b`.`store_id` AS `store_id`,`b`.`sequence_number` AS `sequence_number`,`b`.`merchant_id` AS `merchant_id`,`b`.`maintenance_cost` AS `maintenance_cost`,`b`.`note` AS `note`,`b`.`userName` AS `userName`,`b`.`client_id` AS `client_id`,`b`.`user_phone_number` AS `user_phone_number`,`b`.`payment_method` AS `payment_method`,`b`.`branch_id` AS `branch_id`,`b`.`deliver_date` AS `deliver_date`,round(coalesce(sum(`bp`.`total_before_vat`),0),2) AS `total_before_vat`,round(coalesce(sum(`bp`.`vat_total`),0),2) AS `total_vat`,round(coalesce(sum(`bp`.`total_including_vat`),0),2) AS `total`,`b`.`qr_code` AS `qr_code` from (`bill` `b` left join `bill_product` `bp` on((`b`.`id` = `bp`.`bill_id`))) group by `b`.`id` */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
@@ -2092,7 +2097,7 @@ CREATE TABLE `vin_cache` (
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
-/*!50001 VIEW `purchase_bill_totals` AS select `b`.`id` AS `id`,`b`.`effective_date` AS `effective_date`,`b`.`payment_due_date` AS `payment_due_date`,`b`.`state` AS `state`,`b`.`discount` AS `discount`,`b`.`supplier_id` AS `supplier_id`,`b`.`sequence_number` AS `sequence_number`,`b`.`supplier_sequence_number` AS `supplier_sequence_number`,`b`.`vat_sequence_number` AS `vat_sequence_number`,`b`.`store_id` AS `store_id`,`b`.`merchant_id` AS `merchant_id`,`b`.`pdf_link` AS `pdf_link`,round(coalesce(sum(`bp`.`total_before_vat`),0),2) AS `total_before_vat`,round(coalesce(sum(`bp`.`vat_total`),0),2) AS `total_vat`,round(coalesce(sum(`bp`.`total_including_vat`),0),2) AS `total` from (`purchase_bill` `b` left join `purchase_bill_product` `bp` on((`b`.`id` = `bp`.`bill_id`))) group by `b`.`id` */;
+/*!50001 VIEW `purchase_bill_totals` AS select `b`.`id` AS `id`,`b`.`effective_date` AS `effective_date`,`b`.`payment_due_date` AS `payment_due_date`,`b`.`state` AS `state`,`b`.`discount` AS `discount`,`b`.`supplier_id` AS `supplier_id`,`b`.`sequence_number` AS `sequence_number`,`b`.`supplier_sequence_number` AS `supplier_sequence_number`,`b`.`vat_sequence_number` AS `vat_sequence_number`,`b`.`store_id` AS `store_id`,`b`.`merchant_id` AS `merchant_id`,`b`.`pdf_link` AS `pdf_link`,`b`.`payment_method` AS `payment_method`,`b`.`deliver_date` AS `deliver_date`,round(coalesce(sum(`bp`.`total_before_vat`),0),2) AS `total_before_vat`,round(coalesce(sum(`bp`.`vat_total`),0),2) AS `total_vat`,round(coalesce(sum(`bp`.`total_including_vat`),0),2) AS `total` from (`purchase_bill` `b` left join `purchase_bill_product` `bp` on((`b`.`id` = `bp`.`bill_id`))) group by `b`.`id` */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
@@ -2106,4 +2111,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-28 19:05:29
+-- Dump completed on 2026-03-29  4:38:51

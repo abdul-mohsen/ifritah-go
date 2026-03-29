@@ -33,13 +33,13 @@ INSERT INTO cash_voucher (
   state, reference_type, reference_id,
   recipient_type, recipient_id, recipient_name,
   description, note, bank_name, bank_account, transaction_reference,
-  store_id, merchant_id, branch_id, created_by
+  store_id, merchant_id, branch_id, created_by, approved_by
 ) VALUES (
   ?, ?, ?, ?, ?,
   0, ?, ?,
   ?, ?, ?,
   ?, ?, ?, ?, ?,
-  ?, ?, ?, ?
+  ?, ?, ?, ?, ?
 );
 
 -- name: UpdateCashVoucher :exec

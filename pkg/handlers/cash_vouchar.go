@@ -326,14 +326,14 @@ func (h *handler) CreateCashVoucher(c *gin.Context) {
 			state, reference_type, reference_id,
 			recipient_type, recipient_id, recipient_name,
 			description, note, bank_name, bank_account, transaction_reference,
-			store_id, merchant_id, created_by, branch_id, created_by, approved_by
-		) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			store_id, merchant_id, created_by, branch_id, approved_by
+		) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		nextNumber, req.VoucherType, effectiveDate, req.Amount, paymentMethod,
 		req.ReferenceType, req.ReferenceID,
 		req.RecipientType, req.RecipientID, req.RecipientName,
 		req.Description, req.Note, req.BankName, req.BankAccount, req.TransactionReference,
-		req.StoreID, merchantID, userID, req.BranchID, merchantID, merchantID,
+		req.StoreID, merchantID, userID, req.BranchID, merchantID,
 	)
 	if err != nil {
 		log.Printf("ERROR CreateCashVoucher insert: %v", err)

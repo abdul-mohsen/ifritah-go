@@ -24,7 +24,7 @@ type PurchaseBill struct {
 	TotalVAT               string                   `json:"total_vat"`
 	Total                  string                   `json:"total"`
 	Attachments            []string                 `json:"attachments" binding:"required"`
-	PDFLink                *string                  `json:"pdf_link" binding:"required"`
+	PDFLink                *string                  `json:"pdf_link"`
 }
 type AddPurchaseBillRequest struct {
 	StoreId                int32                 `json:"store_id" binding:"required"`

@@ -14,6 +14,7 @@ package handlers
 // ============================================================================
 
 import (
+	"database/sql"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
@@ -155,6 +156,9 @@ func (h *handler) AddBill(c *gin.Context) {
 		Username:        request.UserName,
 		ClientID:        request.ClientID,
 		UserPhoneNumber: request.UserPhoneNumber,
+		PaymentMethod:   request.PaymentMethod,
+		DeliverDate:     request.DeliverDate,
+		BranchID:        sql.NullInt32{Int32: request.BranchID, Valid: true},
 	}
 
 	res, err := qtx.CreateBill(c.Request.Context(), args)
@@ -288,6 +292,9 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		ClientID:        request.ClientID,
 		UserPhoneNumber: request.UserPhoneNumber,
 		ID:              int32(billID),
+		PaymentMethod:   request.PaymentMethod,
+		DeliverDate:     request.DeliverDate,
+		BranchID:        sql.NullInt32{Int32: request.BranchID, Valid: true},
 	}
 
 	err = qtx.UpdateBillByID(c.Request.Context(), args)
@@ -470,6 +477,11 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		client, _ = h.queries.GetClientByID(c.Request.Context(), uint32(*bill.ClientID))
 	}
 
+	var branchID *int32 = nil
+	if bill.BranchID.Valid {
+		branchID = &bill.BranchID.Int32
+	}
+
 	return model.Bill{
 		Id:                           bill.ID,
 		EffectiveDate:                bill.EffectiveDate,
@@ -498,6 +510,9 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		CommercialRegistrationNumber: CommercialRegistrationNumber,
 		CreditID:                     bill.CreditID,
 		Client:                       &client,
+		PaymentMethod:                bill.PaymentMethod,
+		DeliverDate:                  bill.DeliverDate,
+		BranchID:                     branchID,
 	}, xProducts
 }
 

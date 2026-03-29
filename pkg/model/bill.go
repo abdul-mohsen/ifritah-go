@@ -42,13 +42,15 @@ type AddBillRequest struct {
 	Discount        decimal.Decimal `json:"discount" binding:"required"`
 	PaidAmount      decimal.Decimal `json:"paidAmount" `
 	MaintenanceCost decimal.Decimal `json:"maintenance_cost" binding:"required"`
-	PaymentMethod   int8            `json:"payment_method"`
 	UserName        *string         `json:"user_name"`
 	UserPhoneNumber *string         `json:"user_phone_number"`
 	Note            *string         `json:"note"`
 	Products        []BillProduct   `json:"products" binding:"required,dive"`
 	ManualProducts  []BillProduct   `json:"manual_products" binding:"required,dive"`
 	ClientID        *int32          `json:"client_id" `
+	PaymentMethod   int32           `json:"payment_method" binding:"required"`
+	BranchID        int32           `json:"branch_id" binding:"required"`
+	DeliverDate     *time.Time      `json:"deliver_date"`
 }
 
 type BillProduct struct {
@@ -122,6 +124,9 @@ type Bill struct {
 	TotalVAT                     string                `json:"total_vat"`
 	Total                        string                `json:"total"`
 	Client                       *db.Client            `json:"client"`
+	PaymentMethod                int32                 `json:"payment_method"`
+	BranchID                     *int32                `json:"branch_id"`
+	DeliverDate                  *time.Time            `json:"deliver_date"`
 	CreditID                     *int32
 	CommercialRegistrationNumber string
 }

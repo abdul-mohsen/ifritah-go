@@ -99,6 +99,8 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		SupplierID:     request.SupplierId,
 		SequenceNumber: request.SupplierSequenceNumber,
 		ID:             int32(id),
+		PaymentMethod:  request.PaymentMethod,
+		DeliverDate:    request.DeliverDate,
 	}
 
 	err = qtx.UpdatePurchaseBill(c.Request.Context(), args)
@@ -115,7 +117,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 				"detail": err.Error(),
 				"type":   "stock_error",
 			})
-			return
+			log.Panic(err)
 		}
 	}
 
@@ -229,7 +231,10 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		SupplierID:     request.SupplierId,
 		SequenceNumber: request.SupplierSequenceNumber,
 		PdfLink:        request.PDFLink,
+		PaymentMethod:  request.PaymentMethod,
+		DeliverDate:    request.DeliverDate,
 	}
+
 	res, err := qtx.AddPurchaseBill(c.Request.Context(), args)
 	if err != nil {
 		c.Status(http.StatusBadRequest)

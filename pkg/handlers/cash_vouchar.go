@@ -286,8 +286,8 @@ func (h *handler) CreateCashVoucher(c *gin.Context) {
 
 	// Verify store exists
 	var storeExists int
-	h.DB.QueryRow("SELECT COUNT(*) FROM store WHERE id = ? AND merchant_id = ?",
-		req.StoreID, merchantID).Scan(&storeExists)
+	h.DB.QueryRow("SELECT COUNT(*) FROM store WHERE id = ?",
+		req.StoreID).Scan(&storeExists)
 	if storeExists == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "المخزن غير موجود"})
 		return

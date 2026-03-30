@@ -429,6 +429,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 
 		product := model.BillProductResponse{
 			Name:           name,
+			PartName:       *product.PartName,
 			Quantity:       product.Quantity.Round(1).String(),
 			Price:          product.Price.Round(2).String(),
 			Discount:       "0.0",

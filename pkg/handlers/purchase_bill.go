@@ -42,7 +42,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 	request := model.AddPurchaseBillRequest{
-		State:         1,
+		State:         3,
 		PaymentMethod: 0,
 		PaidAmount:    "0.0",
 	}

@@ -19,10 +19,11 @@ type SupplierRequest struct {
 	BankAccount            *string `json:"bank_account"`
 	IsPostPaid             bool    `json:"is_postpaid"`
 	CreditLimit            string  `json:"credit_limit"`
-	PaymentTermsDays       int     `json:"payment_terms_days"`
+	PaymentTermsDays       int32   `json:"payment_terms_days"`
+	PreferredPaymentMethod int32   `json:"preferred_payment_method"`
+	CommercialRegistration *string `json:"commercial_registration"`
 	Email                  string  `json:"email"`
 	CRN                    string  `json:"crn"`
-	PreferredPaymentMethod int     `json:"preferred_payment_method"`
 }
 
 func (h *handler) GetAllSupplier(c *gin.Context) {
@@ -95,16 +96,18 @@ func (h *handler) AddSupplier(c *gin.Context) {
 
 	args :=
 		db.AddSupplierParams{
-			CompanyID:        int32(companyID),
-			Name:             request.Name,
-			Address:          request.Address,
-			PhoneNumber:      request.PhoneNumber,
-			Number:           request.Number,
-			VatNumber:        request.VatNumber,
-			BankAccount:      request.BankAccount,
-			IsPostpaid:       request.IsPostPaid,
-			CreditLimit:      request.CreditLimit,
-			PaymentTermsDays: int32(request.PaymentTermsDays),
+			CompanyID:              int32(companyID),
+			Name:                   request.Name,
+			Address:                request.Address,
+			PhoneNumber:            request.PhoneNumber,
+			Number:                 request.Number,
+			VatNumber:              request.VatNumber,
+			BankAccount:            request.BankAccount,
+			IsPostpaid:             request.IsPostPaid,
+			CreditLimit:            request.CreditLimit,
+			PaymentTermsDays:       request.PaymentTermsDays,
+			CommercialRegistration: request.CommercialRegistration,
+			PreferredPaymentMethod: request.PreferredPaymentMethod,
 		}
 
 	res, err := h.queries.AddSupplier(c.Request.Context(), args)
@@ -144,14 +147,18 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 	row := db.UpdateSupplierParams{
-		Name:        request.Name,
-		Address:     request.Address,
-		PhoneNumber: request.PhoneNumber,
-		Number:      request.Number,
-		VatNumber:   request.VatNumber,
-		BankAccount: request.BankAccount,
-		CompanyID:   int32(companyId),
-		ID:          res,
+		Name:                   request.Name,
+		Address:                request.Address,
+		PhoneNumber:            request.PhoneNumber,
+		Number:                 request.Number,
+		VatNumber:              request.VatNumber,
+		BankAccount:            request.BankAccount,
+		IsPostpaid:             request.IsPostPaid,
+		CreditLimit:            request.CreditLimit,
+		PaymentTermsDays:       request.PaymentTermsDays,
+		CommercialRegistration: request.CommercialRegistration,
+		PreferredPaymentMethod: request.PreferredPaymentMethod,
+		ID:                     res,
 	}
 
 	h.queries.UpdateSupplier(c.Request.Context(), row)

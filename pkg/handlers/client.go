@@ -57,6 +57,7 @@ type CreateClientRequest struct {
 	Phone       *string `json:"phone" binding:"required"`
 	Address     *string `json:"address" binding:"required"`
 	VatNumber   string  `json:"vat_number" binding:"required"`
+	Number      *string `json:"number"`
 }
 
 func (h *handler) CreateClient(c *gin.Context) {
@@ -72,6 +73,7 @@ func (h *handler) CreateClient(c *gin.Context) {
 		Address:     request.Address,
 		Phone:       request.Phone,
 		VatNumber:   request.VatNumber,
+		Number:      request.Number,
 	}
 	err := h.queries.CreateClient(c.Request.Context(), query)
 	if err != nil {
@@ -107,6 +109,7 @@ func (h *handler) UpdateClient(c *gin.Context) {
 		Phone:       request.Phone,
 		VatNumber:   request.VatNumber,
 		ID:          uint32(id),
+		Number:      request.Number,
 	}
 	err = h.queries.UpdateClient(c.Request.Context(), query)
 	if err != nil {

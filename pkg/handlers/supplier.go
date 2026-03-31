@@ -11,15 +11,18 @@ import (
 )
 
 type SupplierRequest struct {
-	Name             *string `json:"name"`
-	Address          *string `json:"address"`
-	PhoneNumber      *string `json:"phone_number"`
-	Number           *string `json:"number"`
-	VatNumber        *string `json:"vat_number"`
-	BankAccount      *string `json:"bank_account"`
-	IsPostPaid       bool    `json:"is_postpaid"`
-	CreditLimit      string  `json:"credit_limit"`
-	PaymentTermsDays int     `json:"payment_terms_days"`
+	Name                   *string `json:"name"`
+	Address                *string `json:"address"`
+	PhoneNumber            *string `json:"phone_number"`
+	Number                 *string `json:"number"`
+	VatNumber              *string `json:"vat_number"`
+	BankAccount            *string `json:"bank_account"`
+	IsPostPaid             bool    `json:"is_postpaid"`
+	CreditLimit            string  `json:"credit_limit"`
+	PaymentTermsDays       int     `json:"payment_terms_days"`
+	Email                  string  `json:"email"`
+	CRN                    string  `json:"crn"`
+	PreferredPaymentMethod int     `json:"preferred_payment_method"`
 }
 
 func (h *handler) GetAllSupplier(c *gin.Context) {
@@ -104,11 +107,20 @@ func (h *handler) AddSupplier(c *gin.Context) {
 			PaymentTermsDays: int32(request.PaymentTermsDays),
 		}
 
-	if err := h.queries.AddSupplier(c.Request.Context(), args); err != nil {
+	res, err := h.queries.AddSupplier(c.Request.Context(), args)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)
 	}
 
-	c.Status(http.StatusCreated)
+	supplierID, err := res.LastInsertId()
+
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"id": supplierID})
 
 }
 

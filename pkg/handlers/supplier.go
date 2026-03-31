@@ -18,7 +18,7 @@ type SupplierRequest struct {
 	VatNumber        *string `json:"vat_number"`
 	BankAccount      *string `json:"bank_account"`
 	IsPostPaid       bool    `json:"is_postpaid"`
-	CreditLimit      float64 `json:"credit_limit"`
+	CreditLimit      string  `json:"credit_limit"`
 	PaymentTermsDays int     `json:"payment_terms_days"`
 }
 
@@ -78,6 +78,7 @@ func (h *handler) GetSupplier(c *gin.Context) {
 func (h *handler) AddSupplier(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
+	companyID := h.getUserCompany(c)
 
 	var id int
 	if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&id); err != nil {
@@ -89,8 +90,21 @@ func (h *handler) AddSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	if _, err := h.DB.Exec(
-		"INSERT INTO supplier (company_id, name, address, phone_number, number, vat_number, bank_account, is_postpaid, credit_limit, payment_terms_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", id, request.Name, request.Address, request.PhoneNumber, request.Number, request.VatNumber, request.BankAccount, request.IsPostPaid, request.CreditLimit, request.PaymentTermsDays); err != nil {
+	args :=
+		db.AddSupplierParams{
+			CompanyID:        int32(companyID),
+			Name:             request.Name,
+			Address:          request.Address,
+			PhoneNumber:      request.PhoneNumber,
+			Number:           request.Number,
+			VatNumber:        request.VatNumber,
+			BankAccount:      request.BankAccount,
+			IsPostpaid:       request.IsPostPaid,
+			CreditLimit:      request.CreditLimit,
+			PaymentTermsDays: int32(request.PaymentTermsDays),
+		}
+
+	if err := h.queries.AddSupplier(c.Request.Context(), args); err != nil {
 		log.Panic(err)
 	}
 

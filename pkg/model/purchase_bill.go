@@ -33,7 +33,7 @@ type AddPurchaseBillRequest struct {
 	PaymentDueDate         *string               `json:"payment_due_date" `
 	PaymentDate            *string               `json:"payment_date" `
 	Discount               string                `json:"discount"`
-	PaidAmount             string                `json:"paidAmount" `
+	PaidAmount             string                `json:"paid_amount" `
 	Products               []PurchaseBillProduct `json:"products" binding:"required,dive"`
 	ManualProducts         []PurchaseBillProduct `json:"manual_products" binding:"required,dive"`
 	SupplierId             int32                 `json:"supplier_id" binding:"required"`

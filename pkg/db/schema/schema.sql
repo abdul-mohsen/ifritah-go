@@ -837,6 +837,7 @@ CREATE TABLE `client` (
   `email` varchar(255) DEFAULT NULL,
   `phone` varchar(20) DEFAULT NULL,
   `address` varchar(500) DEFAULT NULL,
+  `short_address` varchar(200) DEFAULT NULL,
   `street` varchar(255) DEFAULT NULL,
   `building` varchar(50) DEFAULT NULL,
   `district` varchar(255) DEFAULT NULL,
@@ -848,11 +849,17 @@ CREATE TABLE `client` (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `vat_number` varchar(15) NOT NULL,
+  `commercial_registration` varchar(10) DEFAULT NULL,
   `is_deleted` tinyint(1) NOT NULL DEFAULT '0',
+  `bank_account` varchar(50) DEFAULT NULL,
+  `preferred_payment_method` tinyint NOT NULL DEFAULT '10' COMMENT '10=cash, 20=bank, 30=credit',
+  `credit_limit` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `payment_terms_days` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_vat_number` (`vat_number`),
-  UNIQUE KEY `uq_email` (`email`)
-) ENGINE=InnoDB AUTO_INCREMENT=104 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  UNIQUE KEY `uq_email` (`email`),
+  KEY `idx_supplier_payment_method` (`preferred_payment_method`)
+) ENGINE=InnoDB AUTO_INCREMENT=111 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1805,7 +1812,7 @@ CREATE TABLE `supplier` (
   KEY `idx_supplier_postpaid` (`is_postpaid`),
   KEY `idx_supplier_payment_method` (`preferred_payment_method`),
   CONSTRAINT `supplier_ibfk_1` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=214 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=216 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2116,4 +2123,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-01  7:37:46
+-- Dump completed on 2026-04-01 19:08:28

@@ -18,7 +18,7 @@ type SupplierRequest struct {
 	VatNumber              *string `json:"vat_number"`
 	BankAccount            *string `json:"bank_account"`
 	IsPostPaid             bool    `json:"is_postpaid"`
-	CreditLimit            string  `json:"credit_limit"`
+	CreditLimit            *string `json:"credit_limit"`
 	PaymentTermsDays       int32   `json:"payment_terms_days"`
 	PreferredPaymentMethod int32   `json:"preferred_payment_method"`
 	CommercialRegistration *string `json:"commercial_registration"`
@@ -95,6 +95,11 @@ func (h *handler) AddSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	cl := "0.0"
+	if request.CreditLimit != nil {
+		cl = *request.CreditLimit
+	}
+
 	args :=
 		db.AddSupplierParams{
 			CompanyID:              int32(companyID),
@@ -105,7 +110,7 @@ func (h *handler) AddSupplier(c *gin.Context) {
 			VatNumber:              request.VatNumber,
 			BankAccount:            request.BankAccount,
 			IsPostpaid:             request.IsPostPaid,
-			CreditLimit:            request.CreditLimit,
+			CreditLimit:            cl,
 			PaymentTermsDays:       request.PaymentTermsDays,
 			CommercialRegistration: request.CommercialRegistration,
 			PreferredPaymentMethod: request.PreferredPaymentMethod,
@@ -148,6 +153,12 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
+
+	cl := "0.0"
+	if request.CreditLimit != nil {
+		cl = *request.CreditLimit
+	}
+
 	row := db.UpdateSupplierParams{
 		Name:                   request.Name,
 		Address:                request.Address,
@@ -156,7 +167,7 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		VatNumber:              request.VatNumber,
 		BankAccount:            request.BankAccount,
 		IsPostpaid:             request.IsPostPaid,
-		CreditLimit:            request.CreditLimit,
+		CreditLimit:            cl,
 		PaymentTermsDays:       request.PaymentTermsDays,
 		CommercialRegistration: request.CommercialRegistration,
 		PreferredPaymentMethod: request.PreferredPaymentMethod,
@@ -164,7 +175,10 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		ShortAddress:           request.ShortAddress,
 	}
 
-	h.queries.UpdateSupplier(c.Request.Context(), row)
+	if err := h.queries.UpdateSupplier(c.Request.Context(), row); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		log.Panic(err)
+	}
 
 	c.Status(http.StatusOK)
 }

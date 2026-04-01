@@ -22,9 +22,9 @@ type SupplierRequest struct {
 	PaymentTermsDays       int32   `json:"payment_terms_days"`
 	PreferredPaymentMethod int32   `json:"preferred_payment_method"`
 	CommercialRegistration *string `json:"commercial_registration"`
-	Email                  string  `json:"email"`
 	CRN                    string  `json:"crn"`
 	ShortAddress           *string `json:"short_address"`
+	Email                  *string `json:"email"`
 }
 
 func (h *handler) GetAllSupplier(c *gin.Context) {
@@ -115,6 +115,7 @@ func (h *handler) AddSupplier(c *gin.Context) {
 			CommercialRegistration: request.CommercialRegistration,
 			PreferredPaymentMethod: request.PreferredPaymentMethod,
 			ShortAddress:           request.ShortAddress,
+			Email:                  request.Email,
 		}
 
 	res, err := h.queries.AddSupplier(c.Request.Context(), args)
@@ -173,6 +174,7 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		PreferredPaymentMethod: request.PreferredPaymentMethod,
 		ID:                     res,
 		ShortAddress:           request.ShortAddress,
+		Email:                  request.Email,
 	}
 
 	if err := h.queries.UpdateSupplier(c.Request.Context(), row); err != nil {

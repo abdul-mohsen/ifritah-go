@@ -51,13 +51,19 @@ func (h *handler) GetAllClient(c *gin.Context) {
 }
 
 type CreateClientRequest struct {
-	Name        string  `json:"name" binding:"required"`
-	CompanyName *string `json:"company_name" binding:"required"`
-	Email       *string `json:"email" binding:"required"`
-	Phone       *string `json:"phone" binding:"required"`
-	Address     *string `json:"address" binding:"required"`
-	VatNumber   string  `json:"vat_number" binding:"required"`
-	Number      *string `json:"number"`
+	Name                   string  `json:"name" binding:"required"`
+	CompanyName            *string `json:"company_name" binding:"required"`
+	Email                  *string `json:"email" binding:"required"`
+	Phone                  *string `json:"phone" binding:"required"`
+	Address                *string `json:"address" binding:"required"`
+	VatNumber              string  `json:"vat_number" binding:"required"`
+	Number                 *string `json:"number"`
+	BankAccount            *string `json:"bank_account"`
+	PreferredPaymentMethod int8    `json:"preferred_payment_method"`
+	CreditLimit            string  `json:"credit_limit"`
+	PaymentTermsDays       int32   `json:"payment_terms_days"`
+	ShortAddress           *string `json:"short_address"`
+	CommercialRegistration *string `json:"commercial_registration"`
 }
 
 func (h *handler) CreateClient(c *gin.Context) {
@@ -67,14 +73,21 @@ func (h *handler) CreateClient(c *gin.Context) {
 		log.Panic(err)
 	}
 	query := db.CreateClientParams{
-		Name:        request.Name,
-		CompanyName: request.CompanyName,
-		Email:       request.Email,
-		Address:     request.Address,
-		Phone:       request.Phone,
-		VatNumber:   request.VatNumber,
-		Number:      request.Number,
+		Name:                   request.Name,
+		CompanyName:            request.CompanyName,
+		Email:                  request.Email,
+		Address:                request.Address,
+		Phone:                  request.Phone,
+		VatNumber:              request.VatNumber,
+		Number:                 request.Number,
+		BankAccount:            request.BankAccount,
+		PreferredPaymentMethod: request.PreferredPaymentMethod,
+		CreditLimit:            request.CreditLimit,
+		PaymentTermsDays:       request.PaymentTermsDays,
+		ShortAddress:           request.ShortAddress,
+		CommercialRegistration: request.CommercialRegistration,
 	}
+
 	err := h.queries.CreateClient(c.Request.Context(), query)
 	if err != nil {
 		if IsDuplicate(err) {
@@ -102,14 +115,20 @@ func (h *handler) UpdateClient(c *gin.Context) {
 	}
 
 	query := db.UpdateClientParams{
-		Name:        request.Name,
-		CompanyName: request.CompanyName,
-		Email:       request.Email,
-		Address:     request.Address,
-		Phone:       request.Phone,
-		VatNumber:   request.VatNumber,
-		ID:          uint32(id),
-		Number:      request.Number,
+		Name:                   request.Name,
+		CompanyName:            request.CompanyName,
+		Email:                  request.Email,
+		Address:                request.Address,
+		Phone:                  request.Phone,
+		VatNumber:              request.VatNumber,
+		ID:                     uint32(id),
+		Number:                 request.Number,
+		BankAccount:            request.BankAccount,
+		PreferredPaymentMethod: request.PreferredPaymentMethod,
+		CreditLimit:            request.CreditLimit,
+		PaymentTermsDays:       request.PaymentTermsDays,
+		ShortAddress:           request.ShortAddress,
+		CommercialRegistration: request.CommercialRegistration,
 	}
 	err = h.queries.UpdateClient(c.Request.Context(), query)
 	if err != nil {

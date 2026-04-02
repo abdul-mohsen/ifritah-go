@@ -98,6 +98,8 @@ func (h *handler) GetCreditBillPDF(c *gin.Context) {
 
 		invoice := b2cInvoice(true, models.PaperThermal, bill, products).
 			WithType(models.InvoiceTypeB2CCredit).
+			WithNoteReason(*bill.CreditNote).
+			WithTitle("إشعار دائن").
 			Build()
 
 		fontDir := "fonts"

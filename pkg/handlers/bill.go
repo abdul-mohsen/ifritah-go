@@ -453,7 +453,8 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		VatRegistrationNumber = *bill.VatRegistrationNumber
 	}
 
-	AddressName := ""
+	// TODO @ssda fix this
+	AddressName := "ﺍﻟﻤﺒﺮﺯ, ﺣﻲ ﺍﻟﺮﺍﺷﺪﻳﺔ ﺍﻟﺜﺎﻟﺚ, Abdullah Ibn Muaeqil"
 	if bill.AddressName != nil {
 		AddressName = *bill.AddressName
 	}
@@ -598,7 +599,7 @@ func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 		WithPaper(paper).
 		WithTitle("فاتورة ضريبية مبسطة").
 		WithInvoiceNumber("INV-"+fmt.Sprint(bill.SequenceNumber)).
-		WithSeller("tmp", bill.Address, bill.VatRegistration, bill.CommercialRegistrationNumber).
+		WithSeller(bill.CompanyName, bill.Address, bill.VatRegistration, bill.CommercialRegistrationNumber).
 		WithVATPercentage("15.0").
 		WithQRCode(qrCode).
 		WithTotals(bill.Discount, bill.TotalBeforeVAT, bill.TotalVAT, bill.Total).

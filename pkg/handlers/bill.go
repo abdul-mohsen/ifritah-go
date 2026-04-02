@@ -455,9 +455,9 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 
 	// TODO @ssda fix this
 	AddressName := "ﺍﻟﻤﺒﺮﺯ, ﺣﻲ ﺍﻟﺮﺍﺷﺪﻳﺔ ﺍﻟﺜﺎﻟﺚ, Abdullah Ibn Muaeqil"
-	if bill.AddressName != nil {
-		AddressName = *bill.AddressName
-	}
+	// if bill.AddressName != nil {
+	// 	AddressName = *bill.AddressName
+	// }
 
 	StoreName := ""
 	if bill.StoreName != nil {

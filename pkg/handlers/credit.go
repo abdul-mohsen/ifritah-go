@@ -96,7 +96,7 @@ func (h *handler) GetCreditBillPDF(c *gin.Context) {
 			}
 		}
 
-		invoice := b2cInvoice(true, models.PaperA4, bill, products).
+		invoice := b2cInvoice(true, models.PaperThermal, bill, products).
 			WithType(models.InvoiceTypeB2CCredit).
 			Build()
 

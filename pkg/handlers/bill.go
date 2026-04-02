@@ -537,7 +537,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 				p.Name = "تكلفة الصيانة"
 			}
 		}
-		invoice := b2cInvoice(true, models.PaperA4, bill, products).
+		invoice := b2cInvoice(true, models.PaperThermal, bill, products).
 			WithType(models.InvoiceTypeB2C).
 			Build()
 
@@ -577,9 +577,7 @@ func (h *handler) GetBillCreditDetail(c *gin.Context) {
 }
 
 func langBuilder(arabic bool) *invoice.Builder {
-	b := invoice.NewBuilder().
-		WithDate(time.Now()).
-		WithDateFormat("2006-01-02 15:04")
+	b := invoice.NewBuilder()
 	if arabic {
 		b.WithArabic()
 	} else {
@@ -595,9 +593,11 @@ func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 	}
 
 	b := langBuilder(arabic).
+		WithDate(bill.EffectiveDate).
+		WithDateFormat("2006-01-02 15:04").
 		WithPaper(paper).
 		// WithTitle(title(arabic, "Simplified Tax Invoice", "فاتورة ضريبية مبسطة")).
-		WithInvoiceNumber("INV-2026-0042").
+		WithInvoiceNumber(fmt.Sprint("INV-%s", bill.SequenceNumber)).
 		WithSeller("tmp", bill.Address, bill.VatRegistration, bill.CommercialRegistrationNumber).
 		WithVATPercentage("15.0").
 		WithQRCode(qrCode).

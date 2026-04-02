@@ -589,13 +589,18 @@ func langBuilder(arabic bool) *invoice.Builder {
 }
 
 func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products []model.BillProductResponse) *invoice.Builder {
+	var qrCode string = ""
+	if bill.QRCode != nil {
+		qrCode = *bill.QRCode
+	}
+
 	b := langBuilder(arabic).
 		WithPaper(paper).
 		// WithTitle(title(arabic, "Simplified Tax Invoice", "فاتورة ضريبية مبسطة")).
 		WithInvoiceNumber("INV-2026-0042").
 		WithSeller("tmp", bill.Address, bill.VatRegistration, bill.CommercialRegistrationNumber).
 		WithVATPercentage("15.0").
-		WithQRCode(*bill.QRCode).
+		WithQRCode(qrCode).
 		WithTotals("0.0", bill.TotalBeforeVAT, bill.TotalVAT, bill.Total)
 
 	for _, p := range products {

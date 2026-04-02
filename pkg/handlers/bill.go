@@ -597,7 +597,7 @@ func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 		WithDateFormat("2006-01-02 15:04").
 		WithPaper(paper).
 		// WithTitle(title(arabic, "Simplified Tax Invoice", "فاتورة ضريبية مبسطة")).
-		WithInvoiceNumber(fmt.Sprint("INV-%s", bill.SequenceNumber)).
+		WithInvoiceNumber(fmt.Sprint("INV-%d", bill.SequenceNumber)).
 		WithSeller("tmp", bill.Address, bill.VatRegistration, bill.CommercialRegistrationNumber).
 		WithVATPercentage("15.0").
 		WithQRCode(qrCode).

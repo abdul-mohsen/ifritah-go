@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/invoice"
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/models"
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/pdf"
 	"github.com/gin-gonic/gin"
@@ -530,65 +531,15 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
 	if true {
-		bill, xProducts := h.getBillDetail(c)
-		var products []models.Product
-		name := "تكلفة الصيانة"
-		for _, p := range xProducts {
+		bill, products := h.getBillDetail(c)
+		for _, p := range products {
 			if p.Name == model.MaintenanceCost {
-				p.Name = name
+				p.Name = "تكلفة الصيانة"
 			}
-			product := models.Product{
-				Name:      p.Name,
-				Quantity:  p.Quantity,
-				UnitPrice: p.Price,
-				Discount:  p.Discount,
-				VATAmount: p.TotalVAT,
-				Total:     p.Total,
-			}
-			products = append(products, product)
-
 		}
-		qr := ""
-
-		if bill.QRCode != nil {
-			qr = *bill.QRCode
-		}
-
-		invoice := models.Invoice{
-			Title:                        "فاتورة ضريبية مبسطة",
-			InvoiceNumber:                fmt.Sprintf("INV%d", bill.SequenceNumber),
-			StoreName:                    bill.StoreName,
-			StoreAddress:                 bill.Address,
-			Date:                         bill.EffectiveDate.Local().Format(time.DateTime),
-			VATRegistrationNo:            bill.VatRegistration,
-			QRCodeData:                   qr,
-			TotalDiscount:                "0.0",
-			TotalTaxableAmt:              bill.TotalBeforeVAT,
-			TotalVAT:                     bill.TotalVAT,
-			TotalWithVAT:                 bill.Total,
-			VATPercentage:                "15",
-			CommercialRegistrationNumber: bill.CommercialRegistrationNumber,
-			Labels: models.Labels{
-				CommercialRegistrationNumber: "رقم السجل التجاري",
-				InvoiceNumber:                "رقم الفاتورة:",
-				Date:                         "تاريخ:",
-				VATRegistration:              "رقم تسجيل ضريبة القيمة المضافة:",
-				TotalTaxable:                 "اجمالي المبلغ الخاضع للضريبة",
-				TotalWithVat:                 "المجموع مع الضريبة",
-				ProductColumn:                "المنتجات",
-				QuantityColumn:               "الكمية",
-				UnitPriceColumn:              "سعر الوحدة",
-				DiscountColumn:               "الخصم",
-				VATAmountColumn:              "ضريبة القيمة المضافة",
-				TotalColumn:                  "السعر شامل الضريبة",
-				TotalDiscount:                "إجمالي الخصم",
-				Footer:                       fmt.Sprintf(">>>>>>>>>>>>>> إغلاق الفاتورة %d <<<<<<<<<<<<<<<", bill.SequenceNumber),
-				Vat:                          "ضريبة القيمة المضافة (%51)",
-			},
-			Language: "ar",
-			Products: products,
-			IsRTL:    true,
-		}
+		invoice := b2cInvoice(true, models.PaperA4, bill, products).
+			WithType(models.InvoiceTypeB2C).
+			Build()
 
 		fontDir := "fonts"
 		pdfBytes, err := pdf.GenerateInvoiceBytes(invoice, fontDir)
@@ -623,6 +574,35 @@ func (h *handler) GetBillCreditDetail(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, bill)
+}
+
+func langBuilder(arabic bool) *invoice.Builder {
+	b := invoice.NewBuilder().
+		WithDate(time.Now()).
+		WithDateFormat("2006-01-02 15:04")
+	if arabic {
+		b.WithArabic()
+	} else {
+		b.WithEnglish()
+	}
+	return b
+}
+
+func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products []model.BillProductResponse) *invoice.Builder {
+	b := langBuilder(arabic).
+		WithPaper(paper).
+		// WithTitle(title(arabic, "Simplified Tax Invoice", "فاتورة ضريبية مبسطة")).
+		WithInvoiceNumber("INV-2026-0042").
+		WithSeller("tmp", bill.Address, bill.VatRegistration, bill.CommercialRegistrationNumber).
+		WithVATPercentage("15.0").
+		WithQRCode(*bill.QRCode).
+		WithTotals("0.0", bill.TotalBeforeVAT, bill.TotalVAT, bill.Total)
+
+	for _, p := range products {
+		b.AddProduct(p.PartName, p.Quantity, p.Price, p.Discount, p.TotalVAT, p.Total)
+	}
+
+	return b
 }
 
 func (h *handler) getProducts(billId int) []model.ProductDetails {

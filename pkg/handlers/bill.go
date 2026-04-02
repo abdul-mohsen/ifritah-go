@@ -433,7 +433,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 			PartName:       *product.PartName,
 			Quantity:       product.Quantity.Round(1).String(),
 			Price:          product.Price.Round(2).String(),
-			Discount:       "0.0",
+			Discount:       product.Discount,
 			TotalBeforeVAT: product.TotalBeforeVat.Round(2).String(),
 			TotalVAT:       product.VatTotal.Round(2).String(),
 			Total:          product.TotalIncludingVat.Round(2).String(),
@@ -597,11 +597,11 @@ func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 		WithDateFormat("2006-01-02 15:04").
 		WithPaper(paper).
 		WithTitle("فاتورة ضريبية مبسطة").
-		WithInvoiceNumber(fmt.Sprint("INV-%d", bill.SequenceNumber)).
+		WithInvoiceNumber("INV-"+fmt.Sprint(bill.SequenceNumber)).
 		WithSeller("tmp", bill.Address, bill.VatRegistration, bill.CommercialRegistrationNumber).
 		WithVATPercentage("15.0").
 		WithQRCode(qrCode).
-		WithTotals("0.0", bill.TotalBeforeVAT, bill.TotalVAT, bill.Total).
+		WithTotals(bill.Discount, bill.TotalBeforeVAT, bill.TotalVAT, bill.Total).
 		WithStoreAddress(bill.Address).
 		WithStoreName(bill.StoreName)
 

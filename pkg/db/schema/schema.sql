@@ -476,7 +476,7 @@ CREATE TABLE `bill` (
   KEY `idx_bill_deliver_date` (`deliver_date`),
   FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`),
   CONSTRAINT `fk_bill_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=507 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=508 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -506,7 +506,7 @@ DROP TABLE IF EXISTS `bill_product`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `bill_product` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `product_id` int DEFAULT NULL,
+  `product_id` bigint unsigned DEFAULT NULL,
   `bill_id` bigint unsigned NOT NULL,
   `vat` decimal(5,2) DEFAULT '15.00',
   `price` decimal(12,2) NOT NULL,
@@ -521,10 +521,12 @@ CREATE TABLE `bill_product` (
   `total_including_vat` decimal(12,2) GENERATED ALWAYS AS (round((`total_before_vat` + `vat_total`),2)) STORED,
   PRIMARY KEY (`id`),
   KEY `fk_bill_product` (`bill_id`),
+  KEY `fk_product_id` (`product_id`),
   CONSTRAINT `fk_bill_product` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`),
+  CONSTRAINT `fk_product_id` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`),
   CONSTRAINT `chk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=843 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=844 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -804,7 +806,7 @@ CREATE TABLE `cash_voucher` (
   CONSTRAINT `chk_cv_amount` CHECK ((`amount` > 0)),
   CONSTRAINT `chk_cv_bank_fields` CHECK (((`payment_method` <> _utf8mb4'bank_transfer') or ((`bank_name` is not null) and (`bank_account` is not null)))),
   CONSTRAINT `chk_cv_state` CHECK ((`state` in (0,1,2)))
-) ENGINE=InnoDB AUTO_INCREMENT=38 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1504,7 +1506,7 @@ CREATE TABLE `purchase_bill` (
   KEY `idx_pb_supplier_merchant` (`supplier_id`,`merchant_id`),
   KEY `idx_pb_payment_method` (`payment_method`),
   KEY `idx_pb_deliver_date` (`deliver_date`)
-) ENGINE=InnoDB AUTO_INCREMENT=291 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=292 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1567,9 +1569,11 @@ CREATE TABLE `purchase_bill_product` (
   `name` varchar(255) DEFAULT NULL,
   `type` tinyint GENERATED ALWAYS AS ((case when (`product_id` is not null) then 0 else 1 end)) STORED NOT NULL,
   PRIMARY KEY (`id`),
+  KEY `fk_pbp_product_id` (`product_id`),
+  CONSTRAINT `fk_pbp_product_id` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`),
   CONSTRAINT `chpk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chpk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=496 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=498 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1814,7 +1818,7 @@ CREATE TABLE `supplier` (
   KEY `idx_supplier_postpaid` (`is_postpaid`),
   KEY `idx_supplier_payment_method` (`preferred_payment_method`),
   CONSTRAINT `supplier_ibfk_1` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=241 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=242 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2125,4 +2129,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-03 11:08:12
+-- Dump completed on 2026-04-03 14:15:40

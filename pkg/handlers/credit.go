@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/invoice"
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/models"
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/pdf"
 	"github.com/gin-gonic/gin"
@@ -103,11 +104,20 @@ func (h *handler) GetCreditBillPDF(c *gin.Context) {
 			}
 		}
 
-		invoice := b2cInvoice(true, models.PaperThermal, bill, products).
-			WithType(models.InvoiceTypeB2CCredit).
-			WithNoteReason(*bill.CreditNote).
-			WithTitle("إشعار دائن").
-			Build()
+		var invoice invoice.Invoice
+		if bill.Client == nil {
+			invoice = b2cInvoice(true, models.PaperThermal, bill, products).
+				WithType(models.InvoiceTypeB2CCredit).
+				WithNoteReason(*bill.CreditNote).
+				WithTitle("إشعار دائن").
+				Build()
+		} else {
+			invoice = b2bInvoice(true, models.PaperThermal, bill, products, *bill.Client).
+				WithType(models.InvoiceTypeB2CCredit).
+				WithNoteReason(*bill.CreditNote).
+				WithTitle("إشعار دائن").
+				Build()
+		}
 
 		fontDir := "fonts"
 		pdfBytes, err := pdf.GenerateInvoiceBytes(invoice, fontDir)

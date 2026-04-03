@@ -7,25 +7,46 @@ sql:
       go:
         package: "db"
         out: "pkg/db/gen"
+        emit_db_tags: true
         emit_json_tags: true
         emit_pointers_for_null_types: true
         json_tags_case_style: "snake"
         overrides:
+          - db_type: "bigint"
+            unsigned: true
+            go_type : "uint64"
+          - db_type: "bigint"
+            unsigned: true
+            nullable: true
+            go_type :
+              type: "uint64"
+              pointer: true
+          - db_type: "int"
+            unsigned: true
+            nullable: true
+            go_type :
+              type: "uint32"
+              pointer: true
+          - db_type: "int"
+            unsigned: false
+            nullable: true
+            go_type :
+              type: "int32"
+              pointer: true
           # - column: "*.total"
           #   go_type: "string"
           # - column: "*.total_vat"
           #   go_type: "string"
-          - db_type: "bigint"
-            nullable: true
-            go_type:
-              type : "int64"
-              pointer: true
           - db_type: "decimal"
             nullable: true
             go_type:
               import: "github.com/shopspring/decimal"
               type : "Decimal"
               pointer: true
+          - column: "*.discount"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type : "Decimal"
           - column: "*.cost_price"
             go_type:
               import: "github.com/shopspring/decimal"
@@ -54,26 +75,6 @@ sql:
             go_type:
               import: "github.com/shopspring/decimal"
               type : "Decimal"
-          - db_type: "int64"
-            nullable: true
-            go_type:
-              type : "int64"
-              pointer: true
-          - db_type: "int"
-            nullable: true
-            go_type:
-              type : "int32"
-              pointer: true
-          - db_type: "int8"
-            nullable: true
-            go_type:
-              type : "int8"
-              pointer: true
-          - db_type: "tinyint"
-            nullable: true
-            go_type:
-              type : "int16"
-              pointer: true
           - db_type: "varchar"
             nullable: true
             go_type:
@@ -83,11 +84,6 @@ sql:
             nullable: true
             go_type:
               type: "string"
-              pointer: true
-          - db_type: "int32"
-            nullable: true
-            go_type:
-              type: "int32"
               pointer: true
           - db_type: "datetime"
             nullable: true

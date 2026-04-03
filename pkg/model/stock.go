@@ -63,7 +63,7 @@ type StockMovement struct {
 // Used for manual stock corrections (damaged, lost, count_correction, etc.)
 
 type StockAdjustRequest struct {
-	ProductID      int32           `json:"product_id" binding:"required"`
+	ProductID      uint64          `json:"product_id" binding:"required"`
 	QuantityChange decimal.Decimal `json:"quantity_change" binding:"required"`
 	Reason         string          `json:"reason" binding:"required,oneof=damaged lost expired returned_supplier count_correction other"`
 	Note           string          `json:"note"`
@@ -78,7 +78,7 @@ type StockCheckRequest struct {
 }
 
 type StockCheckItem struct {
-	ProductID int32           `json:"product_id" binding:"required"`
+	ProductID uint64          `json:"product_id" binding:"required"`
 	Quantity  decimal.Decimal `json:"quantity" binding:"required"`
 }
 
@@ -89,7 +89,7 @@ type StockCheckResponse struct {
 }
 
 type StockCheckResult struct {
-	ProductID  int32           `json:"product_id"`
+	ProductID  uint64          `json:"product_id"`
 	StoreID    int32           `json:"store_id"`
 	Available  decimal.Decimal `json:"available"`
 	Requested  decimal.Decimal `json:"requested"`

@@ -14,7 +14,6 @@ package handlers
 // ============================================================================
 
 import (
-	"database/sql"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
@@ -92,9 +91,6 @@ func (h *handler) AddBill(c *gin.Context) {
 		PaidAmount:    decimal.NewFromInt(0),
 	}
 
-	log.Print(request.ClientID)
-	log.Print(request)
-
 	if err := c.BindJSON(&request); err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
@@ -127,13 +123,6 @@ func (h *handler) AddBill(c *gin.Context) {
 			log.Panic("Error parsing date:", err)
 		}
 	}
-
-	squenceNumber := 0
-
-	if request.State > 0 {
-		squenceNumber = h.getNextSquenceNumber(userSession.id)
-	}
-
 	tx, err := h.DB.Begin()
 
 	if err != nil {
@@ -144,13 +133,19 @@ func (h *handler) AddBill(c *gin.Context) {
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
 
+	var squenceNumber uint64 = 0
+
+	if request.State > 0 {
+		squenceNumber = getNextSquenceNumber(qtx, c)
+	}
+
 	args := db.CreateBillParams{
 		EffectiveDate:   effectiveDate,
 		PaymentDueDate:  paymentDueDate,
 		State:           int32(request.State),
-		Discount:        request.Discount.String(),
+		Discount:        request.Discount,
 		StoreID:         int32(request.StoreId),
-		SequenceNumber:  int32(squenceNumber),
+		SequenceNumber:  &squenceNumber,
 		MerchantID:      int32(userSession.id),
 		MaintenanceCost: request.MaintenanceCost,
 		Note:            request.Note,
@@ -159,7 +154,7 @@ func (h *handler) AddBill(c *gin.Context) {
 		UserPhoneNumber: request.UserPhoneNumber,
 		PaymentMethod:   request.PaymentMethod,
 		DeliverDate:     request.DeliverDate,
-		BranchID:        sql.NullInt32{Int32: request.BranchID, Valid: true},
+		BranchID:        &request.BranchID,
 	}
 
 	res, err := qtx.CreateBill(c.Request.Context(), args)
@@ -190,7 +185,7 @@ func (h *handler) AddBill(c *gin.Context) {
 		products = append(products, product)
 	}
 
-	if err := addProductToBill(qtx, c, products, int32(id)); err != nil {
+	if err := addProductToBill(qtx, c, products, uint64(id)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
@@ -199,7 +194,7 @@ func (h *handler) AddBill(c *gin.Context) {
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		warnings, err := recordSaleMovements(
-			qtx, c, int32(id), int32(request.StoreId),
+			qtx, c, uint64(id), int32(request.StoreId),
 			request.Products, int32(squenceNumber),
 			enforcement, int32(userSession.id),
 		)
@@ -226,12 +221,14 @@ func (h *handler) AddBill(c *gin.Context) {
 }
 
 func (h *handler) SubmitDraftBill(c *gin.Context) {
-	billID, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	BillID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
+
+	billID := uint64(BillID)
 
 	request := model.AddBillRequest{
 		State:         1,
@@ -264,11 +261,6 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		}
 	}
 
-	squenceNumber := 0
-	if request.State > 0 {
-		squenceNumber = h.getNextSquenceNumber(userSession.id)
-	}
-
 	tx, err := h.DB.Begin()
 
 	if err != nil {
@@ -279,23 +271,28 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
 
+	var squenceNumber uint64 = 0
+	if request.State > 0 {
+		squenceNumber = getNextSquenceNumber(qtx, c)
+	}
+
 	args := db.UpdateBillByIDParams{
 		EffectiveDate:   time.Now(),
 		PaymentDueDate:  paymentDueDate,
 		State:           request.State,
-		Discount:        request.Discount.String(),
+		Discount:        request.Discount,
 		StoreID:         request.StoreId,
-		SequenceNumber:  int32(squenceNumber),
+		SequenceNumber:  &squenceNumber,
 		MerchantID:      int32(userSession.id),
 		MaintenanceCost: request.MaintenanceCost,
 		Note:            request.Note,
 		Username:        request.UserName,
 		ClientID:        request.ClientID,
 		UserPhoneNumber: request.UserPhoneNumber,
-		ID:              int32(billID),
+		ID:              billID,
 		PaymentMethod:   request.PaymentMethod,
 		DeliverDate:     request.DeliverDate,
-		BranchID:        sql.NullInt32{Int32: request.BranchID, Valid: true},
+		BranchID:        &request.BranchID,
 	}
 
 	err = qtx.UpdateBillByID(c.Request.Context(), args)
@@ -305,7 +302,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	if err = qtx.DeleteProductToBill(c.Request.Context(), int32(billID)); err != nil {
+	if err = qtx.DeleteProductToBill(c.Request.Context(), billID); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
@@ -325,7 +322,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		products = append(products, product)
 	}
 
-	if err := addProductToBill(qtx, c, products, int32(billID)); err != nil {
+	if err := addProductToBill(qtx, c, products, billID); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
@@ -334,7 +331,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		warnings, err := recordSaleMovements(
-			qtx, c, int32(billID), int32(request.StoreId),
+			qtx, c, billID, int32(request.StoreId),
 			request.Products, int32(squenceNumber),
 			enforcement, int32(userSession.id),
 		)
@@ -370,7 +367,7 @@ func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
 	return nil
 }
 
-func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.BillProduct, billId int32) error {
+func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.BillProduct, billId uint64) error {
 	for _, product := range products {
 
 		args := db.AddProductToBillParams{
@@ -390,32 +387,29 @@ func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.BillProd
 	return nil
 }
 
-func (h *handler) getNextSquenceNumber(id int64) int {
+func getNextSquenceNumber(qtx *db.Queries, c *gin.Context) uint64 {
 
-	query := `
-	select COALESCE(max(sequence_number), 1) from bill
-	join store on store.id = bill.store_id
-	join company on store.company_id = company.id
-	join user on user.company_id = company.id and user.id = ?
-	`
-	var maxSequenceNumber int
-	if err := h.DB.QueryRow(query, id).Scan(&maxSequenceNumber); err != nil {
+	var maxSequenceNumber int64
+	maxSequenceNumber, err := qtx.GetMaxSequenceNumber(c.Request.Context())
+	if err != nil {
 		log.Panic(err)
 	}
 
-	return maxSequenceNumber + 1
+	return uint64(maxSequenceNumber) + 1
 }
 
 func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProductResponse) {
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	Id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
 
-	bill, err := h.queries.GetBillPDFByID(c.Request.Context(), int32(id))
+	id := uint64(Id)
+
+	bill, err := h.queries.GetBillPDFByID(c.Request.Context(), id)
 	dbProducts, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
 	var xProducts []model.BillProductResponse
 	for _, product := range dbProducts {
@@ -433,7 +427,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 			PartName:       *product.PartName,
 			Quantity:       product.Quantity.Round(1).String(),
 			Price:          product.Price.Round(2).String(),
-			Discount:       product.Discount,
+			Discount:       product.Discount.Round(2).String(),
 			TotalBeforeVAT: product.TotalBeforeVat.Round(2).String(),
 			TotalVAT:       product.VatTotal.Round(2).String(),
 			Total:          product.TotalIncludingVat.Round(2).String(),
@@ -480,17 +474,11 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		client, _ = h.queries.GetClientByID(c.Request.Context(), uint32(*bill.ClientID))
 	}
 
-	var branchID *int32 = nil
-	if bill.BranchID.Valid {
-		branchID = &bill.BranchID.Int32
-	}
-
 	return model.Bill{
 		Id:                           bill.ID,
 		EffectiveDate:                bill.EffectiveDate,
 		PaymentDueDate:               bill.PaymentDueDate,
 		State:                        bill.State,
-		Discount:                     bill.Discount,
 		VatRegistration:              VatRegistrationNumber,
 		Address:                      AddressName,
 		StoreName:                    StoreName,
@@ -507,6 +495,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		CreditState:                  bill.CreditState,
 		CreditNote:                   bill.CreditNote,
 		QRCode:                       bill.QrCode,
+		Discount:                     bill.Discount.Round(2).String(),
 		TotalBeforeVAT:               bill.TotalBeforeVat.Round(2).String(),
 		TotalVAT:                     bill.TotalVat.Round(2).String(),
 		Total:                        bill.Total.Round(2).String(),
@@ -515,7 +504,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		Client:                       &client,
 		PaymentMethod:                bill.PaymentMethod,
 		DeliverDate:                  bill.DeliverDate,
-		BranchID:                     branchID,
+		BranchID:                     bill.BranchID,
 	}, xProducts
 }
 
@@ -562,12 +551,15 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 func (h *handler) GetBillCreditDetail(c *gin.Context) {
 
-	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)
 	}
-	bill, err := h.queries.GetCreditBillByID(c.Request.Context(), int32(id))
+
+	id := uint64(Id)
+
+	bill, err := h.queries.GetCreditBillByID(c.Request.Context(), id)
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
@@ -613,7 +605,7 @@ func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 	return b
 }
 
-func (h *handler) getProducts(billId int) []model.ProductDetails {
+func (h *handler) getProducts(billId uint64) []model.ProductDetails {
 	query := `
 	select product_id, price, quantity , articles.id, articles.articleNumber, articles.genericArticleDescription from bill_product
 	left join articles on articles.id = product_id where bill_id = ?
@@ -639,11 +631,12 @@ func (h *handler) getProducts(billId int) []model.ProductDetails {
 func (h *handler) DeleteBillDetail(c *gin.Context) {
 
 	idStr := c.Param("id")
-	billID, err := strconv.ParseInt(idStr, 10, 32)
+	BillID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
+	billID := uint64(BillID)
 
 	userSession := GetSessionInfo(c)
 
@@ -656,7 +649,7 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	qtx := h.queries.WithTx(tx)
 
 	// ── Stock tracking: restore stock BEFORE deleting the bill (need bill data intact) ──
-	if err := h.reverseSaleMovements(qtx, c, int32(billID), int32(userSession.id)); err != nil {
+	if err := h.reverseSaleMovements(qtx, c, billID, int32(userSession.id)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"detail": err.Error(),
 			"type":   "stock_error",

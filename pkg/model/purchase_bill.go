@@ -8,14 +8,14 @@ import (
 )
 
 type PurchaseBill struct {
-	Id                     int32                    `json:"id"`
+	Id                     uint64                   `json:"id"`
 	EffectiveDate          time.Time                `json:"effective_date"`
 	PaymentDueDate         *time.Time               `json:"payment_due_date"`
 	State                  int32                    `json:"state"`
-	Discount               int64                    `json:"discount"`
-	SequenceNumber         int32                    `json:"sequence_number"`
+	Discount               string                   `json:"discount"`
+	SequenceNumber         *uint64                  `json:"sequence_number"`
 	SupplierId             int32                    `json:"supplier_id"`
-	SupplierSequenceNumber int32                    `json:"supplier_sequence_number"`
+	SupplierSequenceNumber *uint64                  `json:"supplier_sequence_number"`
 	StoreId                int32                    `json:"store_id"`
 	MerchantId             int                      `json:"merchant_id"`
 	Products               []db.PurchaseBillProduct `json:"products"`
@@ -32,12 +32,12 @@ type AddPurchaseBillRequest struct {
 	EffectiveDate          *string               `json:"effective_date" `
 	PaymentDueDate         *string               `json:"payment_due_date" `
 	PaymentDate            *string               `json:"payment_date" `
-	Discount               string                `json:"discount"`
-	PaidAmount             string                `json:"paid_amount" `
+	Discount               decimal.Decimal       `json:"discount"`
+	PaidAmount             decimal.Decimal       `json:"paid_amount" `
 	Products               []PurchaseBillProduct `json:"products" binding:"required,dive"`
 	ManualProducts         []PurchaseBillProduct `json:"manual_products" binding:"required,dive"`
 	SupplierId             int32                 `json:"supplier_id" binding:"required"`
-	SupplierSequenceNumber int32                 `json:"supplier_sequence_number" binding:"required"`
+	SupplierSequenceNumber uint64                `json:"supplier_sequence_number" binding:"required"`
 	Attachments            []string              `json:"attachments"`
 	PDFLink                *string               `json:"pdf_link"`
 	PaymentMethod          int32                 `json:"payment_method" binding:"required"`
@@ -53,7 +53,7 @@ type UploadFileResponse struct {
 }
 
 type PurchaseBillProduct struct {
-	ProductId   *int32          `json:"product_id"`
+	ProductId   *uint64         `json:"product_id"`
 	Price       decimal.Decimal `json:"price" binding:"required"`
 	Name        string          `json:"name" binding:"required"`
 	CostPrice   decimal.Decimal `json:"cost_price" binding:"required"`

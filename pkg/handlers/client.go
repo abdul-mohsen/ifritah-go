@@ -15,11 +15,13 @@ import (
 
 func (h *handler) GetClient(c *gin.Context) {
 	// user := GetSessionInfo(c)
-	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
+
+	id := uint64(Id)
 
 	res, err := h.queries.GetClientByID(c.Request.Context(), uint32(id))
 	if err != nil {
@@ -103,11 +105,13 @@ func (h *handler) CreateClient(c *gin.Context) {
 
 func (h *handler) UpdateClient(c *gin.Context) {
 
-	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
+
+	id := uint64(Id)
 
 	var request CreateClientRequest
 	if err := c.BindJSON(&request); err != nil {
@@ -141,11 +145,13 @@ func (h *handler) UpdateClient(c *gin.Context) {
 
 func (h *handler) DeleteClient(c *gin.Context) {
 	// user := GetSessionInfo(c)
-	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
+
+	id := uint64(Id)
 
 	err = h.queries.DeleteClient(c.Request.Context(), uint32(id))
 	if err != nil {

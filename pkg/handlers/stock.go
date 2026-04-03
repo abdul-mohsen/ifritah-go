@@ -46,8 +46,8 @@ func (h *handler) getStockEnforcementMode(c *gin.Context) string {
 
 // ── Helper: Insert a stock movement row (within a transaction) ──────────────
 
-func insertStockMovement(tx *db.Queries, c *gin.Context, productID, storeID int32, quantity decimal.Decimal,
-	movementType, referenceType string, referenceID, itemID *int32,
+func insertStockMovement(tx *db.Queries, c *gin.Context, productID uint64, storeID int32, quantity decimal.Decimal,
+	movementType, referenceType string, referenceID *uint64, itemID *int32,
 	reason, note *string, createdBy *int32, createdAt time.Time) error {
 
 	args := db.InsertStockMovementParams{
@@ -69,7 +69,7 @@ func insertStockMovement(tx *db.Queries, c *gin.Context, productID, storeID int3
 
 // ── Helper: Update product quantity (within a transaction) ──────────────────
 
-func updateProductQuantity(tx *db.Queries, c *gin.Context, productID int32, delta decimal.Decimal) error {
+func updateProductQuantity(tx *db.Queries, c *gin.Context, productID uint64, delta decimal.Decimal) error {
 	args := db.UpdateProductQuantityParams{ID: productID, Quantity: delta}
 	err := tx.UpdateProductQuantity(c.Request.Context(), args)
 	return err
@@ -77,7 +77,7 @@ func updateProductQuantity(tx *db.Queries, c *gin.Context, productID int32, delt
 
 // ── Helper: Get product stock info ──────────────────────────────────────────
 
-func (h *handler) getProductStock(c *gin.Context, productID int32) (storeID int32, quantity decimal.Decimal, err error) {
+func (h *handler) getProductStock(c *gin.Context, productID uint64) (storeID int32, quantity decimal.Decimal, err error) {
 	var qtyStr string
 	h.queries.GetProductQuantity(c.Request.Context(), productID)
 	if err != nil {
@@ -109,12 +109,12 @@ func (h *handler) getProductStock(c *gin.Context, productID int32) (storeID int3
 //   err         — non-nil if "enforce" mode blocks the operation
 
 type StockWarning struct {
-	ProductID int32           `json:"product_id"`
+	ProductID uint64          `json:"product_id"`
 	Available decimal.Decimal `json:"available"`
 	Requested decimal.Decimal `json:"requested"`
 }
 
-func recordSaleMovements(tx *db.Queries, c *gin.Context, billID int32, storeID int32,
+func recordSaleMovements(tx *db.Queries, c *gin.Context, billID uint64, storeID int32,
 	products []model.BillProduct, seqNumber int32,
 	enforcement string, userID int32) ([]StockWarning, error) {
 
@@ -169,7 +169,7 @@ func recordSaleMovements(tx *db.Queries, c *gin.Context, billID int32, storeID i
 		uid := userID
 		if err := insertStockMovement(tx, c, productID, storeID,
 			p.Quantity.Neg(), model.MovementTypeSale, refType,
-			&billID, nil, nil, &note, &uid, now); err != nil {
+			nil, nil, nil, &note, &uid, now); err != nil {
 			return nil, fmt.Errorf("failed to record sale movement for product %d: %w", productID, err)
 		}
 	}
@@ -185,7 +185,7 @@ func recordSaleMovements(tx *db.Queries, c *gin.Context, billID int32, storeID i
 //   1. Restore product.quantity
 //   2. Insert stock_movement (deletion, positive qty)
 
-func (h *handler) reverseSaleMovements(tx *db.Queries, c *gin.Context, billID int32, userID int32) error {
+func (h *handler) reverseSaleMovements(tx *db.Queries, c *gin.Context, billID uint64, userID int32) error {
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement == model.StockEnforcementDisable {
 		return nil
@@ -198,16 +198,7 @@ func (h *handler) reverseSaleMovements(tx *db.Queries, c *gin.Context, billID in
 	now := time.Now()
 
 	for _, row := range rows {
-		// var itemID, productID, storeID, seqNum int32
-		// var qtyStr string
-		// if err := rows.Scan(&itemID, &productID, &qtyStr, &storeID, &seqNum); err != nil {
-		// 	return err
-		// }
-		//
-		// qty, _ := decimal.NewFromString(qtyStr)
-		//
-		// // Restore stock
-		if err := updateProductQuantity(tx, c, *row.ProductID, row.Quantity); err != nil {
+		if err := updateProductQuantity(tx, c, uint64(row.ID), row.Quantity); err != nil {
 			return fmt.Errorf("failed to restore stock for product %d: %w", *row.ProductID, err)
 		}
 
@@ -215,7 +206,7 @@ func (h *handler) reverseSaleMovements(tx *db.Queries, c *gin.Context, billID in
 		refType := model.ReferenceTypeBill
 		note := fmt.Sprintf("إلغاء فاتورة #%d", row.SequenceNumber)
 		uid := userID
-		if err := insertStockMovement(tx, c, *row.ProductID, row.StoreID,
+		if err := insertStockMovement(tx, c, uint64(row.ID), row.StoreID,
 			row.Quantity, model.MovementTypeDeletion, refType,
 			&billID, &row.ID, nil, &note, &uid, now); err != nil {
 			return fmt.Errorf("failed to record deletion movement for product %d: %w", *row.ProductID, err)
@@ -232,8 +223,8 @@ func (h *handler) reverseSaleMovements(tx *db.Queries, c *gin.Context, billID in
 //   1. Add to product.quantity
 //   2. Insert stock_movement (purchase, positive qty)
 
-func recordPurchaseMovements(tx *db.Queries, c *gin.Context, pbID int32, storeID int32,
-	products []model.PurchaseBillProduct, seqNumber int32,
+func recordPurchaseMovements(tx *db.Queries, c *gin.Context, pbID uint64, storeID int32,
+	products []model.PurchaseBillProduct, seqNumber uint64,
 	enforcement string, userID int32) error {
 
 	if enforcement == model.StockEnforcementDisable {
@@ -276,7 +267,7 @@ func recordPurchaseMovements(tx *db.Queries, c *gin.Context, pbID int32, storeID
 // When a purchase bill is deleted, we need to reverse the stock additions.
 // If enforcement is "enforce", we block if product.quantity would go negative.
 
-func (h *handler) reversePurchaseMovements(tx *db.Queries, c *gin.Context, pbID int32, userID int32) error {
+func (h *handler) reversePurchaseMovements(tx *db.Queries, c *gin.Context, pbID uint64, userID int32) error {
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement == model.StockEnforcementDisable {
 		return nil
@@ -329,7 +320,7 @@ func (h *handler) reversePurchaseMovements(tx *db.Queries, c *gin.Context, pbID 
 //   1. For each catalog item on the original bill → restore stock
 //   2. Insert stock_movement (credit_note, positive qty)
 
-func (h *handler) recordCreditNoteMovements(tx *db.Queries, c *gin.Context, creditNoteID int32, billID int32, userID int32) error {
+func (h *handler) recordCreditNoteMovements(tx *db.Queries, c *gin.Context, creditNoteID uint64, billID uint64, userID int32) error {
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement == model.StockEnforcementDisable {
 		return nil
@@ -493,11 +484,13 @@ func (h *handler) StockCheck(c *gin.Context) {
 // Paginated movement history for a product
 
 func (h *handler) GetStockMovements(c *gin.Context) {
-	productID, err := strconv.ParseInt(c.Param("product_id"), 10, 32)
+	ProductID, err := strconv.ParseInt(c.Param("product_id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid product_id"})
 		return
 	}
+
+	productID := uint64(ProductID)
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))

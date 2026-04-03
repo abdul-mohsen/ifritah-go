@@ -49,12 +49,12 @@ type AddBillRequest struct {
 	ManualProducts  []BillProduct   `json:"manual_products" binding:"required,dive"`
 	ClientID        *int32          `json:"client_id" `
 	PaymentMethod   int32           `json:"payment_method" binding:"required"`
-	BranchID        int32           `json:"branch_id" binding:"required"`
+	BranchID        uint32          `json:"branch_id" binding:"required"`
 	DeliverDate     *time.Time      `json:"deliver_date"`
 }
 
 type BillProduct struct {
-	ProductId *int32          `json:"product_id"`
+	ProductId *uint64         `json:"product_id"`
 	Name      string          `json:"name"`
 	PartName  string          `json:"part_name"` // ← add this
 	Price     decimal.Decimal `json:"price" binding:"required"`
@@ -98,7 +98,7 @@ type ProductDetails struct {
 }
 
 type Bill struct {
-	Id                           int32                 `json:"id"`
+	Id                           uint64                `json:"id"`
 	EffectiveDate                time.Time             `json:"effective_date"`
 	PaymentDueDate               *time.Time            `json:"payment_due_date"`
 	State                        int32                 `json:"state"`
@@ -107,7 +107,7 @@ type Bill struct {
 	Address                      string                `json:"address"`
 	StoreName                    string                `json:"store_name"`
 	CompanyName                  string                `json:"company_name"`
-	SequenceNumber               int32                 `json:"sequence_number"`
+	SequenceNumber               *uint64               `json:"sequence_number"`
 	Type                         bool                  `json:"type"`
 	StoreId                      int32                 `json:"store_id"`
 	MerchantId                   int32                 `json:"merchant_id"`
@@ -125,8 +125,8 @@ type Bill struct {
 	Total                        string                `json:"total"`
 	Client                       *db.Client            `json:"client"`
 	PaymentMethod                int32                 `json:"payment_method"`
-	BranchID                     *int32                `json:"branch_id"`
+	BranchID                     *uint32               `json:"branch_id"`
 	DeliverDate                  *time.Time            `json:"deliver_date"`
-	CreditID                     *int32
+	CreditID                     *uint64
 	CommercialRegistrationNumber string
 }

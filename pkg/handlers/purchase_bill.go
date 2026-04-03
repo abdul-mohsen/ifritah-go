@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/shopspring/decimal"
 )
 
 func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, userID int32) []db.PurchaseBillTotal {
@@ -35,16 +36,19 @@ func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, u
 
 func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
-	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
+
+	id := uint64(Id)
+
 	request := model.AddPurchaseBillRequest{
 		State:         3,
 		PaymentMethod: 0,
-		PaidAmount:    "0.0",
+		PaidAmount:    decimal.Zero,
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -93,12 +97,12 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		EffectiveDate:  effectiveDate,
 		PaymentDueDate: paymentDueDate,
 		State:          request.State,
-		Discount:       0,
+		Discount:       request.Discount,
 		StoreID:        request.StoreId,
 		MerchantID:     int32(userSession.id),
 		SupplierID:     request.SupplierId,
-		SequenceNumber: request.SupplierSequenceNumber,
-		ID:             int32(id),
+		SequenceNumber: &request.SupplierSequenceNumber,
+		ID:             id,
 		PaymentMethod:  request.PaymentMethod,
 		DeliverDate:    request.DeliverDate,
 	}
@@ -112,7 +116,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	// ── Stock tracking: reverse old stock before deleting products ──
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable {
-		if err := h.reversePurchaseMovements(qtx, c, int32(id), int32(userSession.id)); err != nil {
+		if err := h.reversePurchaseMovements(qtx, c, id, int32(userSession.id)); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
 				"type":   "stock_error",
@@ -121,7 +125,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		}
 	}
 
-	if err = qtx.DeleteProductPurchaseBill(c.Request.Context(), int32(id)); err != nil {
+	if err = qtx.DeleteProductPurchaseBill(c.Request.Context(), id); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
@@ -133,7 +137,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	products := append(request.Products, request.ManualProducts...)
 
-	err = addProductToBillPurchase(qtx, c, products, int32(id))
+	err = addProductToBillPurchase(qtx, c, products, id)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
@@ -142,7 +146,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	// ── Stock tracking: add new stock for updated products ──
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		if err := recordPurchaseMovements(
-			qtx, c, int32(id), int32(request.StoreId),
+			qtx, c, id, request.StoreId,
 			request.Products, request.SupplierSequenceNumber,
 			enforcement, int32(userSession.id),
 		); err != nil {
@@ -168,7 +172,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	request := model.AddPurchaseBillRequest{
 		State:         1,
 		PaymentMethod: 0,
-		PaidAmount:    "0.0",
+		PaidAmount:    decimal.Zero,
 	}
 
 	if err := c.BindJSON(&request); err != nil {
@@ -202,15 +206,6 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 			log.Panic("Error parsing date:", err)
 		}
 	}
-
-	_, success1 := stringToBigFloat(request.Discount)
-	_, success2 := stringToBigFloat(request.PaidAmount)
-
-	if !(success1 && success2) {
-		c.Status(http.StatusBadRequest)
-		log.Panic("big float are bad")
-	}
-
 	tx, err := h.DB.Begin()
 
 	if err != nil {
@@ -225,11 +220,11 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		EffectiveDate:  effectiveDate,
 		PaymentDueDate: paymentDueDate,
 		State:          request.State,
-		Discount:       0,
+		Discount:       request.Discount,
 		StoreID:        int32(request.StoreId),
 		MerchantID:     int32(userSession.id),
 		SupplierID:     request.SupplierId,
-		SequenceNumber: request.SupplierSequenceNumber,
+		SequenceNumber: &request.SupplierSequenceNumber,
 		PdfLink:        request.PDFLink,
 		PaymentMethod:  request.PaymentMethod,
 		DeliverDate:    request.DeliverDate,
@@ -241,7 +236,8 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	id, err := res.LastInsertId()
+	Id, err := res.LastInsertId()
+	id := uint64(Id)
 
 	if err != nil {
 		c.Status(http.StatusBadRequest)
@@ -255,7 +251,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	products := append(request.Products, request.ManualProducts...)
 
-	err = addProductToBillPurchase(qtx, c, products, int32(id))
+	err = addProductToBillPurchase(qtx, c, products, id)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
@@ -265,7 +261,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		if err := recordPurchaseMovements(
-			qtx, c, int32(id), int32(request.StoreId),
+			qtx, c, id, request.StoreId,
 			request.Products, request.SupplierSequenceNumber,
 			enforcement, int32(userSession.id),
 		); err != nil {
@@ -300,7 +296,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 }
 
-func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.PurchaseBillProduct, billId int32) error {
+func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.PurchaseBillProduct, billId uint64) error {
 
 	for _, product := range products {
 
@@ -360,16 +356,18 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
 
-	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
 
+	id := uint64(Id)
+
 	args := db.GetPurchaseBillDetailParams{
 		ID:   int32(userSession.id),
-		ID_2: int32(id),
+		ID_2: id,
 	}
 
 	b, err := h.queries.GetPurchaseBillDetail(c.Request.Context(), args)
@@ -379,7 +377,7 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	xProducts, err := h.queries.GetPurchaseBillProducts(c.Request.Context(), int32(id))
+	xProducts, err := h.queries.GetPurchaseBillProducts(c.Request.Context(), id)
 
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -391,7 +389,7 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 		products[p.Type] = append(products[p.Type], p)
 	}
 
-	a, err := h.queries.GetPurchaseBillAttachments(c.Request.Context(), int32(id))
+	a, err := h.queries.GetPurchaseBillAttachments(c.Request.Context(), id)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)
@@ -412,12 +410,12 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 		EffectiveDate:          b.EffectiveDate,
 		PaymentDueDate:         b.PaymentDueDate,
 		State:                  b.State,
-		Discount:               b.Discount,
 		SequenceNumber:         b.SequenceNumber,
 		StoreId:                b.StoreID,
 		MerchantId:             int(b.MerchantID),
 		Products:               products[0],
 		ManualProducts:         products[1],
+		Discount:               b.Discount.Round(2).String(),
 		TotalBeforeVAT:         b.TotalBeforeVat.Round(2).String(),
 		TotalVAT:               b.TotalVat.Round(2).String(),
 		Total:                  b.Total.Round(2).String(),
@@ -430,11 +428,12 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 
 	idStr := c.Param("id")
-	pbID, err := strconv.ParseInt(idStr, 10, 32)
+	PbID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
+	pbID := uint64(PbID)
 
 	userSession := GetSessionInfo(c)
 
@@ -447,7 +446,7 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 	qtx := h.queries.WithTx(tx)
 
 	// ── Stock tracking: reverse stock BEFORE deleting (need PB data intact) ──
-	if err := h.reversePurchaseMovements(qtx, c, int32(pbID), int32(userSession.id)); err != nil {
+	if err := h.reversePurchaseMovements(qtx, c, pbID, int32(userSession.id)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"detail": err.Error(),
 			"type":   "stock_error",

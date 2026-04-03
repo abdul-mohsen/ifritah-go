@@ -356,7 +356,7 @@ func (h *handler) DeleteFile(c *gin.Context) {
 // It extracts the file_key from each URL (last path segment) and:
 //  1. Updates purchase_bill.pdf_link with the file_key
 //  2. Inserts each attachment into purchase_bill_attachments
-func (h *handler) SavePurchaseBillAttachments(db *sql.DB, billID int64, pdfLink string, attachments []string) error {
+func (h *handler) SavePurchaseBillAttachments(db *sql.DB, billID uint64, pdfLink string, attachments []string) error {
 	// Extract file_key from URL: "/api/v2/files/abc123.pdf" → "abc123.pdf"
 	pdfKey := filepath.Base(pdfLink)
 
@@ -439,7 +439,7 @@ func (h *handler) GetPurchaseBillAttachments(db *sql.DB, billID int64) (pdfLink 
 // DeletePurchaseBillAttachments removes all attachment links for a purchase bill.
 // Call this before deleting a bill (CASCADE handles it too, but explicit is cleaner),
 // or when updating a bill's attachments (delete old → insert new).
-func (h *handler) DeletePurchaseBillAttachments(db *sql.DB, billID int64) error {
+func (h *handler) DeletePurchaseBillAttachments(db *sql.DB, billID uint64) error {
 	_, err := db.Exec("DELETE FROM purchase_bill_attachments WHERE purchase_bill_id = ?", billID)
 	if err != nil {
 		log.Printf("[ATTACHMENTS] Failed to delete attachments for bill %d: %v", billID, err)
@@ -450,7 +450,7 @@ func (h *handler) DeletePurchaseBillAttachments(db *sql.DB, billID int64) error 
 // UpdatePurchaseBillAttachments replaces all attachments for a bill.
 // Deletes existing attachments then saves new ones.
 // Call this in your UpdatePurchaseBill handler.
-func (h *handler) UpdatePurchaseBillAttachments(db *sql.DB, billID int64, pdfLink string, attachments []string) error {
+func (h *handler) UpdatePurchaseBillAttachments(db *sql.DB, billID uint64, pdfLink string, attachments []string) error {
 	// Delete existing attachments
 	if err := h.DeletePurchaseBillAttachments(db, billID); err != nil {
 		return err

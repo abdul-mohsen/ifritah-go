@@ -61,7 +61,7 @@ type cashVoucherCreateRequest struct {
 	BankAccount          *string `json:"bank_account"`
 	TransactionReference *string `json:"transaction_reference"`
 	StoreID              int32   `json:"store_id" binding:"required"`
-	BranchID             int32   `json:"branch_id" binding:"required"`
+	BranchID             uint32  `json:"branch_id" binding:"required"`
 }
 
 type cashVoucherListItem struct {
@@ -340,7 +340,7 @@ func (h *handler) CreateCashVoucher(c *gin.Context) {
 		TransactionReference: req.TransactionReference,
 		StoreID:              req.StoreID,
 		MerchantID:           merchantID,
-		BranchID:             sql.NullInt32{Int32: req.BranchID, Valid: true},
+		BranchID:             &req.BranchID,
 		CreatedBy:            merchantID,
 		ApprovedBy:           &merchantID,
 	}

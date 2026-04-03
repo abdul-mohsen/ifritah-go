@@ -54,11 +54,12 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 
 func (h *handler) GetSupplier(c *gin.Context) {
 
-	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
+
 	userSession := GetSessionInfo(c)
 
 	companyID, err := h.queries.GetCompanyIdByUser(c.Request.Context(), int32(userSession.id))

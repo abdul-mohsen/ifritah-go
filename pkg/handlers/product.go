@@ -80,12 +80,15 @@ func (h *handler) AddQuantity(c *gin.Context) {
 
 func (h *handler) UpdateProduct(c *gin.Context) {
 
-	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)
 	}
+
+	id := uint64(Id)
+
 	var request UpdateProductRequest
 	if err := c.BindJSON(&request); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
@@ -97,7 +100,7 @@ func (h *handler) UpdateProduct(c *gin.Context) {
 		Price:       request.Price,
 		CostPrice:   request.CostPrice,
 		ShelfNumber: &request.ShelfNumber,
-		ID:          int32(id),
+		ID:          id,
 	}
 	if err := h.queries.UpdateProduct(c.Request.Context(), args); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
@@ -136,13 +139,15 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 }
 
 func (h *handler) DeleteProduct(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
 
-	err = h.queries.DeleteProduct(c.Request.Context(), int32(id))
+	id := uint64(Id)
+
+	err = h.queries.DeleteProduct(c.Request.Context(), id)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic("Error in query", err)
@@ -154,13 +159,15 @@ func (h *handler) DeleteProduct(c *gin.Context) {
 
 func (h *handler) GetProduct(c *gin.Context) {
 	// user := GetSessionInfo(c)
-	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
+	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
 	}
 
-	res, err := h.queries.GetProduct(c.Request.Context(), int32(id))
+	id := uint64(Id)
+
+	res, err := h.queries.GetProduct(c.Request.Context(), id)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic("Error in query", err)

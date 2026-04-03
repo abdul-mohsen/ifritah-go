@@ -25,7 +25,7 @@ import (
 )
 
 type BillCredit struct {
-	BillId int32  `json:"bill_id" binding:"required"`
+	BillId uint64 `json:"bill_id" binding:"required"`
 	Note   string `json:"note" binding:"required"`
 }
 
@@ -53,7 +53,7 @@ func (h *handler) CreditBill(c *gin.Context) {
 	// Insert the credit note
 	var one int32 = 1
 	args := db.InsertCreditNoteParams{
-		BillID: &request.BillId,
+		BillID: request.BillId,
 		State:  &one,
 		Note:   &request.Note,
 	}
@@ -64,15 +64,16 @@ func (h *handler) CreditBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	creditNoteID, err := res.LastInsertId()
+	CreditNoteID, err := res.LastInsertId()
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)
 	}
+	creditNoteID := uint64(CreditNoteID)
 
 	// ── Stock tracking: restore stock for all catalog items on the original bill ──
 	if err := h.recordCreditNoteMovements(
-		qtx, c, int32(creditNoteID), request.BillId, int32(userSession.id),
+		qtx, c, creditNoteID, request.BillId, int32(userSession.id),
 	); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"detail": err.Error(),

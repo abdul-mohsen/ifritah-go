@@ -263,13 +263,13 @@ func (h *handler) CreateCashVoucher(c *gin.Context) {
 	var req cashVoucherCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "بيانات غير صالحة: " + err.Error()})
-		return
+		log.Panic(err)
 	}
 
 	// Validate fields
 	if err := validateCashVoucherRequest(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
-		return
+		log.Panic(err)
 	}
 
 	merchantID := int32(getMerchantID(c))
@@ -281,7 +281,7 @@ func (h *handler) CreateCashVoucher(c *gin.Context) {
 		effectiveDate, err = time.Parse("2006-01-02", req.EffectiveDate)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"detail": "تاريخ غير صالح"})
-			return
+			log.Panic(err)
 		}
 	}
 
@@ -291,7 +291,7 @@ func (h *handler) CreateCashVoucher(c *gin.Context) {
 		req.StoreID).Scan(&storeExists)
 	if storeExists == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "المخزن غير موجود"})
-		return
+		log.Panic(err)
 	}
 
 	// Get next voucher number for this merchant (atomic)
@@ -373,18 +373,18 @@ func (h *handler) UpdateCashVoucher(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "معرّف غير صالح"})
-		return
+		log.Panic(err)
 	}
 
 	var req cashVoucherCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "بيانات غير صالحة: " + err.Error()})
-		return
+		log.Panic(err)
 	}
 
 	if err := validateCashVoucherRequest(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
-		return
+		log.Panic(err)
 	}
 
 	merchantID := getMerchantID(c)

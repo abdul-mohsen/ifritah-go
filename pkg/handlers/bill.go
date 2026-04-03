@@ -534,12 +534,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 				WithType(models.InvoiceTypeB2C).
 				Build()
 		} else {
-			client, err := h.queries.GetClientByID(c.Request.Context(), bill.Client.ID)
-			if err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				log.Panic(err)
-			}
-			invoice = b2bInvoice(true, models.PaperA4, bill, products, client).
+			invoice = b2bInvoice(true, models.PaperA4, bill, products, *bill.Client).
 				WithType(models.InvoiceTypeB2B).
 				Build()
 		}
@@ -619,9 +614,17 @@ func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 }
 
 func b2bInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products []model.BillProductResponse, client db.Client) *invoice.Builder {
+	address := ""
+	commercialRegistration := ""
+	if client.Address != nil {
+		address = *client.Address
+	}
+	if client.CommercialRegistration != nil {
+		commercialRegistration = *client.CommercialRegistration
+	}
 
 	return b2cInvoice(arabic, paper, bill, products).
-		WithBuyer(client.Name, *client.Address, client.VatNumber, *client.CommercialRegistration)
+		WithBuyer(*client.CompanyName, address, client.VatNumber, commercialRegistration)
 
 }
 

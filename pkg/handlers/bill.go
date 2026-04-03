@@ -468,12 +468,12 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		maintenanceCost = products[2][0].Price
 
 	}
-	var client db.Client
+	var client *db.Client = nil
 
 	if bill.ClientID != nil {
-		client, _ = h.queries.GetClientByID(c.Request.Context(), uint32(*bill.ClientID))
+		Client, _ := h.queries.GetClientByID(c.Request.Context(), uint32(*bill.ClientID))
+		client = &Client
 	}
-
 	return model.Bill{
 		Id:                           bill.ID,
 		EffectiveDate:                bill.EffectiveDate,
@@ -501,7 +501,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		Total:                        bill.Total.Round(2).String(),
 		CommercialRegistrationNumber: CommercialRegistrationNumber,
 		CreditID:                     bill.CreditID,
-		Client:                       &client,
+		Client:                       client,
 		PaymentMethod:                bill.PaymentMethod,
 		DeliverDate:                  bill.DeliverDate,
 		BranchID:                     bill.BranchID,
@@ -622,9 +622,13 @@ func b2bInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 	if client.CommercialRegistration != nil {
 		commercialRegistration = *client.CommercialRegistration
 	}
+	name := client.Name
+	if client.CompanyName != nil {
+		name = *client.CompanyName
+	}
 
 	return b2cInvoice(arabic, paper, bill, products).
-		WithBuyer(*client.CompanyName, address, client.VatNumber, commercialRegistration)
+		WithBuyer(name, address, client.VatNumber, commercialRegistration)
 
 }
 

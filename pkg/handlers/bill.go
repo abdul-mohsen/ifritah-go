@@ -196,10 +196,10 @@ func (h *handler) AddBill(c *gin.Context) {
 	}
 
 	// ── Stock tracking: deduct stock for catalog products ──
-	enforcement := h.getStockEnforcementMode()
+	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		warnings, err := recordSaleMovements(
-			tx, int32(id), int32(request.StoreId),
+			qtx, c, int32(id), int32(request.StoreId),
 			request.Products, int32(squenceNumber),
 			enforcement, int32(userSession.id),
 		)
@@ -331,10 +331,10 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	}
 
 	// ── Stock tracking: deduct stock for catalog products ──
-	enforcement := h.getStockEnforcementMode()
+	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		warnings, err := recordSaleMovements(
-			tx, int32(billID), int32(request.StoreId),
+			qtx, c, int32(billID), int32(request.StoreId),
 			request.Products, int32(squenceNumber),
 			enforcement, int32(userSession.id),
 		)
@@ -653,9 +653,10 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 		log.Panic(err)
 	}
 	defer tx.Rollback()
+	qtx := h.queries.WithTx(tx)
 
 	// ── Stock tracking: restore stock BEFORE deleting the bill (need bill data intact) ──
-	if err := h.reverseSaleMovements(tx, int32(billID), int32(userSession.id)); err != nil {
+	if err := h.reverseSaleMovements(qtx, c, int32(billID), int32(userSession.id)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"detail": err.Error(),
 			"type":   "stock_error",

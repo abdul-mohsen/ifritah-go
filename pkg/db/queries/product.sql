@@ -34,3 +34,6 @@ WHERE user.id = ? AND p.is_deleted = FALSE
        OR COALESCE(p.shelf_number, '') LIKE CONCAT('%', ?, '%'))
 ORDER BY p.id DESC
 LIMIT ?;
+
+-- name: SearchQuantityByID :one
+SELECT quantity FROM product WHERE id = ? FOR UPDATE

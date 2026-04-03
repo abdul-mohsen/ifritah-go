@@ -12,6 +12,7 @@ package handlers
 // ============================================================================
 
 import (
+	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
 	"log"
 	"net/http"
@@ -24,7 +25,7 @@ import (
 )
 
 type BillCredit struct {
-	BillId int    `json:"bill_id" binding:"required"`
+	BillId int32  `json:"bill_id" binding:"required"`
 	Note   string `json:"note" binding:"required"`
 }
 
@@ -47,12 +48,17 @@ func (h *handler) CreditBill(c *gin.Context) {
 		log.Panic(err)
 	}
 	defer tx.Rollback()
+	qtx := h.queries.WithTx(tx)
 
 	// Insert the credit note
-	res, err := tx.Exec(
-		"INSERT INTO credit_note (bill_id, state, note) VALUES (?, ?, ?)",
-		request.BillId, 1, request.Note,
-	)
+	var one int32 = 1
+	args := db.InsertCreditNoteParams{
+		BillID: &request.BillId,
+		State:  &one,
+		Note:   &request.Note,
+	}
+	res, err := qtx.InsertCreditNote(c.Request.Context(), args)
+
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		log.Panic(err)
@@ -66,7 +72,7 @@ func (h *handler) CreditBill(c *gin.Context) {
 
 	// ── Stock tracking: restore stock for all catalog items on the original bill ──
 	if err := h.recordCreditNoteMovements(
-		tx, int32(creditNoteID), int32(request.BillId), int32(userSession.id),
+		qtx, c, int32(creditNoteID), request.BillId, int32(userSession.id),
 	); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"detail": err.Error(),

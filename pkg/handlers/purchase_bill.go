@@ -110,9 +110,9 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	}
 
 	// ── Stock tracking: reverse old stock before deleting products ──
-	enforcement := h.getStockEnforcementMode()
+	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable {
-		if err := h.reversePurchaseMovements(tx, int32(id), int32(userSession.id)); err != nil {
+		if err := h.reversePurchaseMovements(qtx, c, int32(id), int32(userSession.id)); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
 				"type":   "stock_error",
@@ -142,7 +142,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	// ── Stock tracking: add new stock for updated products ──
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		if err := recordPurchaseMovements(
-			tx, int32(id), int32(request.StoreId),
+			qtx, c, int32(id), int32(request.StoreId),
 			request.Products, request.SupplierSequenceNumber,
 			enforcement, int32(userSession.id),
 		); err != nil {
@@ -262,10 +262,10 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	}
 
 	// ── Stock tracking: add stock for catalog products ──
-	enforcement := h.getStockEnforcementMode()
+	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		if err := recordPurchaseMovements(
-			tx, int32(id), int32(request.StoreId),
+			qtx, c, int32(id), int32(request.StoreId),
 			request.Products, request.SupplierSequenceNumber,
 			enforcement, int32(userSession.id),
 		); err != nil {
@@ -444,9 +444,10 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 		log.Panic(err)
 	}
 	defer tx.Rollback()
+	qtx := h.queries.WithTx(tx)
 
 	// ── Stock tracking: reverse stock BEFORE deleting (need PB data intact) ──
-	if err := h.reversePurchaseMovements(tx, int32(pbID), int32(userSession.id)); err != nil {
+	if err := h.reversePurchaseMovements(qtx, c, int32(pbID), int32(userSession.id)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"detail": err.Error(),
 			"type":   "stock_error",

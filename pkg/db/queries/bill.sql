@@ -101,3 +101,13 @@ DELETE FROM bill_product where bill_id = ?;
 
 -- name: GetBillProductByBillID :many
 select * from bill_product where bill_id = ?;
+
+-- name: GetStoreIDAndSequenceNumberFromBill :one
+SELECT store_id, sequence_number FROM bill WHERE id = ? limit 1;
+
+
+-- name: GetProductOfBill :many
+SELECT bp.id, bp.product_id, bp.quantity, b.store_id, b.sequence_number
+		 FROM bill_product bp
+		 JOIN bill b ON bp.bill_id = b.id
+		 WHERE bp.bill_id = ? AND bp.product_id IS NOT NULL;

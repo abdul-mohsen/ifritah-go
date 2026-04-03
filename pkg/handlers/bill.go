@@ -527,9 +527,22 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 				p.Name = "تكلفة الصيانة"
 			}
 		}
-		invoice := b2cInvoice(true, models.PaperThermal, bill, products).
-			WithType(models.InvoiceTypeB2C).
-			Build()
+
+		var invoice invoice.Invoice
+		if bill.Client == nil {
+			invoice = b2cInvoice(true, models.PaperThermal, bill, products).
+				WithType(models.InvoiceTypeB2C).
+				Build()
+		} else {
+			client, err := h.queries.GetClientByID(c.Request.Context(), bill.Client.ID)
+			if err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				log.Panic(err)
+			}
+			invoice = b2bInvoice(true, models.PaperA4, bill, products, client).
+				WithType(models.InvoiceTypeB2B).
+				Build()
+		}
 
 		fontDir := "fonts"
 		pdfBytes, err := pdf.GenerateInvoiceBytes(invoice, fontDir)
@@ -603,6 +616,13 @@ func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 	}
 
 	return b
+}
+
+func b2bInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products []model.BillProductResponse, client db.Client) *invoice.Builder {
+
+	return b2cInvoice(arabic, paper, bill, products).
+		WithBuyer(client.Name, *client.Address, client.VatNumber, *client.CommercialRegistration)
+
 }
 
 func (h *handler) getProducts(billId uint64) []model.ProductDetails {

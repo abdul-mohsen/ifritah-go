@@ -476,7 +476,7 @@ CREATE TABLE `bill` (
   KEY `idx_bill_deliver_date` (`deliver_date`),
   FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`),
   CONSTRAINT `fk_bill_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=508 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=509 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -526,7 +526,7 @@ CREATE TABLE `bill_product` (
   CONSTRAINT `fk_product_id` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`),
   CONSTRAINT `chk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=844 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=845 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -806,7 +806,7 @@ CREATE TABLE `cash_voucher` (
   CONSTRAINT `chk_cv_amount` CHECK ((`amount` > 0)),
   CONSTRAINT `chk_cv_bank_fields` CHECK (((`payment_method` <> _utf8mb4'bank_transfer') or ((`bank_name` is not null) and (`bank_account` is not null)))),
   CONSTRAINT `chk_cv_state` CHECK ((`state` in (0,1,2)))
-) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=40 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1506,7 +1506,7 @@ CREATE TABLE `purchase_bill` (
   KEY `idx_pb_supplier_merchant` (`supplier_id`,`merchant_id`),
   KEY `idx_pb_payment_method` (`payment_method`),
   KEY `idx_pb_deliver_date` (`deliver_date`)
-) ENGINE=InnoDB AUTO_INCREMENT=292 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=293 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1573,7 +1573,7 @@ CREATE TABLE `purchase_bill_product` (
   CONSTRAINT `fk_pbp_product_id` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`),
   CONSTRAINT `chpk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chpk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=498 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=499 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1730,7 +1730,7 @@ CREATE TABLE `stock_movements` (
   `quantity` decimal(10,3) NOT NULL COMMENT 'Positive = stock in, Negative = stock out',
   `movement_type` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
   `reference_type` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `reference_id` int DEFAULT NULL COMMENT 'ID of the bill/PB/credit_note/transfer',
+  `reference_id` bigint unsigned DEFAULT NULL,
   `item_id` int DEFAULT NULL COMMENT 'ID of the line item (bill_product.id or purchase_bill_product.id)',
   `reason` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'For adjustments: damaged, lost, expired, etc.',
   `note` text COLLATE utf8mb4_unicode_ci COMMENT 'Free text note for adjustments',
@@ -1818,7 +1818,7 @@ CREATE TABLE `supplier` (
   KEY `idx_supplier_postpaid` (`is_postpaid`),
   KEY `idx_supplier_payment_method` (`preferred_payment_method`),
   CONSTRAINT `supplier_ibfk_1` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=242 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=243 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2129,4 +2129,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-03 14:15:40
+-- Dump completed on 2026-04-03 19:01:17

@@ -449,13 +449,13 @@ DROP TABLE IF EXISTS `bill`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `bill` (
-  `id` int NOT NULL AUTO_INCREMENT,
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `effective_date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `payment_due_date` datetime DEFAULT NULL,
   `state` int NOT NULL DEFAULT '0',
   `discount` decimal(30,10) NOT NULL,
   `store_id` int NOT NULL,
-  `sequence_number` int NOT NULL,
+  `sequence_number` bigint unsigned DEFAULT NULL,
   `merchant_id` int NOT NULL,
   `maintenance_cost` decimal(30,10) NOT NULL,
   `note` text,
@@ -476,7 +476,7 @@ CREATE TABLE `bill` (
   KEY `idx_bill_deliver_date` (`deliver_date`),
   FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`),
   CONSTRAINT `fk_bill_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=491 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=507 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -507,7 +507,7 @@ DROP TABLE IF EXISTS `bill_product`;
 CREATE TABLE `bill_product` (
   `id` int NOT NULL AUTO_INCREMENT,
   `product_id` int DEFAULT NULL,
-  `bill_id` int NOT NULL,
+  `bill_id` bigint unsigned NOT NULL,
   `vat` decimal(5,2) DEFAULT '15.00',
   `price` decimal(12,2) NOT NULL,
   `quantity` decimal(10,3) NOT NULL,
@@ -520,9 +520,11 @@ CREATE TABLE `bill_product` (
   `vat_total` decimal(12,2) GENERATED ALWAYS AS (round(((`total_before_vat` * `vat`) / 100),2)) STORED,
   `total_including_vat` decimal(12,2) GENERATED ALWAYS AS (round((`total_before_vat` + `vat_total`),2)) STORED,
   PRIMARY KEY (`id`),
+  KEY `fk_bill_product` (`bill_id`),
+  CONSTRAINT `fk_bill_product` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`),
   CONSTRAINT `chk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=824 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=843 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -653,7 +655,7 @@ CREATE TABLE `branches` (
   UNIQUE KEY `uq_branches_company_name` (`company_id`,`name`),
   KEY `idx_branches_active` (`is_active`),
   CONSTRAINT `fk_branches_company` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=26 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -758,7 +760,7 @@ DROP TABLE IF EXISTS `cash_voucher`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `cash_voucher` (
-  `id` int NOT NULL AUTO_INCREMENT,
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `voucher_number` int NOT NULL COMMENT 'Sequential number per merchant, auto-generated',
   `voucher_type` enum('disbursement','receipt','cash_box') NOT NULL COMMENT 'disbursement=سند صرف, receipt=سند قبض, cash_box=سند صرف صندوق',
   `effective_date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -802,7 +804,7 @@ CREATE TABLE `cash_voucher` (
   CONSTRAINT `chk_cv_amount` CHECK ((`amount` > 0)),
   CONSTRAINT `chk_cv_bank_fields` CHECK (((`payment_method` <> _utf8mb4'bank_transfer') or ((`bank_name` is not null) and (`bank_account` is not null)))),
   CONSTRAINT `chk_cv_state` CHECK ((`state` in (0,1,2)))
-) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=38 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -859,7 +861,7 @@ CREATE TABLE `client` (
   UNIQUE KEY `uq_vat_number` (`vat_number`),
   UNIQUE KEY `uq_email` (`email`),
   KEY `idx_supplier_payment_method` (`preferred_payment_method`)
-) ENGINE=InnoDB AUTO_INCREMENT=111 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=115 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -930,8 +932,8 @@ DROP TABLE IF EXISTS `credit_note`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `credit_note` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `bill_id` int DEFAULT NULL,
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `bill_id` bigint unsigned NOT NULL,
   `state` int DEFAULT NULL,
   `NOTE` text,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
@@ -941,7 +943,7 @@ CREATE TABLE `credit_note` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_bill_id` (`bill_id`),
   KEY `idx_cn_bill_id` (`bill_id`),
-  CONSTRAINT `credit_note_ibfk_1` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`)
+  CONSTRAINT `fk_credit_note` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=114 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1397,7 +1399,7 @@ DROP TABLE IF EXISTS `order_items`;
 CREATE TABLE `order_items` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `order_id` int unsigned NOT NULL,
-  `part_id` int DEFAULT NULL COMMENT 'FK to product — NULL for manual items',
+  `part_id` bigint unsigned DEFAULT NULL,
   `part_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `quantity` int NOT NULL DEFAULT '1',
   `unit_price` decimal(12,2) NOT NULL DEFAULT '0.00',
@@ -1407,7 +1409,7 @@ CREATE TABLE `order_items` (
   KEY `idx_oi_order` (`order_id`),
   KEY `idx_oi_part` (`part_id`),
   CONSTRAINT `fk_oi_order` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_oi_part` FOREIGN KEY (`part_id`) REFERENCES `product` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_oi_part` FOREIGN KEY (`part_id`) REFERENCES `product` (`id`),
   CONSTRAINT `chk_oi_price` CHECK ((`unit_price` >= 0)),
   CONSTRAINT `chk_oi_qty` CHECK ((`quantity` > 0)),
   CONSTRAINT `chk_oi_total` CHECK ((`line_total` >= 0))
@@ -1456,7 +1458,7 @@ DROP TABLE IF EXISTS `product`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `product` (
-  `id` int NOT NULL AUTO_INCREMENT,
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `article_id` int NOT NULL,
   `store_id` int NOT NULL,
   `status` int NOT NULL DEFAULT '0',
@@ -1472,7 +1474,7 @@ CREATE TABLE `product` (
   KEY `idx_product_store_price` (`store_id`,`price`),
   CONSTRAINT `ch_product_price` CHECK ((`price` > 0)),
   CONSTRAINT `ch_product_quantity` CHECK ((`quantity` >= 0))
-) ENGINE=InnoDB AUTO_INCREMENT=285208986 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=285208987 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1483,15 +1485,15 @@ DROP TABLE IF EXISTS `purchase_bill`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `purchase_bill` (
-  `id` int NOT NULL AUTO_INCREMENT,
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `effective_date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `payment_due_date` datetime DEFAULT NULL,
   `state` int NOT NULL DEFAULT '0',
   `discount` bigint NOT NULL DEFAULT '0',
   `supplier_id` int NOT NULL,
-  `sequence_number` int NOT NULL,
-  `supplier_sequence_number` int DEFAULT NULL,
-  `vat_sequence_number` int DEFAULT NULL,
+  `sequence_number` bigint unsigned DEFAULT NULL,
+  `supplier_sequence_number` bigint unsigned DEFAULT NULL,
+  `vat_sequence_number` bigint unsigned DEFAULT NULL,
   `store_id` int NOT NULL,
   `merchant_id` int NOT NULL,
   `pdf_link` varchar(255) DEFAULT NULL COMMENT 'file_key of the mandatory bill PDF',
@@ -1502,7 +1504,7 @@ CREATE TABLE `purchase_bill` (
   KEY `idx_pb_supplier_merchant` (`supplier_id`,`merchant_id`),
   KEY `idx_pb_payment_method` (`payment_method`),
   KEY `idx_pb_deliver_date` (`deliver_date`)
-) ENGINE=InnoDB AUTO_INCREMENT=277 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=291 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1514,14 +1516,14 @@ DROP TABLE IF EXISTS `purchase_bill_attachments`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `purchase_bill_attachments` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
-  `purchase_bill_id` int NOT NULL,
+  `purchase_bill_id` bigint unsigned NOT NULL,
   `file_key` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_pba_file` (`purchase_bill_id`,`file_key`),
-  KEY `idx_pba_bill` (`purchase_bill_id`),
   KEY `fk_pba_file` (`file_key`),
-  CONSTRAINT `fk_pba_bill` FOREIGN KEY (`purchase_bill_id`) REFERENCES `purchase_bill` (`id`) ON DELETE CASCADE,
+  KEY `idx_pba_bill` (`purchase_bill_id`),
+  CONSTRAINT `fk_pba_bill` FOREIGN KEY (`purchase_bill_id`) REFERENCES `purchase_bill` (`id`),
   CONSTRAINT `fk_pba_file` FOREIGN KEY (`file_key`) REFERENCES `uploaded_files` (`file_key`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1554,8 +1556,8 @@ DROP TABLE IF EXISTS `purchase_bill_product`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `purchase_bill_product` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `product_id` int DEFAULT NULL,
-  `bill_id` int NOT NULL,
+  `product_id` bigint unsigned DEFAULT NULL,
+  `bill_id` bigint unsigned NOT NULL,
   `vat` decimal(5,2) DEFAULT '15.00',
   `price` decimal(12,2) NOT NULL,
   `quantity` decimal(10,3) NOT NULL,
@@ -1567,7 +1569,7 @@ CREATE TABLE `purchase_bill_product` (
   PRIMARY KEY (`id`),
   CONSTRAINT `chpk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chpk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=481 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=496 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1693,7 +1695,7 @@ CREATE TABLE `settings` (
   UNIQUE KEY `uq_settings_key` (`setting_key`),
   KEY `fk_settings_user` (`updated_by`),
   CONSTRAINT `fk_settings_user` FOREIGN KEY (`updated_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=10719 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=12384 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1719,7 +1721,7 @@ DROP TABLE IF EXISTS `stock_movements`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `stock_movements` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `product_id` int NOT NULL COMMENT 'FK to product.id (per-store inventory)',
+  `product_id` bigint unsigned NOT NULL,
   `store_id` int NOT NULL COMMENT 'Denormalized from product.store_id for queries',
   `quantity` decimal(10,3) NOT NULL COMMENT 'Positive = stock in, Negative = stock out',
   `movement_type` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -1737,7 +1739,7 @@ CREATE TABLE `stock_movements` (
   KEY `idx_sm_type` (`movement_type`),
   KEY `idx_sm_created` (`created_at`),
   KEY `fk_sm_user` (`created_by`),
-  CONSTRAINT `fk_sm_product` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_sm_product` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`),
   CONSTRAINT `fk_sm_store` FOREIGN KEY (`store_id`) REFERENCES `store` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_sm_user` FOREIGN KEY (`created_by`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `chk_sm_movement_type` CHECK ((`movement_type` in (_utf8mb4'purchase',_utf8mb4'sale',_utf8mb4'credit_note',_utf8mb4'adjustment',_utf8mb4'transfer_out',_utf8mb4'transfer_in',_utf8mb4'initial_balance',_utf8mb4'deletion'))),
@@ -1777,7 +1779,7 @@ CREATE TABLE `store` (
   CONSTRAINT `companyID` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`),
   CONSTRAINT `fk_store_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_stores_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=47 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=49 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1812,7 +1814,7 @@ CREATE TABLE `supplier` (
   KEY `idx_supplier_postpaid` (`is_postpaid`),
   KEY `idx_supplier_payment_method` (`preferred_payment_method`),
   CONSTRAINT `supplier_ibfk_1` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=216 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=241 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2123,4 +2125,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-01 19:08:28
+-- Dump completed on 2026-04-03 11:08:12

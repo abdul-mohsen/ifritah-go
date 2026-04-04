@@ -365,13 +365,13 @@ func (h *handler) StockAdjust(c *gin.Context) {
 	var req model.StockAdjustRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
-		return
+		log.Panic(err)
 	}
 
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement == model.StockEnforcementDisable {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "stock tracking is disabled"})
-		return
+		log.Panic("stock tracking is disabled")
 	}
 
 	userID := GetSessionInfo(c).id
@@ -380,7 +380,7 @@ func (h *handler) StockAdjust(c *gin.Context) {
 	storeID, currentQty, err := h.getProductStock(c, req.ProductID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "product not found"})
-		return
+		log.Panic(err)
 	}
 
 	// Check if adjustment would make stock negative (enforce mode)
@@ -391,7 +391,7 @@ func (h *handler) StockAdjust(c *gin.Context) {
 			"available": currentQty.String(),
 			"requested": req.QuantityChange.Abs().String(),
 		})
-		return
+		log.Panic(err)
 	}
 
 	// Transaction: update product + insert movement

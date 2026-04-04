@@ -21,6 +21,7 @@ package handlers
 // ============================================================================
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -63,7 +64,8 @@ func insertStockMovement(tx *db.Queries, c *gin.Context, productID uint64, store
 		CreatedBy:     createdBy,
 		CreatedAt:     createdAt,
 	}
-	log.Println(args)
+	data, _ := json.Marshal(args)
+	log.Println(string(data))
 	_, err := tx.InsertStockMovement(c.Request.Context(), args)
 	return err
 }

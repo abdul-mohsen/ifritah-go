@@ -78,13 +78,11 @@ func updateProductQuantity(tx *db.Queries, c *gin.Context, productID uint64, del
 // ── Helper: Get product stock info ──────────────────────────────────────────
 
 func (h *handler) getProductStock(c *gin.Context, productID uint64) (storeID int32, quantity decimal.Decimal, err error) {
-	var qtyStr string
-	h.queries.GetProductQuantity(c.Request.Context(), productID)
+	row, err := h.queries.GetProductQuantity(c.Request.Context(), productID)
 	if err != nil {
 		return 0, decimal.Zero, err
 	}
-	quantity, err = decimal.NewFromString(qtyStr)
-	return storeID, quantity, err
+	return storeID, row.Quantity, err
 }
 
 // ============================================================================

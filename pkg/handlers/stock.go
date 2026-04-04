@@ -378,7 +378,7 @@ func (h *handler) StockAdjust(c *gin.Context) {
 	userID := GetSessionInfo(c).id
 
 	// Get product info
-	storeID, currentQty, err := h.getProductStock(c, req.ProductID)
+	_, currentQty, err := h.getProductStock(c, req.ProductID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "product not found"})
 		log.Panic(err)
@@ -413,7 +413,7 @@ func (h *handler) StockAdjust(c *gin.Context) {
 	uid := int32(userID)
 	reason := req.Reason
 	note := req.Note
-	if err := insertStockMovement(qtx, c, req.ProductID, storeID,
+	if err := insertStockMovement(qtx, c, req.ProductID, req.StoreId,
 		req.QuantityChange, model.MovementTypeAdjustment, refType,
 		nil, nil, &reason, &note, &uid, time.Now()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to record movement"})

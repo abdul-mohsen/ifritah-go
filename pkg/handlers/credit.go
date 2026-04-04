@@ -112,8 +112,8 @@ func (h *handler) GetCreditBillPDF(c *gin.Context) {
 				WithTitle("إشعار دائن").
 				Build()
 		} else {
-			invoice = b2bInvoice(true, models.PaperThermal, bill, products, *bill.Client).
-				WithType(models.InvoiceTypeB2CCredit).
+			invoice = b2bInvoice(true, models.PaperA4, bill, products, *bill.Client).
+				WithType(models.InvoiceTypeB2BCredit).
 				WithNoteReason(*bill.CreditNote).
 				WithTitle("إشعار دائن").
 				Build()

@@ -63,6 +63,7 @@ func insertStockMovement(tx *db.Queries, c *gin.Context, productID uint64, store
 		CreatedBy:     createdBy,
 		CreatedAt:     createdAt,
 	}
+	log.Println(args)
 	_, err := tx.InsertStockMovement(c.Request.Context(), args)
 	return err
 }

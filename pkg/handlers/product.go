@@ -25,14 +25,14 @@ type UpdateProductRequest struct {
 	Quantity    decimal.Decimal `json:"quantity" binding:"required"`
 	Price       decimal.Decimal `json:"price" binding:"required"`
 	CostPrice   decimal.Decimal `json:"cost_price" binding:"required"`
-	ShelfNumber string          `json:"shelf_number" binding:"required"`
+	ShelfNumber string          `json:"shelf_number"`
 }
 type AddProduct struct {
 	Id          int             `json:"product_id" binding:"required"`
 	Quantity    decimal.Decimal `json:"quantity" binding:"required"`
 	Price       decimal.Decimal `json:"price" binding:"required"`
 	CostPrice   decimal.Decimal `json:"cost_price" binding:"required"`
-	ShelfNumber string          `json:"shelf_number" binding:"required"`
+	ShelfNumber string          `json:"shelf_number"`
 }
 
 func (h *handler) AddQuantity(c *gin.Context) {

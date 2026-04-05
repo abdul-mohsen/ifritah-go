@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
+	"github.com/shopspring/decimal"
 )
 
 func (h *handler) GetClient(c *gin.Context) {
@@ -53,19 +54,19 @@ func (h *handler) GetAllClient(c *gin.Context) {
 }
 
 type CreateClientRequest struct {
-	Name                   string  `json:"name" binding:"required"`
-	CompanyName            *string `json:"company_name" binding:"required"`
-	Email                  *string `json:"email" binding:"required"`
-	Phone                  *string `json:"phone" binding:"required"`
-	Address                *string `json:"address" binding:"required"`
-	VatNumber              string  `json:"vat_number" binding:"required"`
-	Number                 *string `json:"number"`
-	BankAccount            *string `json:"bank_account"`
-	PreferredPaymentMethod int8    `json:"preferred_payment_method"`
-	CreditLimit            string  `json:"credit_limit"`
-	PaymentTermsDays       int32   `json:"payment_terms_days"`
-	ShortAddress           *string `json:"short_address"`
-	CommercialRegistration *string `json:"commercial_registration"`
+	Name                   string           `json:"name" binding:"required"`
+	CompanyName            *string          `json:"company_name" binding:"required"`
+	Email                  *string          `json:"email" binding:"required"`
+	Phone                  *string          `json:"phone" binding:"required"`
+	Address                *string          `json:"address" binding:"required"`
+	VatNumber              string           `json:"vat_number" binding:"required"`
+	Number                 *string          `json:"number"`
+	BankAccount            *string          `json:"bank_account"`
+	PreferredPaymentMethod int8             `json:"preferred_payment_method"`
+	CreditLimit            *decimal.Decimal `json:"credit_limit"`
+	PaymentTermsDays       int32            `json:"payment_terms_days"`
+	ShortAddress           *string          `json:"short_address"`
+	CommercialRegistration *string          `json:"commercial_registration"`
 }
 
 func (h *handler) CreateClient(c *gin.Context) {
@@ -73,6 +74,10 @@ func (h *handler) CreateClient(c *gin.Context) {
 	var request CreateClientRequest
 	if err := c.BindJSON(&request); err != nil {
 		log.Panic(err)
+	}
+
+	if request.CreditLimit == nil {
+		request.CreditLimit = &decimal.Zero
 	}
 	query := db.CreateClientParams{
 		Name:                   request.Name,
@@ -84,7 +89,7 @@ func (h *handler) CreateClient(c *gin.Context) {
 		Number:                 request.Number,
 		BankAccount:            request.BankAccount,
 		PreferredPaymentMethod: request.PreferredPaymentMethod,
-		CreditLimit:            request.CreditLimit,
+		CreditLimit:            *request.CreditLimit,
 		PaymentTermsDays:       request.PaymentTermsDays,
 		ShortAddress:           request.ShortAddress,
 		CommercialRegistration: request.CommercialRegistration,
@@ -118,6 +123,10 @@ func (h *handler) UpdateClient(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	if request.CreditLimit == nil {
+		request.CreditLimit = &decimal.Zero
+	}
+
 	query := db.UpdateClientParams{
 		Name:                   request.Name,
 		CompanyName:            request.CompanyName,
@@ -129,7 +138,7 @@ func (h *handler) UpdateClient(c *gin.Context) {
 		Number:                 request.Number,
 		BankAccount:            request.BankAccount,
 		PreferredPaymentMethod: request.PreferredPaymentMethod,
-		CreditLimit:            request.CreditLimit,
+		CreditLimit:            *request.CreditLimit,
 		PaymentTermsDays:       request.PaymentTermsDays,
 		ShortAddress:           request.ShortAddress,
 		CommercialRegistration: request.CommercialRegistration,

@@ -8,23 +8,24 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 type SupplierRequest struct {
-	Name                   *string `json:"name"`
-	Address                *string `json:"address"`
-	PhoneNumber            *string `json:"phone_number"`
-	Number                 *string `json:"number"`
-	VatNumber              *string `json:"vat_number"`
-	BankAccount            *string `json:"bank_account"`
-	IsPostPaid             bool    `json:"is_postpaid"`
-	CreditLimit            *string `json:"credit_limit"`
-	PaymentTermsDays       int32   `json:"payment_terms_days"`
-	PreferredPaymentMethod int32   `json:"preferred_payment_method"`
-	CommercialRegistration *string `json:"commercial_registration"`
-	CRN                    string  `json:"crn"`
-	ShortAddress           *string `json:"short_address"`
-	Email                  *string `json:"email"`
+	Name                   *string          `json:"name"`
+	Address                *string          `json:"address"`
+	PhoneNumber            *string          `json:"phone_number"`
+	Number                 *string          `json:"number"`
+	VatNumber              *string          `json:"vat_number"`
+	BankAccount            *string          `json:"bank_account"`
+	IsPostPaid             bool             `json:"is_postpaid"`
+	CreditLimit            *decimal.Decimal `json:"credit_limit"`
+	PaymentTermsDays       int32            `json:"payment_terms_days"`
+	PreferredPaymentMethod int32            `json:"preferred_payment_method"`
+	CommercialRegistration *string          `json:"commercial_registration"`
+	CRN                    string           `json:"crn"`
+	ShortAddress           *string          `json:"short_address"`
+	Email                  *string          `json:"email"`
 }
 
 func (h *handler) GetAllSupplier(c *gin.Context) {
@@ -96,9 +97,8 @@ func (h *handler) AddSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	cl := "0.0"
-	if request.CreditLimit != nil {
-		cl = *request.CreditLimit
+	if request.CreditLimit == nil {
+		request.CreditLimit = &decimal.Zero
 	}
 
 	args :=
@@ -111,7 +111,7 @@ func (h *handler) AddSupplier(c *gin.Context) {
 			VatNumber:              request.VatNumber,
 			BankAccount:            request.BankAccount,
 			IsPostpaid:             request.IsPostPaid,
-			CreditLimit:            cl,
+			CreditLimit:            *request.CreditLimit,
 			PaymentTermsDays:       request.PaymentTermsDays,
 			CommercialRegistration: request.CommercialRegistration,
 			PreferredPaymentMethod: request.PreferredPaymentMethod,
@@ -156,9 +156,8 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		log.Panic(err)
 	}
 
-	cl := "0.0"
 	if request.CreditLimit != nil {
-		cl = *request.CreditLimit
+		request.CreditLimit = &decimal.Zero
 	}
 
 	row := db.UpdateSupplierParams{
@@ -169,7 +168,7 @@ func (h *handler) EditSupplier(c *gin.Context) {
 		VatNumber:              request.VatNumber,
 		BankAccount:            request.BankAccount,
 		IsPostpaid:             request.IsPostPaid,
-		CreditLimit:            cl,
+		CreditLimit:            *request.CreditLimit,
 		PaymentTermsDays:       request.PaymentTermsDays,
 		CommercialRegistration: request.CommercialRegistration,
 		PreferredPaymentMethod: request.PreferredPaymentMethod,

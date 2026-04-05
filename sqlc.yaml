@@ -43,6 +43,10 @@ sql:
               import: "github.com/shopspring/decimal"
               type : "Decimal"
               pointer: true
+          - column: "*.credit_limit"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type : "Decimal"
           - column: "*.discount"
             go_type:
               import: "github.com/shopspring/decimal"

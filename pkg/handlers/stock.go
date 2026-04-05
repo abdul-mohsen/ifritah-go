@@ -234,12 +234,18 @@ func recordPurchaseMovements(tx *db.Queries, c *gin.Context, pbID uint64, storeI
 
 	now := time.Now()
 
-	for _, p := range products {
-		if p.ProductId == nil {
+	Products, err := tx.GetPurchaseBillProducts(c.Request.Context(), pbID)
+
+	if err != nil {
+		return nil
+	}
+
+	for _, p := range Products {
+		if p.ProductID == nil {
 			continue // manual item — skip
 		}
 
-		productID := *p.ProductId
+		productID := *p.ProductID
 
 		// Add stock
 		if err := updateProductQuantity(tx, c, productID, p.Quantity); err != nil {

@@ -53,7 +53,7 @@ type UploadFileResponse struct {
 }
 
 type PurchaseBillProduct struct {
-	ProductId   *uint64         `json:"product_id"`
+	ProductId   *int32          `json:"product_id"`
 	Price       decimal.Decimal `json:"price" binding:"required"`
 	Name        string          `json:"name" binding:"required"`
 	CostPrice   decimal.Decimal `json:"cost_price" binding:"required"`

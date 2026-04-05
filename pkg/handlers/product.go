@@ -28,7 +28,7 @@ type UpdateProductRequest struct {
 	ShelfNumber string          `json:"shelf_number"`
 }
 type AddProduct struct {
-	Id          int             `json:"product_id" binding:"required"`
+	Id          int32           `json:"product_id" binding:"required"`
 	Quantity    decimal.Decimal `json:"quantity" binding:"required"`
 	Price       decimal.Decimal `json:"price" binding:"required"`
 	CostPrice   decimal.Decimal `json:"cost_price" binding:"required"`
@@ -58,7 +58,7 @@ func (h *handler) AddQuantity(c *gin.Context) {
 	for _, value := range request.Products {
 
 		args := db.AddProductParams{
-			ArticleID:   int32(value.Id),
+			ArticleID:   &value.Id,
 			Quantity:    value.Quantity,
 			Price:       value.Price,
 			CostPrice:   value.CostPrice,

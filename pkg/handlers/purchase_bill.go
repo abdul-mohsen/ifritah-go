@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
@@ -138,7 +137,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	products := append(request.Products, request.ManualProducts...)
 
-	err = addProductToBillPurchase(qtx, c, products, id)
+	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
@@ -180,13 +179,6 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
 		log.Panic(err)
 	}
-
-	j, _ := json.Marshal(request)
-	log.Println(string(j))
-	j, _ = json.Marshal(request.ManualProducts)
-	log.Println(string(j))
-	j, _ = json.Marshal(request.Products)
-	log.Println(string(j))
 
 	userSession := GetSessionInfo(c)
 
@@ -259,7 +251,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	products := append(request.Products, request.ManualProducts...)
 
-	err = addProductToBillPurchase(qtx, c, products, id)
+	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
 		log.Panic(err)
@@ -304,21 +296,38 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 }
 
-func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.PurchaseBillProduct, billId uint64) error {
+func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.PurchaseBillProduct, billId uint64, storeID int32) error {
 
 	for _, product := range products {
-		j, _ := json.Marshal(product)
-		log.Println(string(j))
-		log.Println(billId)
+		arg := db.AddProductParams{
+			ArticleID:   product.ProductId,
+			Quantity:    product.Quantity,
+			Price:       product.Price,
+			CostPrice:   product.CostPrice,
+			ShelfNumber: product.ShelfNumber,
+			StoreID:     storeID,
+		}
+		res, err := tx.AddProduct(c.Request.Context(), arg)
+
+		if err != nil {
+			return err
+		}
+
+		PID, err := res.LastInsertId()
+		pID := uint64(PID)
+
+		if err != nil {
+			return err
+		}
 
 		args := db.AddProductToBillPurchaseParams{
-			ProductID: product.ProductId,
+			ProductID: &pID,
 			Name:      &product.Name,
 			Price:     product.Price,
 			Quantity:  product.Quantity,
 			BillID:    billId,
 		}
-		err := tx.AddProductToBillPurchase(c.Request.Context(), args)
+		err = tx.AddProductToBillPurchase(c.Request.Context(), args)
 		if err != nil {
 			return err
 		}

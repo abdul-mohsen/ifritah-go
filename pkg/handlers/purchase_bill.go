@@ -183,6 +183,10 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	j, _ := json.Marshal(request)
 	log.Println(string(j))
+	j, _ = json.Marshal(request.ManualProducts)
+	log.Println(string(j))
+	j, _ = json.Marshal(request.Products)
+	log.Println(string(j))
 
 	userSession := GetSessionInfo(c)
 

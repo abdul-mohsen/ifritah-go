@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
@@ -180,6 +181,9 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		log.Panic(err)
 	}
 
+	j, _ := json.Marshal(request)
+	log.Println(string(j))
+
 	userSession := GetSessionInfo(c)
 
 	storeIds := h.getStoreIds(c)
@@ -299,6 +303,9 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.PurchaseBillProduct, billId uint64) error {
 
 	for _, product := range products {
+		j, _ := json.Marshal(product)
+		log.Println(string(j))
+		log.Println(billId)
 
 		args := db.AddProductToBillPurchaseParams{
 			ProductID: product.ProductId,

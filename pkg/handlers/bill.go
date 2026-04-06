@@ -606,6 +606,10 @@ func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 		WithStoreAddress(bill.Address).
 		WithStoreName(bill.StoreName)
 
+	if bill.UserName != nil {
+		b.WithBuyer(*bill.UserName+" ", "", "", "")
+	}
+
 	for _, p := range products {
 		b.AddProduct(p.Name+" "+p.PartName, p.Quantity, p.Price, p.Discount, p.TotalVAT, p.Total)
 	}

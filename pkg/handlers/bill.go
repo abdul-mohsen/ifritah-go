@@ -594,7 +594,7 @@ func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 	}
 
 	b := langBuilder(arabic).
-		WithDate(bill.EffectiveDate).
+		WithDate(bill.EffectiveDate.Local()).
 		WithDateFormat("2006-01-02 15:04").
 		WithPaper(paper).
 		WithTitle("فاتورة ضريبية مبسطة").

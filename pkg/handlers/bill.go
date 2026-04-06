@@ -607,7 +607,7 @@ func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 		WithStoreName(bill.StoreName)
 
 	for _, p := range products {
-		b.AddProduct(p.Name, p.Quantity, p.Price, p.Discount, p.TotalVAT, p.Total)
+		b.AddProduct(p.Name+" "+p.PartName, p.Quantity, p.Price, p.Discount, p.TotalVAT, p.Total)
 	}
 
 	return b

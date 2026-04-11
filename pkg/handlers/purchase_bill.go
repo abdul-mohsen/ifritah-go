@@ -94,17 +94,17 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	qtx := h.queries.WithTx(tx)
 
 	args := db.UpdatePurchaseBillParams{
-		EffectiveDate:  effectiveDate,
-		PaymentDueDate: paymentDueDate,
-		State:          request.State,
-		Discount:       request.Discount,
-		StoreID:        request.StoreId,
-		MerchantID:     int32(userSession.id),
-		SupplierID:     request.SupplierId,
-		SequenceNumber: &request.SupplierSequenceNumber,
-		ID:             id,
-		PaymentMethod:  request.PaymentMethod,
-		DeliverDate:    request.DeliverDate,
+		EffectiveDate:          effectiveDate,
+		PaymentDueDate:         paymentDueDate,
+		State:                  request.State,
+		Discount:               request.Discount,
+		StoreID:                request.StoreId,
+		MerchantID:             int32(userSession.id),
+		SupplierID:             request.SupplierId,
+		SupplierSequenceNumber: &request.SupplierSequenceNumber,
+		ID:                     id,
+		PaymentMethod:          request.PaymentMethod,
+		DeliverDate:            request.DeliverDate,
 	}
 
 	err = qtx.UpdatePurchaseBill(c.Request.Context(), args)
@@ -224,17 +224,17 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	qtx := h.queries.WithTx(tx)
 
 	args := db.AddPurchaseBillParams{
-		EffectiveDate:  effectiveDate,
-		PaymentDueDate: paymentDueDate,
-		State:          request.State,
-		Discount:       request.Discount,
-		StoreID:        int32(request.StoreId),
-		MerchantID:     int32(userSession.id),
-		SupplierID:     request.SupplierId,
-		SequenceNumber: &request.SupplierSequenceNumber,
-		PdfLink:        request.PDFLink,
-		PaymentMethod:  request.PaymentMethod,
-		DeliverDate:    request.DeliverDate,
+		EffectiveDate:          effectiveDate,
+		PaymentDueDate:         paymentDueDate,
+		State:                  request.State,
+		Discount:               request.Discount,
+		StoreID:                int32(request.StoreId),
+		MerchantID:             int32(userSession.id),
+		SupplierID:             request.SupplierId,
+		SupplierSequenceNumber: &request.SupplierSequenceNumber,
+		PdfLink:                request.PDFLink,
+		PaymentMethod:          request.PaymentMethod,
+		DeliverDate:            request.DeliverDate,
 	}
 
 	res, err := qtx.AddPurchaseBill(c.Request.Context(), args)

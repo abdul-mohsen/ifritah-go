@@ -306,6 +306,7 @@ func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.P
 			CostPrice:   product.CostPrice,
 			ShelfNumber: product.ShelfNumber,
 			StoreID:     storeID,
+			Name:        &product.Name,
 		}
 		res, err := tx.AddProduct(c.Request.Context(), arg)
 

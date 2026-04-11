@@ -476,7 +476,7 @@ CREATE TABLE `bill` (
   KEY `idx_bill_deliver_date` (`deliver_date`),
   FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`),
   CONSTRAINT `fk_bill_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=515 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=518 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -526,7 +526,7 @@ CREATE TABLE `bill_product` (
   CONSTRAINT `fk_product_id` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`),
   CONSTRAINT `chk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=858 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=862 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -863,7 +863,7 @@ CREATE TABLE `client` (
   UNIQUE KEY `uq_vat_number` (`vat_number`),
   UNIQUE KEY `uq_email` (`email`),
   KEY `idx_supplier_payment_method` (`preferred_payment_method`)
-) ENGINE=InnoDB AUTO_INCREMENT=115 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=119 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1470,13 +1470,14 @@ CREATE TABLE `product` (
   `price` decimal(12,2) NOT NULL,
   `quantity` decimal(10,3) NOT NULL,
   `is_deleted` tinyint(1) NOT NULL DEFAULT '0',
+  `name` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `id_UNIQUE` (`article_id`,`store_id`) /*!80000 INVISIBLE */,
   KEY `idx_product_store_qty` (`store_id`,`quantity`),
   KEY `idx_product_store_price` (`store_id`,`price`),
   CONSTRAINT `ch_product_price` CHECK ((`price` > 0)),
   CONSTRAINT `ch_product_quantity` CHECK ((`quantity` >= 0))
-) ENGINE=InnoDB AUTO_INCREMENT=285208989 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=285209013 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1506,7 +1507,7 @@ CREATE TABLE `purchase_bill` (
   KEY `idx_pb_supplier_merchant` (`supplier_id`,`merchant_id`),
   KEY `idx_pb_payment_method` (`payment_method`),
   KEY `idx_pb_deliver_date` (`deliver_date`)
-) ENGINE=InnoDB AUTO_INCREMENT=305 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=318 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1573,7 +1574,7 @@ CREATE TABLE `purchase_bill_product` (
   CONSTRAINT `fk_pbp_product_id` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`),
   CONSTRAINT `chpk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chpk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=511 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=530 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2129,4 +2130,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-05 13:06:34
+-- Dump completed on 2026-04-10 21:32:24

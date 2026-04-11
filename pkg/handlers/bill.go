@@ -427,6 +427,12 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 			log.Panic("ERR")
 		}
 
+		u := ""
+		if product.PartName == nil {
+
+			product.PartName = &u
+		}
+
 		product := model.BillProductResponse{
 			Name:           name,
 			PartName:       *product.PartName,

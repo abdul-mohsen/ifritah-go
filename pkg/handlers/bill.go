@@ -159,6 +159,11 @@ func (h *handler) AddBill(c *gin.Context) {
 
 	res, err := qtx.CreateBill(c.Request.Context(), args)
 	if err != nil {
+		if IsDuplicate(err) {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+				"message": "Supplier bill number already exists for this supplier",
+			})
+		}
 		log.Panic(err)
 	}
 
@@ -592,6 +597,8 @@ func b2cInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 	if bill.QRCode != nil {
 		qrCode = *bill.QRCode
 	}
+
+	bill.Address = "ﺍﻟﻤﺒﺮﺯ, ﺣﻲ ﺍﻟﺮﺍﺷﺪﻳﺔ ﺍﻟﺜﺎﻟﺚ, Abdullah Ibn Muaeqil"
 
 	b := langBuilder(arabic).
 		WithDate(bill.EffectiveDate.Local()).

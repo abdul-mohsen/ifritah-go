@@ -109,7 +109,14 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	err = qtx.UpdatePurchaseBill(c.Request.Context(), args)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
+		if IsDuplicate(err) {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+				"message": "Supplier bill number already exists for this supplier",
+			})
+		} else {
+			c.AbortWithError(http.StatusBadRequest, err)
+		}
+
 		log.Panic(err)
 	}
 
@@ -232,7 +239,13 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	res, err := qtx.AddPurchaseBill(c.Request.Context(), args)
 	if err != nil {
-		c.Status(http.StatusBadRequest)
+		if IsDuplicate(err) {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+				"message": "Supplier bill number already exists for this supplier",
+			})
+		} else {
+			c.Status(http.StatusBadRequest)
+		}
 		log.Panic(err)
 	}
 

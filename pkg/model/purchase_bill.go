@@ -13,7 +13,6 @@ type PurchaseBill struct {
 	PaymentDueDate         *time.Time               `json:"payment_due_date"`
 	State                  int32                    `json:"state"`
 	Discount               string                   `json:"discount"`
-	SequenceNumber         *uint64                  `json:"sequence_number"`
 	SupplierId             int32                    `json:"supplier_id"`
 	SupplierSequenceNumber *uint64                  `json:"supplier_sequence_number"`
 	StoreId                int32                    `json:"store_id"`

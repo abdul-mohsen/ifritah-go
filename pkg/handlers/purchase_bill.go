@@ -440,11 +440,10 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 	bill := model.PurchaseBill{
 		Id:                     b.ID,
 		SupplierId:             b.SupplierID,
-		SupplierSequenceNumber: b.SequenceNumber,
+		SupplierSequenceNumber: b.SupplierSequenceNumber,
 		EffectiveDate:          b.EffectiveDate,
 		PaymentDueDate:         b.PaymentDueDate,
-		State:                  b.State,
-		SequenceNumber:         b.SequenceNumber,
+		State:                  3,
 		StoreId:                b.StoreID,
 		MerchantId:             int(b.MerchantID),
 		Products:               products[0],

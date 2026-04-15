@@ -217,6 +217,12 @@ func (h *handler) AddBill(c *gin.Context) {
 		}
 	}
 
+	if request.State > 0 {
+		if err := h.pub.SubmitBill(id, int64(request.BranchID)); err != nil {
+			log.Printf("zatca publish failed: %v", err)
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)
@@ -349,6 +355,12 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		}
 		if len(warnings) > 0 {
 			c.Header("X-Stock-Warning", "true")
+		}
+	}
+
+	if request.State > 0 {
+		if err := h.pub.SubmitBill(BillID, int64(request.BranchID)); err != nil {
+			log.Printf("zatca publish failed: %v", err)
 		}
 	}
 

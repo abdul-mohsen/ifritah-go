@@ -13,6 +13,7 @@ import (
 type handler struct {
 	DB      *sql.DB
 	queries *db.Queries
+	pub     *ZatcaPublisher
 }
 
 type userSession struct {
@@ -21,8 +22,8 @@ type userSession struct {
 	exp      int64
 }
 
-func New(db *sql.DB, queries *db.Queries) handler {
-	return handler{db, queries}
+func New(db *sql.DB, queries *db.Queries, pub *ZatcaPublisher) handler {
+	return handler{db, queries, pub}
 }
 
 func EnvSetup() {

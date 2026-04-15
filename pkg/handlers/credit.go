@@ -83,6 +83,11 @@ func (h *handler) CreditBill(c *gin.Context) {
 		return
 	}
 
+	branchID, err := qtx.GetBranchByBillID(c.Request.Context(), request.BillId)
+	if err := h.pub.SubmitCredit(CreditNoteID, int64(branchID)); err != nil {
+		log.Printf("zatca publish failed: %v", err)
+	}
+
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		log.Panic(err)

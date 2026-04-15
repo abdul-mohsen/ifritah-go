@@ -25,8 +25,15 @@ func main() {
 	DB := db.Connect()
 	queries := db.New(DB)
 
+	pub, err := handlers.NewZATCAPublisher()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer pub.Close()
+
 	handlers.EnvSetup()
-	h := handlers.New(DB, queries)
+	h := handlers.New(DB, queries, pub)
+
 	router := gin.Default()
 	baseUrl := os.Getenv("BASEURL")
 	store := persistence.NewInMemoryStore(time.Second)
@@ -92,6 +99,7 @@ func main() {
 		// ── Branch ZATCA Config ─────────────────────────────────────────
 		authorized.GET("branch/:id/zatca", h.GetBranchZatcaConfig)
 		authorized.PUT("branch/:id/zatca", h.UpdateBranchZatcaConfig)
+		authorized.PUT("branch/:id/zatca/onboard", h.OnboardBranchZatca)
 
 		// ── Stores (new CRUD — keep existing GET stores/all) ────────────
 		// authorized.GET("stores/all", h.GetStores)   ← already exists, keep it

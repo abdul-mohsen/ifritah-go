@@ -1,42 +1,20 @@
 package handlers
 
-// ============================================================================
-// Branch CRUD + ZATCA Config
-// ============================================================================
-// Copy to: pkg/handlers/handler_branch.go
-//
-// Endpoints:
-//   POST   /api/v2/branch/all         → ListBranches
-//   GET    /api/v2/branch/:id         → GetBranch
-//   POST   /api/v2/branch             → CreateBranch
-//   PUT    /api/v2/branch/:id         → UpdateBranch
-//   DELETE /api/v2/branch/:id         → DeleteBranch
-//   GET    /api/v2/branch/:id/zatca   → GetBranchZatcaConfig
-//   PUT    /api/v2/branch/:id/zatca   → UpdateBranchZatcaConfig
-//
-// DATABASE:
-//   - `branches` table (already exists):
-//       id INT UNSIGNED PK, name, address, city, phone,
-//       company_id, manager_id, is_active, created_at
-//   - `branch_zatca_config` table (separate, created by migration_settings_zatca.sql):
-//       branch_id PK/FK → branches(id) ON DELETE CASCADE
-//       csr_org_*, business_category, seller_vat, seller_crn,
-//       street, building, district, postal_code, zatca_otp,
-//       zatca_csr, zatca_private_key, zatca_compliance_*, zatca_production_*
-//   - `store` table has branch_id FK → branches(id)
-//
-// Follows same patterns as handler_stock.go:
-//   - (h *handler) method receiver
-//   - h.DB for database access
-//   - GetSessionInfo(c) for current user
-// ============================================================================
-
 import (
+	db "ifritah/web-service-gin/pkg/db/gen"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+)
+
+const (
+	ZatcaStatusDeleted   = 0
+	ZatcaStatusActive    = 1
+	ZatcaStatusExpired   = 2
+	ZatcaStatusNotActive = 3
 )
 
 // ── POST /api/v2/branch/all ─────────────────────────────────────────────────
@@ -315,93 +293,21 @@ func (h *handler) DeleteBranch(c *gin.Context) {
 // Returns config fields + status indicators, NOT actual credentials/private keys.
 
 func (h *handler) GetBranchZatcaConfig(c *gin.Context) {
-	branchID, err := strconv.Atoi(c.Param("id"))
+	BranchID, err := strconv.Atoi(c.Param("id"))
+	branchID := uint32(BranchID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid branch ID"})
 		return
 	}
 
-	// Verify branch exists
-	var branchName string
-	err = h.DB.QueryRow("SELECT name FROM branches WHERE id = ?", branchID).Scan(&branchName)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"detail": "branch not found"})
-		return
-	}
-
-	// Try to get ZATCA config (may not exist yet)
-	var orgID, orgUnit, orgName, csrCountry, csrLoc, bizCat string
-	var vat, crn, street, building, district, postal, otp string
-	var csrLen, prodLen int
-	var registeredAt *string
-
-	err = h.DB.QueryRow(`
-		SELECT
-			COALESCE(csr_org_identifier,''), COALESCE(csr_org_unit,''),
-			COALESCE(csr_org_name,''), COALESCE(csr_country,'SA'),
-			COALESCE(csr_location,''), COALESCE(business_category,'Supply activities'),
-			COALESCE(seller_vat,''), COALESCE(seller_crn,''),
-			COALESCE(street,''), COALESCE(building,''), COALESCE(district,''),
-			COALESCE(postal_code,''), COALESCE(zatca_otp,''),
-			LENGTH(COALESCE(zatca_csr,'')),
-			LENGTH(COALESCE(zatca_production_username,'')),
-			zatca_registered_at
-		FROM branch_zatca_config WHERE branch_id = ?
-	`, branchID).Scan(
-		&orgID, &orgUnit, &orgName, &csrCountry, &csrLoc, &bizCat,
-		&vat, &crn, &street, &building, &district, &postal, &otp,
-		&csrLen, &prodLen, &registeredAt,
-	)
-
+	config, err := h.queries.GetZatcaBranchConfig(c.Request.Context(), branchID)
 	// No config row yet → return empty config with not_registered status
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"detail": gin.H{
-				"branch_id":   branchID,
-				"branch_name": branchName,
-				"config": gin.H{
-					"csr_org_identifier": "", "csr_org_unit": "", "csr_org_name": "",
-					"csr_country": "SA", "csr_location": "",
-					"business_category": "Supply activities",
-					"seller_vat":        "", "seller_crn": "",
-					"street": "", "building": "", "district": "", "postal_code": "",
-					"zatca_otp": "",
-				},
-				"status":         "not_registered",
-				"has_csr":        false,
-				"has_production": false,
-				"registered_at":  nil,
-			},
-		})
+		c.Status(http.StatusNotFound)
 		return
 	}
 
-	status := "not_registered"
-	if prodLen > 0 {
-		status = "registered"
-	} else if csrLen > 0 {
-		status = "compliance_only"
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"detail": gin.H{
-			"branch_id":   branchID,
-			"branch_name": branchName,
-			"config": gin.H{
-				"csr_org_identifier": orgID, "csr_org_unit": orgUnit,
-				"csr_org_name": orgName, "csr_country": csrCountry,
-				"csr_location": csrLoc, "business_category": bizCat,
-				"seller_vat": vat, "seller_crn": crn,
-				"street": street, "building": building,
-				"district": district, "postal_code": postal,
-				"zatca_otp": otp,
-			},
-			"status":         status,
-			"has_csr":        csrLen > 0,
-			"has_production": prodLen > 0,
-			"registered_at":  registeredAt,
-		},
-	})
+	c.JSON(http.StatusOK, config)
 }
 
 // ── PUT /api/v2/branch/:id/zatca ────────────────────────────────────────────
@@ -410,27 +316,14 @@ func (h *handler) GetBranchZatcaConfig(c *gin.Context) {
 // Uses INSERT ... ON DUPLICATE KEY UPDATE for upsert.
 
 func (h *handler) UpdateBranchZatcaConfig(c *gin.Context) {
-	branchID, err := strconv.Atoi(c.Param("id"))
+	BranchID, err := strconv.Atoi(c.Param("id"))
+	branchID := uint32(BranchID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid branch ID"})
 		return
 	}
 
-	var req struct {
-		CsrOrgIdentifier string `json:"csr_org_identifier"`
-		CsrOrgUnit       string `json:"csr_org_unit"`
-		CsrOrgName       string `json:"csr_org_name"`
-		CsrCountry       string `json:"csr_country"`
-		CsrLocation      string `json:"csr_location"`
-		BusinessCategory string `json:"business_category"`
-		SellerVat        string `json:"seller_vat"`
-		SellerCrn        string `json:"seller_crn"`
-		Street           string `json:"street"`
-		Building         string `json:"building"`
-		District         string `json:"district"`
-		PostalCode       string `json:"postal_code"`
-		ZatcaOtp         string `json:"zatca_otp"`
-	}
+	var req db.UpdateZatcaBranchConfigParams
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request"})
 		return
@@ -454,30 +347,7 @@ func (h *handler) UpdateBranchZatcaConfig(c *gin.Context) {
 
 	// Upsert: INSERT or UPDATE user-editable fields only
 	// Credential fields (zatca_csr, zatca_private_key, etc.) are NOT touched here.
-	_, err = h.DB.Exec(`
-		INSERT INTO branch_zatca_config
-			(branch_id, csr_org_identifier, csr_org_unit, csr_org_name,
-			 csr_country, csr_location, business_category,
-			 seller_vat, seller_crn, street, building, district, postal_code, zatca_otp)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			csr_org_identifier = VALUES(csr_org_identifier),
-			csr_org_unit = VALUES(csr_org_unit),
-			csr_org_name = VALUES(csr_org_name),
-			csr_country = VALUES(csr_country),
-			csr_location = VALUES(csr_location),
-			business_category = VALUES(business_category),
-			seller_vat = VALUES(seller_vat),
-			seller_crn = VALUES(seller_crn),
-			street = VALUES(street),
-			building = VALUES(building),
-			district = VALUES(district),
-			postal_code = VALUES(postal_code),
-			zatca_otp = VALUES(zatca_otp)
-	`, branchID, req.CsrOrgIdentifier, req.CsrOrgUnit, req.CsrOrgName,
-		req.CsrCountry, req.CsrLocation, req.BusinessCategory,
-		req.SellerVat, req.SellerCrn, req.Street, req.Building,
-		req.District, req.PostalCode, req.ZatcaOtp)
+	err = h.queries.UpdateZatcaBranchConfig(c.Request.Context(), req)
 	if err != nil {
 		log.Printf("ERROR UpdateBranchZatcaConfig: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to save ZATCA config"})
@@ -485,4 +355,33 @@ func (h *handler) UpdateBranchZatcaConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"detail": "success"})
+}
+
+func (h *handler) OnboardBranchZatca(c *gin.Context) {
+	BranchID, err := strconv.Atoi(c.Param("id"))
+	branchID := uint32(BranchID)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid branch ID"})
+		return
+	}
+
+	var req struct {
+		OTP string `json:"otp" binding:"requried"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "OTP required"})
+		return
+	}
+
+	otp := strings.TrimSpace(req.OTP)
+	if len(otp) != 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "OTP must be 6 numbers"})
+		return
+	}
+
+	if err := h.pub.OnboadBranch(int64(branchID)); err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
 }

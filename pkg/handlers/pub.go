@@ -91,10 +91,13 @@ func (p *ZatcaPublisher) publish(msg Message) error {
 	}
 
 	subject := fmt.Sprint("zatca.%s.%s.%d", msg.DocType, msg.DBName, msg.BranchID)
-	_, err = p.js.Publish(subject, data)
+	ack, err := p.js.Publish(subject, data)
 	if err != nil {
 		return fmt.Errorf("publish to %s: %w", subject, err)
 	}
+	log.Print(ack)
+	log.Print(subject)
+	log.Print(data)
 	return nil
 }
 

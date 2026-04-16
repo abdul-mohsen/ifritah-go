@@ -17,6 +17,10 @@ const (
 	ZatcaStatusNotActive = 3
 )
 
+type OTPRequest struct {
+	OTP string `json:"otp" binding:"requried"`
+}
+
 // ── POST /api/v2/branch/all ─────────────────────────────────────────────────
 // Returns all branches with store count and ZATCA registration status.
 
@@ -366,9 +370,7 @@ func (h *handler) OnboardBranchZatca(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		OTP string `json:"otp" binding:"requried"`
-	}
+	var req OTPRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "OTP required"})
 		return

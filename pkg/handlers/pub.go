@@ -97,7 +97,7 @@ func (p *ZatcaPublisher) publish(msg Message) error {
 	}
 	log.Print(ack)
 	log.Print(subject)
-	log.Print(data)
+	log.Print(msg)
 	return nil
 }
 

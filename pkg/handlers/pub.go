@@ -90,7 +90,7 @@ func (p *ZatcaPublisher) publish(msg Message) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	subject := fmt.Sprint("zatca.%s.%s.%d", msg.DocType, msg.DBName, msg.BranchID)
+	subject := fmt.Sprintf("zatca.%s.%s.%d", msg.DocType, msg.DBName, msg.BranchID)
 	ack, err := p.js.Publish(subject, data)
 	if err != nil {
 		return fmt.Errorf("publish to %s: %w", subject, err)

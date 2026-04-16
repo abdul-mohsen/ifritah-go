@@ -382,7 +382,7 @@ func (h *handler) OnboardBranchZatca(c *gin.Context) {
 		return
 	}
 
-	if err := h.pub.OnboadBranch(int64(branchID)); err != nil {
+	if err := h.pub.OnboadBranch(int64(branchID), req.OTP); err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
 	}

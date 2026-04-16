@@ -63,8 +63,8 @@ func (p *ZatcaPublisher) SubmitDebit(debitNoteID, branchID int64) error {
 	return p.publish(Message{DocType: "debit", ID: debitNoteID, BranchID: branchID, DBName: p.dbName})
 }
 
-func (p *ZatcaPublisher) OnboadBranch(branchID int64) error {
-	return p.publish(Message{DocType: "onboard", ID: branchID, BranchID: branchID, DBName: p.dbName})
+func (p *ZatcaPublisher) OnboadBranch(branchID int64, otp string) error {
+	return p.publish(Message{DocType: "onboard", ID: branchID, BranchID: branchID, DBName: p.dbName, OTP: otp})
 }
 
 func (p *ZatcaPublisher) publish(msg Message) error {

@@ -18,7 +18,7 @@ const (
 )
 
 type OTPRequest struct {
-	OTP string `json:"otp" binding:"requried"`
+	OTP string `json:"otp" binding:"required"`
 }
 
 // ── POST /api/v2/branch/all ─────────────────────────────────────────────────

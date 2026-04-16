@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -33,7 +34,23 @@ func NewZATCAPublisher() (*ZatcaPublisher, error) {
 		return nil, fmt.Errorf("DBNAME env var is required")
 	}
 
-	nc, err := nats.Connect(natsURL, nats.Timeout(5*time.Second))
+	nc, err := nats.Connect(natsURL,
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(10*time.Second),
+		nats.ReconnectBufSize(8*1024*1024),
+		nats.Timeout(5*time.Second),
+		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+			if err != nil {
+				log.Printf("[zatca-publisher] nats disconnected: %v", err)
+			}
+		}),
+		nats.ReconnectHandler(func(nc *nats.Conn) {
+			log.Printf("[zatca-publisher] NATS reconnected to %s", nc.ConnectedUrl())
+		}),
+		nats.ClosedHandler(func(_ *nats.Conn) {
+			log.Printf("[zatca-publisher] NATS  connection closed")
+		}),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}

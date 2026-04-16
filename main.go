@@ -99,7 +99,7 @@ func main() {
 		// ── Branch ZATCA Config ─────────────────────────────────────────
 		authorized.GET("branch/:id/zatca", h.GetBranchZatcaConfig)
 		authorized.PUT("branch/:id/zatca", h.UpdateBranchZatcaConfig)
-		authorized.PUT("branch/:id/zatca/onboard", h.OnboardBranchZatca)
+		authorized.POST("branch/:id/zatca/onboard", h.OnboardBranchZatca)
 
 		// ── Stores (new CRUD — keep existing GET stores/all) ────────────
 		// authorized.GET("stores/all", h.GetStores)   ← already exists, keep it

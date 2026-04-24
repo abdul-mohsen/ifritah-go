@@ -207,7 +207,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	effectiveDate := time.Now()
 	if request.EffectiveDate != nil {
-		parsedTime, err := time.Parse(time.DateOnly, *request.EffectiveDate)
+		parsedTime, err := time.Parse(time.RFC3339, *request.EffectiveDate)
 		effectiveDate = parsedTime
 		if err != nil {
 			log.Panic("Error parsing date:", err)

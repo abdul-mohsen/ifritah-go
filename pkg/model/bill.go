@@ -40,7 +40,7 @@ type AddBillRequest struct {
 	PaymentDueDate  *string         `json:"payment_due_date" `
 	PaymentDate     *string         `json:"payment_date" `
 	Discount        decimal.Decimal `json:"discount" binding:"required"`
-	PaidAmount      decimal.Decimal `json:"paidAmount" `
+	PaidAmount      decimal.Decimal `json:"paid_amount" `
 	MaintenanceCost decimal.Decimal `json:"maintenance_cost" binding:"required"`
 	UserName        *string         `json:"user_name"`
 	UserPhoneNumber *string         `json:"user_phone_number"`

@@ -155,6 +155,13 @@ func main() {
 		authorized.DELETE("cash_voucher/:id", h.DeleteCashVoucher)
 		authorized.POST("cash_voucher/:id/approve", h.ApproveCashVoucher) // manager+ only
 		authorized.POST("cash_voucher/:id/post", h.PostCashVoucher)
+
+		// ── Supplier Report / كشف حساب المورد ──────────────────────────
+		authorized.GET("supplier/:id/report", h.GetSupplierReport)
+
+		// ── Purchase Bill Receipt Tracking ──────────────────────────────
+		authorized.PUT("purchase_bill/:id/received", h.MarkBillReceived)
+		authorized.DELETE("purchase_bill/:id/received", h.UnmarkBillReceived)
 	}
 
 	nonAuthGroup := router.Group(baseUrl)

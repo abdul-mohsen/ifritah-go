@@ -12,6 +12,10 @@ sql:
         emit_pointers_for_null_types: true
         json_tags_case_style: "snake"
         overrides:
+          - db_type: "decimal"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type: "Decimal"
           - db_type: "bigint"
             unsigned: true
             go_type : "uint64"

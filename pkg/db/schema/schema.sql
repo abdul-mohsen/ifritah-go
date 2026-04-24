@@ -1504,7 +1504,7 @@ CREATE TABLE `purchase_bill` (
   `payment_method` int NOT NULL DEFAULT '10' COMMENT 'ZATCA payment method: 10=Cash, 30=Credit, 42=Bank, 48=Card',
   `deliver_date` date DEFAULT NULL COMMENT 'Expected delivery date',
   `received_at` datetime DEFAULT NULL COMMENT 'When goods were confirmed received',
-  `received_by` varchar(100) DEFAULT NULL COMMENT 'Username who confirmed receipt',
+  `received_by` int DEFAULT NULL COMMENT 'FK to user.id — who confirmed receipt',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_pb_supplier_seq` (`supplier_id`,`supplier_sequence_number`),
   UNIQUE KEY `uq_pb_sequence` (`sequence_number`),
@@ -2135,4 +2135,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-24  7:35:32
+-- Dump completed on 2026-04-24 16:15:24

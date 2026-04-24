@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 // ============================================================================
@@ -46,22 +47,22 @@ type cashVoucherListRequest struct {
 }
 
 type cashVoucherCreateRequest struct {
-	VoucherType          string  `json:"voucher_type" binding:"required"`
-	EffectiveDate        string  `json:"effective_date" binding:"required"`
-	Amount               string  `json:"amount" binding:"required"`
-	PaymentMethod        string  `json:"payment_method"`
-	RecipientType        string  `json:"recipient_type" binding:"required"`
-	RecipientID          *int32  `json:"recipient_id"`
-	RecipientName        string  `json:"recipient_name" binding:"required"`
-	ReferenceType        *string `json:"reference_type"`
-	ReferenceID          *int32  `json:"reference_id"`
-	Description          *string `json:"description"`
-	Note                 *string `json:"note"`
-	BankName             *string `json:"bank_name"`
-	BankAccount          *string `json:"bank_account"`
-	TransactionReference *string `json:"transaction_reference"`
-	StoreID              int32   `json:"store_id" binding:"required"`
-	BranchID             uint32  `json:"branch_id" binding:"required"`
+	VoucherType          string          `json:"voucher_type" binding:"required"`
+	EffectiveDate        string          `json:"effective_date" binding:"required"`
+	Amount               decimal.Decimal `json:"amount" binding:"required"`
+	PaymentMethod        string          `json:"payment_method"`
+	RecipientType        string          `json:"recipient_type" binding:"required"`
+	RecipientID          *int32          `json:"recipient_id"`
+	RecipientName        string          `json:"recipient_name" binding:"required"`
+	ReferenceType        *string         `json:"reference_type"`
+	ReferenceID          *int32          `json:"reference_id"`
+	Description          *string         `json:"description"`
+	Note                 *string         `json:"note"`
+	BankName             *string         `json:"bank_name"`
+	BankAccount          *string         `json:"bank_account"`
+	TransactionReference *string         `json:"transaction_reference"`
+	StoreID              int32           `json:"store_id" binding:"required"`
+	BranchID             uint32          `json:"branch_id" binding:"required"`
 }
 
 type cashVoucherListItem struct {

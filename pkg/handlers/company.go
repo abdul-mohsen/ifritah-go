@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	db "ifritah/web-service-gin/pkg/db/gen"
 	"log"
 	"net/http"
 
@@ -44,4 +45,32 @@ func (h *handler) getUserCompany(c *gin.Context) int {
 	}
 	return companyID
 
+}
+
+func (h *handler) GetCompany(c *gin.Context) {
+	cid := h.getUserCompany(c)
+	row, err := h.queries.GetCompanyByID(c.Request.Context(), int32(cid))
+	if err != nil {
+		c.JSON(404, gin.H{"detail": "company not found"})
+		return
+	}
+	c.JSON(200, row)
+}
+
+func (h *handler) UpdateCompany(c *gin.Context) {
+	cid := h.getUserCompany(c)
+	var req struct {
+		Name   string `json:"name"`
+		NameAr string `json:"name_ar" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"detail": "name_ar is required"})
+		return
+	}
+	if err := h.queries.UpdateCompany(c.Request.Context(),
+		db.UpdateCompanyParams{Name: req.Name, NameAr: &req.NameAr, ID: int32(cid)}); err != nil {
+		c.JSON(500, gin.H{"detail": "update failed"})
+		return
+	}
+	c.JSON(200, gin.H{"detail": "success"})
 }

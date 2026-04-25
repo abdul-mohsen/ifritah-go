@@ -1,64 +1,35 @@
+// Package handlers — drop-in replacement for pkg/handlers/dashboard.go.
+//
+// Single-tenant: each database hosts exactly one company, so no merchant_id
+// or company_id parameters are passed to any query.
+//
+// Architecture:
+//   • All SQL lives in pkg/db/queries/dashboard.sql (sqlc-generated).
+//   • All response shapes live in pkg/model/dashboard.go (typed structs).
+//   • Independent aggregates run in parallel under a single 10s context.
+//
+// To wire up:
+//   1. Drop queries/dashboard.sql into pkg/db/queries/.
+//   2. Drop model/dashboard.go into pkg/model/.
+//   3. Run `sqlc generate`.
+//   4. Replace pkg/handlers/dashboard.go with this file.
+
 package handlers
 
-// ============================================================================
-// Dashboard API — Complete Backend for Afrita Dashboard
-// ============================================================================
-// Copy to: pkg/handlers/handler_dashboard.go
-//
-// Endpoints:
-//   GET  /api/v2/dashboard                → GetDashboard (main KPIs + charts)
-//   GET  /api/v2/dashboard/analytics      → GetDashboardAnalytics (aging, P&L, cash flow)
-//   GET  /api/v2/dashboard/compare        → GetDashboardCompare (period comparison)
-//
-// Query Parameters (all endpoints):
-//   ?state=0|1|2|3         → Filter invoices by state (0=draft, 1=processing, 2=processed, 3=issued)
-//   ?start_date=2026-01-01 → Filter from date (inclusive)
-//   ?end_date=2026-03-31   → Filter to date (inclusive)
-//   ?months=6              → Number of months for charts (default 6)
-//
-// Compare endpoint additional params:
-//   ?a_start=2026-01-01&a_end=2026-01-31  → Period A
-//   ?b_start=2025-01-01&b_end=2025-01-31  → Period B
-//
-// DATABASE TABLES/VIEWS USED:
-//   - bill               (invoices — rows NOT in credit_note are regular invoices)
-//   - bill_totals         (VIEW: bill + computed total/total_vat from bill_product)
-//   - credit_note         (tracks which bills are credit notes via bill_id FK → bill.id)
-//   - bill_product        (line items for bills, has name/part_name columns)
-//   - purchase_bill       (purchase bills — has merchant_id, supplier_id)
-//   - purchase_bill_totals (VIEW: purchase_bill + computed total/total_vat)
-//   - product             (inventory: id, article_id, store_id, price, quantity, cost_price, min_stock)
-//   - articles            (TecDoc catalog: legacyArticleId → articleNumber)
-//   - client              (customers — NO company FK, shared across tenants)
-//   - supplier            (vendors — has company_id)
-//   - store               (warehouses — has company_id)
-//   - branches            (branches — has company_id)
-//
-// SCHEMA NOTES:
-//   - bill has merchant_id but NO bill_type column and NO total column
-//   - Credit notes: a bill is a credit note if credit_note.bill_id = bill.id
-//   - bill_totals VIEW provides: total_before_vat, total_vat, total (computed from bill_product)
-//   - purchase_bill_totals VIEW provides same for purchase bills
-//   - product has NO merchant_id — belongs to store via store_id, store has company_id
-//   - product has NO name column — use articles.articleNumber via product.article_id = articles.legacyArticleId
-//   - client has NO company_id — clients are not tenant-scoped
-//   - supplier uses company_id (not merchant_id)
-//   - store uses company_id (not merchant_id)
-//   - No `order` table exists — client activity derived from bill.buyer_id
-//
-// Follows same patterns as handler_stock.go:
-//   - (h *handler) method receiver
-//   - h.DB for database access
-//   - GetSessionInfo(c) for current user (session.companyID = company.id)
-// ============================================================================
-
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/model"
 
 	"github.com/gin-gonic/gin"
 )
@@ -66,9 +37,6 @@ import (
 // ── GET /api/v2/dashboard ───────────────────────────────────────────────────
 
 func (h *handler) GetDashboard(c *gin.Context) {
-	companyID := h.getUserCompany(c)
-
-	// Parse query parameters
 	stateFilter := c.Query("state")
 	startDate := c.Query("start_date")
 	endDate := c.Query("end_date")
@@ -79,532 +47,238 @@ func (h *handler) GetDashboard(c *gin.Context) {
 	}
 
 	now := time.Now()
+	monthLabels := buildMonthLabels(now, numMonths)
+	months := int32(numMonths)
 
-	// ── Build month labels ─────────────────────────────────────────
-	monthLabels := make([]string, numMonths)
-	for i := numMonths - 1; i >= 0; i-- {
-		m := now.AddDate(0, -i, 0)
-		monthLabels[numMonths-1-i] = m.Format("01/2006")
+	stateNarg := optInt32(stateFilter)
+	startNarg := optDate(startDate, false)
+	endNarg := optDate(endDate, true)
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	q := h.queries
+
+	var (
+		counts         db.GetDashboardCountsRow
+		sales          db.GetDashboardSalesKPIsRow
+		credit         db.GetDashboardCreditNoteStatsRow
+		purchases      db.GetDashboardPurchaseKPIsRow
+		monthlyRev     []db.GetMonthlyRevenueRow
+		monthlyPur     []db.GetMonthlyPurchasesRow
+		recent         []db.GetDashboardRecentInvoicesRow
+		lowStock       []db.GetDashboardLowStockProductsRow
+		topStock       []db.GetDashboardTopStockProductsRow
+		tiersRows      []db.GetDashboardPriceTiersRow
+		supplierRows   []db.GetDashboardSupplierPerformanceRow
+		monthlyRetRows []db.GetDashboardMonthlyReturnsRow
+		weekdayRows    []db.GetDashboardWeekdayRevenueRow
+		yoyRows        []db.GetDashboardYoYRevenueRow
+		topClientRows  []db.GetDashboardTopClientsRow
+		orderStats     db.GetDashboardOrderStatsRow
+		avgProcessing  any
+		clvRows        []db.GetDashboardOrdersCLVRow
+	)
+
+	var wg sync.WaitGroup
+	run := func(fn func()) {
+		wg.Add(1)
+		go func() { defer wg.Done(); fn() }()
 	}
 
-	// ── Helper: product has no merchant_id, it links to store ──────
-	// store.company_id = session.companyID
-	storeSubquery := "SELECT id FROM store WHERE company_id = ?"
+	run(func() { counts, _ = q.GetDashboardCounts(ctx) })
+	run(func() {
+		sales, _ = q.GetDashboardSalesKPIs(ctx, db.GetDashboardSalesKPIsParams{
+			State: stateNarg, StartDate: startNarg, EndDate: endNarg,
+		})
+	})
+	run(func() {
+		credit, _ = q.GetDashboardCreditNoteStats(ctx, db.GetDashboardCreditNoteStatsParams{
+			StartDate: startNarg, EndDate: endNarg,
+		})
+	})
+	run(func() {
+		purchases, _ = q.GetDashboardPurchaseKPIs(ctx, db.GetDashboardPurchaseKPIsParams{
+			StartDate: startNarg, EndDate: endNarg,
+		})
+	})
+	run(func() { monthlyRev, _ = q.GetMonthlyRevenue(ctx, months) })
+	run(func() { monthlyPur, _ = q.GetMonthlyPurchases(ctx, months) })
+	run(func() { recent, _ = q.GetDashboardRecentInvoices(ctx) })
+	run(func() { lowStock, _ = q.GetDashboardLowStockProducts(ctx) })
+	run(func() { topStock, _ = q.GetDashboardTopStockProducts(ctx) })
+	run(func() { tiersRows, _ = q.GetDashboardPriceTiers(ctx) })
+	run(func() { supplierRows, _ = q.GetDashboardSupplierPerformance(ctx) })
+	run(func() { monthlyRetRows, _ = q.GetDashboardMonthlyReturns(ctx, months) })
+	run(func() { weekdayRows, _ = q.GetDashboardWeekdayRevenue(ctx, months) })
+	run(func() {
+		yoyRows, _ = q.GetDashboardYoYRevenue(ctx, db.GetDashboardYoYRevenueParams{
+			Anchor:          now,
+			MonthsBackStart: int32(12 + numMonths - 1),
+			MonthsBackEnd:   int32(12 - 1),
+		})
+	})
+	run(func() { topClientRows, _ = q.GetDashboardTopClients(ctx) })
+	run(func() { orderStats, _ = q.GetDashboardOrderStats(ctx) })
+	run(func() { avgProcessing, _ = q.GetDashboardAvgOrderProcessing(ctx) })
+	run(func() { clvRows, _ = q.GetDashboardOrdersCLV(ctx) })
 
-	// ── 1. COUNTS ──────────────────────────────────────────────────
-	var totalProducts, totalClients, totalSuppliers, totalStores, totalBranches int
+	wg.Wait()
 
-	h.DB.QueryRow(`
-		SELECT COUNT(*) FROM product
-		WHERE store_id IN (`+storeSubquery+`) AND is_deleted = 0
-	`, companyID).Scan(&totalProducts)
-
-	// client has no company_id — count all non-deleted
-	h.DB.QueryRow("SELECT COUNT(*) FROM client WHERE is_deleted = 0").Scan(&totalClients)
-
-	h.DB.QueryRow("SELECT COUNT(*) FROM supplier WHERE company_id = ? AND is_deleted = 0",
-		companyID).Scan(&totalSuppliers)
-	h.DB.QueryRow("SELECT COUNT(*) FROM store WHERE company_id = ?",
-		companyID).Scan(&totalStores)
-	h.DB.QueryRow("SELECT COUNT(*) FROM branches WHERE company_id = ?",
-		companyID).Scan(&totalBranches)
-
-	// ── 2. INVOICE AGGREGATES ──────────────────────────────────────
-	// bill_totals VIEW gives us the total column; LEFT JOIN credit_note to exclude credit notes
-	invoiceWhere := "WHERE bt.merchant_id = ?"
-	invoiceArgs := []interface{}{companyID}
-
-	if stateFilter != "" {
-		if stateVal, err := strconv.Atoi(stateFilter); err == nil {
-			invoiceWhere += " AND bt.state = ?"
-			invoiceArgs = append(invoiceArgs, stateVal)
-		}
+	// ── Assemble ───────────────────────────────────────────────────
+	statusCounts := map[string]int64{
+		"draft":      toInt64(sales.DraftCount),
+		"processing": toInt64(sales.ProcessingCount),
+		"processed":  toInt64(sales.ProcessedCount),
+		"issued":     toInt64(sales.IssuedCount),
 	}
-	if startDate != "" {
-		invoiceWhere += " AND bt.effective_date >= ?"
-		invoiceArgs = append(invoiceArgs, startDate)
-	}
-	if endDate != "" {
-		invoiceWhere += " AND bt.effective_date <= ?"
-		invoiceArgs = append(invoiceArgs, endDate+"T23:59:59Z")
-	}
-
-	// 2a. Status counts (invoices only, not credit notes)
-	statusCounts := map[string]int{"draft": 0, "processing": 0, "processed": 0, "issued": 0}
-	statusRows, err := h.DB.Query(`
-		SELECT bt.state, COUNT(*) as cnt
-		FROM bill_totals bt
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		`+invoiceWhere+` AND cn.id IS NULL
-		GROUP BY bt.state
-	`, invoiceArgs...)
-	if err == nil {
-		defer statusRows.Close()
-		for statusRows.Next() {
-			var state, cnt int
-			if statusRows.Scan(&state, &cnt) == nil {
-				switch state {
-				case 0:
-					statusCounts["draft"] = cnt
-				case 1:
-					statusCounts["processing"] = cnt
-				case 2:
-					statusCounts["processed"] = cnt
-				case 3:
-					statusCounts["issued"] = cnt
-				}
-			}
-		}
-	}
-
 	totalInvoices := statusCounts["draft"] + statusCounts["processing"] +
 		statusCounts["processed"] + statusCounts["issued"]
 
-	// 2b. Revenue totals (invoices only)
-	var totalRevenue, totalVAT, totalDiscount float64
-	h.DB.QueryRow(`
-		SELECT COALESCE(SUM(bt.total), 0),
-		       COALESCE(SUM(bt.total_vat), 0),
-		       COALESCE(SUM(bt.discount), 0)
-		FROM bill_totals bt
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		`+invoiceWhere+` AND cn.id IS NULL
-	`, invoiceArgs...).Scan(&totalRevenue, &totalVAT, &totalDiscount)
+	totalRevenue := toFloat(sales.TotalRevenue)
+	totalVAT := toFloat(sales.TotalVat)
+	totalDiscount := toFloat(sales.TotalDiscount)
+	pendingAmount := toFloat(sales.PendingAmount)
+	totalPurchases := toFloat(purchases.PurchasesTotal)
+	totalPurchaseVAT := toFloat(purchases.PurchasesVat)
+	creditNoteTotal := toFloat(credit.CreditNoteTotal)
+	totalInventoryValue := toFloat(counts.InventoryValue)
 
-	// 2c. Pending amount (draft + processing, invoices only)
-	var pendingAmount float64
-	var pendingCount int
-	pendingArgs := append([]interface{}{}, invoiceArgs...)
-	h.DB.QueryRow(`
-		SELECT COUNT(*), COALESCE(SUM(bt.total), 0)
-		FROM bill_totals bt
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		`+invoiceWhere+` AND bt.state IN (0, 1) AND cn.id IS NULL
-	`, pendingArgs...).Scan(&pendingCount, &pendingAmount)
-
-	// 2d. Credit notes count & total
-	var creditNoteCount int
-	var creditNoteTotal float64
-	cnArgs := []interface{}{companyID}
-	cnWhere := "WHERE bt.merchant_id = ?"
-	if startDate != "" {
-		cnWhere += " AND bt.effective_date >= ?"
-		cnArgs = append(cnArgs, startDate)
-	}
-	if endDate != "" {
-		cnWhere += " AND bt.effective_date <= ?"
-		cnArgs = append(cnArgs, endDate+"T23:59:59Z")
-	}
-	h.DB.QueryRow(`
-		SELECT COUNT(*), COALESCE(SUM(bt.total), 0)
-		FROM bill_totals bt
-		INNER JOIN credit_note cn ON cn.bill_id = bt.id
-		`+cnWhere,
-		cnArgs...).Scan(&creditNoteCount, &creditNoteTotal)
-
-	// ── 3. PURCHASE BILL AGGREGATES ────────────────────────────────
-	pbWhere := "WHERE pbt.merchant_id = ?"
-	pbArgs := []interface{}{companyID}
-	if startDate != "" {
-		pbWhere += " AND pbt.effective_date >= ?"
-		pbArgs = append(pbArgs, startDate)
-	}
-	if endDate != "" {
-		pbWhere += " AND pbt.effective_date <= ?"
-		pbArgs = append(pbArgs, endDate+"T23:59:59Z")
-	}
-
-	var totalPurchases, totalPurchaseVAT float64
-	var totalPurchaseBills int
-	h.DB.QueryRow(`
-		SELECT COUNT(*), COALESCE(SUM(pbt.total), 0), COALESCE(SUM(pbt.total_vat), 0)
-		FROM purchase_bill_totals pbt `+pbWhere,
-		pbArgs...).Scan(&totalPurchaseBills, &totalPurchases, &totalPurchaseVAT)
 	grossProfit := totalRevenue - totalPurchases
-	grossMargin := 0.0
-	if totalRevenue > 0 {
-		grossMargin = grossProfit * 100 / totalRevenue
-	}
-
-	// ── 4. MONTHLY REVENUE & PURCHASES (chart data) ────────────────
-	type monthlyData struct {
-		Revenue   float64
-		Purchases float64
-	}
-	monthlyMap := make(map[string]*monthlyData)
-	for _, label := range monthLabels {
-		monthlyMap[label] = &monthlyData{}
-	}
-
-	// Revenue by month (invoices only, via bill_totals)
-	revenueRows, err := h.DB.Query(`
-		SELECT DATE_FORMAT(bt.effective_date, '%m/%Y') AS month_key,
-		       COALESCE(SUM(bt.total), 0) AS revenue
-		FROM bill_totals bt
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		WHERE bt.merchant_id = ? AND cn.id IS NULL
-		  AND bt.effective_date >= DATE_SUB(NOW(), INTERVAL ? MONTH)
-		GROUP BY month_key
-		ORDER BY month_key
-	`, companyID, numMonths)
-	if err == nil {
-		defer revenueRows.Close()
-		for revenueRows.Next() {
-			var key string
-			var rev float64
-			if revenueRows.Scan(&key, &rev) == nil {
-				if md, ok := monthlyMap[key]; ok {
-					md.Revenue = rev
-				}
-			}
-		}
-	}
-
-	// Purchases by month (via purchase_bill_totals)
-	purchaseRows, err := h.DB.Query(`
-		SELECT DATE_FORMAT(pbt.effective_date, '%m/%Y') AS month_key,
-		       COALESCE(SUM(pbt.total), 0) AS purchases
-		FROM purchase_bill_totals pbt
-		WHERE pbt.merchant_id = ?
-		  AND pbt.effective_date >= DATE_SUB(NOW(), INTERVAL ? MONTH)
-		GROUP BY month_key
-		ORDER BY month_key
-	`, companyID, numMonths)
-	if err == nil {
-		defer purchaseRows.Close()
-		for purchaseRows.Next() {
-			var key string
-			var purch float64
-			if purchaseRows.Scan(&key, &purch) == nil {
-				if md, ok := monthlyMap[key]; ok {
-					md.Purchases = purch
-				}
-			}
-		}
-	}
-
-	monthlyRevenue := make([]string, numMonths)
-	monthlyPurchases := make([]string, numMonths)
-	monthlyProfit := make([]string, numMonths)
-	for i, label := range monthLabels {
-		md := monthlyMap[label]
-		monthlyRevenue[i] = fmt.Sprintf("%.2f", md.Revenue)
-		monthlyPurchases[i] = fmt.Sprintf("%.2f", md.Purchases)
-		monthlyProfit[i] = fmt.Sprintf("%.2f", md.Revenue-md.Purchases)
-	}
-
-	// ── 5. RECENT INVOICES (last 10) ───────────────────────────────
-	type recentInvoice struct {
-		ID             int     `json:"id"`
-		SequenceNumber int     `json:"sequence_number"`
-		Total          string  `json:"total"`
-		State          int     `json:"state"`
-		StateLabel     string  `json:"state_label"`
-		Date           string  `json:"date"`
-		IsCreditNote   bool    `json:"is_credit_note"`
-		UserPhone      *string `json:"user_phone_number"`
-	}
-
-	var recentInvoices []recentInvoice
-	recentRows, err := h.DB.Query(`
-		SELECT bt.id, bt.sequence_number, COALESCE(bt.total, 0), bt.state,
-		       DATE_FORMAT(bt.effective_date, '%Y-%m-%d') AS date,
-		       CASE WHEN cn.id IS NOT NULL THEN 1 ELSE 0 END AS is_credit,
-		       bt.user_phone_number
-		FROM bill_totals bt
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		WHERE bt.merchant_id = ?
-		ORDER BY bt.effective_date DESC, bt.id DESC
-		LIMIT 10
-	`, companyID)
-	if err == nil {
-		defer recentRows.Close()
-		for recentRows.Next() {
-			var ri recentInvoice
-			var total float64
-			var isCN int
-			if recentRows.Scan(&ri.ID, &ri.SequenceNumber, &total, &ri.State,
-				&ri.Date, &isCN, &ri.UserPhone) == nil {
-				ri.Total = fmt.Sprintf("%.2f", total)
-				ri.IsCreditNote = isCN == 1
-				switch ri.State {
-				case 0:
-					ri.StateLabel = "مسودة"
-				case 1:
-					ri.StateLabel = "قيد المعالجة"
-				case 2:
-					ri.StateLabel = "تمت المعالجة"
-				case 3:
-					ri.StateLabel = "صادرة"
-				default:
-					ri.StateLabel = "غير معروف"
-				}
-				recentInvoices = append(recentInvoices, ri)
-			}
-		}
-	}
-	if recentInvoices == nil {
-		recentInvoices = []recentInvoice{}
-	}
-
-	// ── 6. LOW-STOCK PRODUCTS (quantity <= min_stock, top 10) ──────
-	// product has no name — join articles via article_id = legacyArticleId
-	type lowStockProduct struct {
-		ID            int    `json:"id"`
-		ArticleNumber string `json:"article_number"`
-		Price         string `json:"price"`
-		Quantity      string `json:"quantity"`
-		CostPrice     string `json:"cost_price"`
-		MinStock      int    `json:"min_stock"`
-		StoreID       int    `json:"store_id"`
-	}
-
-	var lowStock []lowStockProduct
-	lowRows, err := h.DB.Query(`
-		SELECT p.id,
-		       COALESCE(a.articleNumber, CAST(p.article_id AS CHAR)),
-		       p.price, p.quantity, p.cost_price, p.min_stock, p.store_id
-		FROM product p
-		LEFT JOIN articles a ON a.legacyArticleId = p.article_id
-		WHERE p.store_id IN (`+storeSubquery+`)
-		  AND p.is_deleted = 0 AND p.quantity <= p.min_stock
-		ORDER BY p.quantity ASC, p.id ASC
-		LIMIT 10
-	`, companyID)
-	if err == nil {
-		defer lowRows.Close()
-		for lowRows.Next() {
-			var ls lowStockProduct
-			var price, qty, costPrice float64
-			if lowRows.Scan(&ls.ID, &ls.ArticleNumber, &price, &qty,
-				&costPrice, &ls.MinStock, &ls.StoreID) == nil {
-				ls.Price = fmt.Sprintf("%.2f", price)
-				ls.Quantity = fmt.Sprintf("%.3f", qty)
-				ls.CostPrice = fmt.Sprintf("%.2f", costPrice)
-				lowStock = append(lowStock, ls)
-			}
-		}
-	}
-	if lowStock == nil {
-		lowStock = []lowStockProduct{}
-	}
-
-	var lowStockCount int
-	h.DB.QueryRow(`
-		SELECT COUNT(*) FROM product
-		WHERE store_id IN (`+storeSubquery+`)
-		  AND is_deleted = 0 AND quantity <= min_stock
-	`, companyID).Scan(&lowStockCount)
-
-	// ── 7. TOP PRODUCTS (by quantity in stock, top 8) ──────────────
-	type topProduct struct {
-		ID            int    `json:"id"`
-		ArticleNumber string `json:"article_number"`
-		Quantity      string `json:"quantity"`
-		Price         string `json:"price"`
-	}
-
-	var topProducts []topProduct
-	topProdRows, err := h.DB.Query(`
-		SELECT p.id,
-		       COALESCE(a.articleNumber, CAST(p.article_id AS CHAR)),
-		       p.quantity, p.price
-		FROM product p
-		LEFT JOIN articles a ON a.legacyArticleId = p.article_id
-		WHERE p.store_id IN (`+storeSubquery+`)
-		  AND p.is_deleted = 0
-		ORDER BY p.quantity DESC, p.id DESC
-		LIMIT 8
-	`, companyID)
-	if err == nil {
-		defer topProdRows.Close()
-		for topProdRows.Next() {
-			var tp topProduct
-			var price, qty float64
-			if topProdRows.Scan(&tp.ID, &tp.ArticleNumber, &qty, &price) == nil {
-				tp.Quantity = fmt.Sprintf("%.3f", qty)
-				tp.Price = fmt.Sprintf("%.2f", price)
-				topProducts = append(topProducts, tp)
-			}
-		}
-	}
-	if topProducts == nil {
-		topProducts = []topProduct{}
-	}
-
-	// ── 8. PRODUCT PRICE TIERS ─────────────────────────────────────
-	type priceTier struct {
-		Label    string `json:"label"`
-		Count    int    `json:"count"`
-		AvgPrice string `json:"avg_price"`
-	}
-
-	var tier1Count, tier2Count, tier3Count, tier4Count int
-	var tier1Avg, tier2Avg, tier3Avg, tier4Avg float64
-
-	tierBase := `SELECT COUNT(*), COALESCE(AVG(price),0) FROM product
-		WHERE store_id IN (` + storeSubquery + `) AND is_deleted = 0`
-	h.DB.QueryRow(tierBase+" AND price < 50", companyID).Scan(&tier1Count, &tier1Avg)
-	h.DB.QueryRow(tierBase+" AND price >= 50 AND price < 200", companyID).Scan(&tier2Count, &tier2Avg)
-	h.DB.QueryRow(tierBase+" AND price >= 200 AND price < 500", companyID).Scan(&tier3Count, &tier3Avg)
-	h.DB.QueryRow(tierBase+" AND price >= 500", companyID).Scan(&tier4Count, &tier4Avg)
-
-	marginTiers := []priceTier{
-		{Label: "< 50 ر.س", Count: tier1Count, AvgPrice: fmt.Sprintf("%.2f", tier1Avg)},
-		{Label: "50-200 ر.س", Count: tier2Count, AvgPrice: fmt.Sprintf("%.2f", tier2Avg)},
-		{Label: "200-500 ر.س", Count: tier3Count, AvgPrice: fmt.Sprintf("%.2f", tier3Avg)},
-		{Label: "500+ ر.س", Count: tier4Count, AvgPrice: fmt.Sprintf("%.2f", tier4Avg)},
-	}
-
-	// ── 9. SUPPLIER PERFORMANCE (top 5 by spend) ───────────────────
-	type supplierPerf struct {
-		ID         int    `json:"id"`
-		Name       string `json:"name"`
-		BillCount  int    `json:"bill_count"`
-		TotalSpent string `json:"total_spent"`
-		AvgTotal   string `json:"avg_total"`
-	}
-
-	var supplierPerfs []supplierPerf
-	suppRows, err := h.DB.Query(`
-		SELECT s.id, s.name,
-		       COUNT(pbt.id) AS bill_count,
-		       COALESCE(SUM(pbt.total), 0) AS total_spent,
-		       COALESCE(AVG(pbt.total), 0) AS avg_total
-		FROM supplier s
-		LEFT JOIN purchase_bill_totals pbt
-		  ON pbt.supplier_id = s.id AND pbt.merchant_id = ?
-		WHERE s.company_id = ? AND s.is_deleted = 0
-		GROUP BY s.id, s.name
-		ORDER BY total_spent DESC
-		LIMIT 5
-	`, companyID, companyID)
-	if err == nil {
-		defer suppRows.Close()
-		for suppRows.Next() {
-			var sp supplierPerf
-			var totalSpent, avgTotal float64
-			if suppRows.Scan(&sp.ID, &sp.Name, &sp.BillCount, &totalSpent, &avgTotal) == nil {
-				sp.TotalSpent = fmt.Sprintf("%.2f", totalSpent)
-				sp.AvgTotal = fmt.Sprintf("%.2f", avgTotal)
-				supplierPerfs = append(supplierPerfs, sp)
-			}
-		}
-	}
-	if supplierPerfs == nil {
-		supplierPerfs = []supplierPerf{}
-	}
-
-	// ── 10. FULFILLMENT & RETURN RATE ──────────────────────────────
-	// No order table — fulfillment = issued / total invoices
-	var issuedInvoices int
-	h.DB.QueryRow(`
-		SELECT COUNT(*) FROM bill b
-		LEFT JOIN credit_note cn ON cn.bill_id = b.id
-		WHERE b.merchant_id = ? AND b.state = 3 AND cn.id IS NULL
-	`, companyID).Scan(&issuedInvoices)
-
-	fulfillmentRate := 0.0
+	grossMargin := pct(grossProfit, totalRevenue)
+	avgInvoiceValue := 0.0
 	if totalInvoices > 0 {
-		fulfillmentRate = float64(issuedInvoices) * 100 / float64(totalInvoices)
+		avgInvoiceValue = totalRevenue / float64(totalInvoices)
 	}
-
-	returnRate := 0.0
-	if totalInvoices > 0 {
-		returnRate = float64(creditNoteCount) * 100 / float64(totalInvoices)
-	}
-
-	// Monthly return rates
-	type monthlyReturn struct {
-		Month       string `json:"month"`
-		Invoices    int    `json:"invoices"`
-		CreditNotes int    `json:"credit_notes"`
-		Rate        string `json:"rate"`
-	}
-
-	var monthlyReturns []monthlyReturn
-	returnRows, err := h.DB.Query(`
-		SELECT DATE_FORMAT(b.effective_date, '%m/%Y') AS month_key,
-		       SUM(CASE WHEN cn.id IS NULL THEN 1 ELSE 0 END) AS inv_count,
-		       SUM(CASE WHEN cn.id IS NOT NULL THEN 1 ELSE 0 END) AS cn_count
-		FROM bill b
-		LEFT JOIN credit_note cn ON cn.bill_id = b.id
-		WHERE b.merchant_id = ?
-		  AND b.effective_date >= DATE_SUB(NOW(), INTERVAL ? MONTH)
-		GROUP BY month_key
-		ORDER BY month_key
-	`, companyID, numMonths)
-	if err == nil {
-		defer returnRows.Close()
-		for returnRows.Next() {
-			var mr monthlyReturn
-			if returnRows.Scan(&mr.Month, &mr.Invoices, &mr.CreditNotes) == nil {
-				rate := 0.0
-				if mr.Invoices > 0 {
-					rate = float64(mr.CreditNotes) * 100 / float64(mr.Invoices)
-				}
-				mr.Rate = fmt.Sprintf("%.1f", rate)
-				monthlyReturns = append(monthlyReturns, mr)
-			}
-		}
-	}
-	if monthlyReturns == nil {
-		monthlyReturns = []monthlyReturn{}
-	}
-
-	// ── 11. INVENTORY TURNOVER ─────────────────────────────────────
-	var totalInventoryValue float64
-	h.DB.QueryRow(`
-		SELECT COALESCE(SUM(price * quantity), 0)
-		FROM product
-		WHERE store_id IN (`+storeSubquery+`) AND is_deleted = 0
-	`, companyID).Scan(&totalInventoryValue)
-
 	invTurnover := 0.0
 	if totalInventoryValue > 0 {
 		invTurnover = totalPurchases / totalInventoryValue
 	}
-
-	// ── 12. WEEKDAY REVENUE (Sat=0 through Fri=6 for MENA) ────────
-	type weekdayRev struct {
-		Day     int    `json:"day"`
-		DayName string `json:"day_name"`
-		AvgRev  string `json:"avg_revenue"`
+	fulfillmentRate, returnRate := 0.0, 0.0
+	if totalInvoices > 0 {
+		fulfillmentRate = float64(toInt64(counts.IssuedInvoices)) * 100 / float64(totalInvoices)
+		returnRate = float64(toInt64(credit.CreditNoteCount)) * 100 / float64(totalInvoices)
 	}
 
-	dayNames := []string{"السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"}
-	weekdayRevenues := make([]weekdayRev, 7)
-	for i := range weekdayRevenues {
-		weekdayRevenues[i] = weekdayRev{Day: i, DayName: dayNames[i], AvgRev: "0.00"}
+	// monthly chart
+	revMap := map[string]float64{}
+	for _, r := range monthlyRev {
+		revMap[r.MonthKey] = toFloat(r.Revenue)
+	}
+	purMap := map[string]float64{}
+	for _, r := range monthlyPur {
+		purMap[r.MonthKey] = toFloat(r.Purchases)
+	}
+	monthlyRevenueOut := make([]string, numMonths)
+	monthlyPurchasesOut := make([]string, numMonths)
+	monthlyProfitOut := make([]string, numMonths)
+	for i, label := range monthLabels {
+		r, p := revMap[label], purMap[label]
+		monthlyRevenueOut[i] = fmt.Sprintf("%.2f", r)
+		monthlyPurchasesOut[i] = fmt.Sprintf("%.2f", p)
+		monthlyProfitOut[i] = fmt.Sprintf("%.2f", r-p)
 	}
 
-	wdRows, err := h.DB.Query(`
-		SELECT DAYOFWEEK(bt.effective_date) AS dow,
-		       COALESCE(AVG(bt.total), 0) AS avg_rev,
-		       COUNT(*) AS cnt
-		FROM bill_totals bt
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		WHERE bt.merchant_id = ? AND cn.id IS NULL
-		  AND bt.effective_date >= DATE_SUB(NOW(), INTERVAL ? MONTH)
-		GROUP BY dow
-	`, companyID, numMonths)
-	if err == nil {
-		defer wdRows.Close()
-		for wdRows.Next() {
-			var dow int
-			var avgRev float64
-			var cnt int
-			if wdRows.Scan(&dow, &avgRev, &cnt) == nil {
-				// MySQL DAYOFWEEK(1=Sun..7=Sat) → MENA index
-				menaIdx := dow % 7
-				if menaIdx >= 0 && menaIdx < 7 {
-					weekdayRevenues[menaIdx].AvgRev = fmt.Sprintf("%.2f", avgRev)
-				}
-			}
+	// recent invoices
+	recentInvoices := make([]model.DashboardInvoice, 0, len(recent))
+	for _, r := range recent {
+		recentInvoices = append(recentInvoices, model.DashboardInvoice{
+			ID:              toInt(r.ID),
+			SequenceNumber:  toInt64(r.SequenceNumber),
+			Total:           fmt.Sprintf("%.2f", toFloat(r.Total)),
+			State:           toInt(r.State),
+			StateLabel:      stateLabel(toInt(r.State)),
+			Date:            toString(r.EffectiveDate),
+			IsCreditNote:    toBool(r.IsCreditNote),
+			UserPhoneNumber: derefStr(r.UserPhoneNumber),
+		})
+	}
+
+	// low stock + top stock
+	lowStockOut := make([]model.DashboardLowStock, 0, len(lowStock))
+	for _, l := range lowStock {
+		lowStockOut = append(lowStockOut, model.DashboardLowStock{
+			ID:            toInt(l.ID),
+			ArticleNumber: l.ArticleNumber,
+			Price:         fmt.Sprintf("%.2f", toFloat(l.Price)),
+			Quantity:      fmt.Sprintf("%.3f", toFloat(l.Quantity)),
+			CostPrice:     fmt.Sprintf("%.2f", toFloat(l.CostPrice)),
+			MinStock:      toInt(l.MinStock),
+			StoreID:       toInt(l.StoreID),
+		})
+	}
+	topProductsOut := make([]model.DashboardTopProduct, 0, len(topStock))
+	for _, t := range topStock {
+		topProductsOut = append(topProductsOut, model.DashboardTopProduct{
+			ID:            toInt(t.ID),
+			ArticleNumber: t.ArticleNumber,
+			Quantity:      fmt.Sprintf("%.3f", toFloat(t.Quantity)),
+			Price:         fmt.Sprintf("%.2f", toFloat(t.Price)),
+		})
+	}
+
+	// price tiers
+	tierLabels := []string{"< 50 ر.س", "50-200 ر.س", "200-500 ر.س", "500+ ر.س"}
+	marginTiers := make([]model.DashboardTier, 4)
+	for i, l := range tierLabels {
+		marginTiers[i] = model.DashboardTier{Label: l, Count: 0, AvgPrice: "0.00"}
+	}
+	for _, t := range tiersRows {
+		idx := toInt(t.Tier)
+		if idx >= 0 && idx < 4 {
+			marginTiers[idx].Count = toInt(t.ProductCount)
+			marginTiers[idx].AvgPrice = fmt.Sprintf("%.2f", toFloat(t.AvgPrice))
 		}
 	}
 
-	// ── 13. YoY REVENUE ────────────────────────────────────────────
+	// supplier performance
+	supplierPerfsOut := make([]model.DashboardSupplier, 0, len(supplierRows))
+	for _, s := range supplierRows {
+		supplierPerfsOut = append(supplierPerfsOut, model.DashboardSupplier{
+			ID:         toInt(s.ID),
+			Name:       s.Name,
+			BillCount:  toInt(s.BillCount),
+			TotalSpent: fmt.Sprintf("%.2f", toFloat(s.TotalSpent)),
+			AvgTotal:   fmt.Sprintf("%.2f", toFloat(s.AvgTotal)),
+		})
+	}
+
+	// monthly returns
+	monthlyReturnsOut := make([]model.DashboardMonthlyReturn, 0, len(monthlyRetRows))
+	for _, r := range monthlyRetRows {
+		invCount := toInt(r.InvoiceCount)
+		cnCount := toInt(r.CreditNoteCount)
+		rate := 0.0
+		if invCount > 0 {
+			rate = float64(cnCount) * 100 / float64(invCount)
+		}
+		monthlyReturnsOut = append(monthlyReturnsOut, model.DashboardMonthlyReturn{
+			Month:       r.MonthKey,
+			Invoices:    invCount,
+			CreditNotes: cnCount,
+			Rate:        fmt.Sprintf("%.1f", rate),
+		})
+	}
+
+	// weekday revenue
+	dayNames := []string{"السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"}
+	weekdayRevenuesOut := make([]model.DashboardWeekdayRevenue, 7)
+	for i := range weekdayRevenuesOut {
+		weekdayRevenuesOut[i] = model.DashboardWeekdayRevenue{Day: i, DayName: dayNames[i], AvgRevenue: "0.00"}
+	}
+	for _, w := range weekdayRows {
+		// MySQL DAYOFWEEK: 1=Sunday … 7=Saturday → MENA Sat=0..Fri=6 = dow % 7
+		menaIdx := toInt(w.Dow) % 7
+		if menaIdx >= 0 && menaIdx < 7 {
+			weekdayRevenuesOut[menaIdx].AvgRevenue = fmt.Sprintf("%.2f", toFloat(w.AvgRevenue))
+		}
+	}
+
+	// YoY revenue: align last-year keys with this-year monthLabels.
+	yoyMap := map[string]float64{}
+	for _, y := range yoyRows {
+		yoyMap[y.MonthKey] = toFloat(y.Revenue)
+	}
 	yoyRevenue := make([]string, numMonths)
 	for i, label := range monthLabels {
 		parts := strings.SplitN(label, "/", 2)
@@ -612,141 +286,111 @@ func (h *handler) GetDashboard(c *gin.Context) {
 			yoyRevenue[i] = "0.00"
 			continue
 		}
-		month, _ := strconv.Atoi(parts[0])
-		year, _ := strconv.Atoi(parts[1])
-		prevYear := year - 1
-
-		var rev float64
-		h.DB.QueryRow(`
-			SELECT COALESCE(SUM(bt.total), 0)
-			FROM bill_totals bt
-			LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-			WHERE bt.merchant_id = ? AND cn.id IS NULL
-			  AND MONTH(bt.effective_date) = ? AND YEAR(bt.effective_date) = ?
-		`, companyID, month, prevYear).Scan(&rev)
-		yoyRevenue[i] = fmt.Sprintf("%.2f", rev)
+		mo, _ := strconv.Atoi(parts[0])
+		yr, _ := strconv.Atoi(parts[1])
+		yoyRevenue[i] = fmt.Sprintf("%.2f", yoyMap[fmt.Sprintf("%02d/%04d", mo, yr-1)])
 	}
 
-	// ── 14. TOP CLIENTS BY INVOICE VALUE ───────────────────────────
-	// No order table — derive from bill.buyer_id → client.id
-	type topClient struct {
-		ID          int    `json:"id"`
-		Name        string `json:"name"`
-		InvCount    int    `json:"invoice_count"`
-		Total       string `json:"total"`
-		LastInvoice string `json:"last_invoice"`
+	// top clients
+	topClientsOut := make([]model.DashboardTopClient, 0, len(topClientRows))
+	for _, t := range topClientRows {
+		topClientsOut = append(topClientsOut, model.DashboardTopClient{
+			ID:           toInt(t.ID),
+			Name:         t.Name,
+			InvoiceCount: toInt(t.InvoiceCount),
+			Total:        fmt.Sprintf("%.2f", toFloat(t.TotalValue)),
+			LastInvoice:  toString(t.LastInvoiceDate),
+		})
 	}
 
-	var topClients []topClient
-	tcRows, err := h.DB.Query(`
-		SELECT c.id, c.name,
-		       COUNT(bt.id) AS inv_count,
-		       COALESCE(SUM(bt.total), 0) AS total_value,
-		       COALESCE(MAX(DATE_FORMAT(bt.effective_date, '%Y-%m-%d')), '-') AS last_inv
-		FROM client c
-		INNER JOIN bill_totals bt ON bt.client_id= c.id AND bt.merchant_id = ?
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		WHERE cn.id IS NULL AND c.is_deleted = 0
-		GROUP BY c.id, c.name
-		ORDER BY total_value DESC
-		LIMIT 5
-	`, companyID)
-	if err == nil {
-		defer tcRows.Close()
-		for tcRows.Next() {
-			var tc topClient
-			var totalVal float64
-			if tcRows.Scan(&tc.ID, &tc.Name, &tc.InvCount, &totalVal, &tc.LastInvoice) == nil {
-				tc.Total = fmt.Sprintf("%.2f", totalVal)
-				topClients = append(topClients, tc)
-			}
-		}
+	// CLV — top clients by total order value
+	topCLVOut := make([]model.DashboardCLVClient, 0, len(clvRows))
+	clvValues := make([]float64, 0, len(clvRows))
+	for _, r := range clvRows {
+		v := toFloat(r.TotalValue)
+		clvValues = append(clvValues, v)
+		topCLVOut = append(topCLVOut, model.DashboardCLVClient{
+			ClientID:   toInt(r.ClientID),
+			Name:       toString(r.ClientName),
+			OrderCount: toInt(r.OrderCount),
+			Value:      fmt.Sprintf("%.2f", v),
+		})
 	}
-	if topClients == nil {
-		topClients = []topClient{}
-	}
+	clientConcentration := concentrationRisk(clvValues, 3)
 
-	// ── 15. CLIENT DISTRIBUTION ────────────────────────────────────
-	// Active = has at least one invoice via buyer_id
-	var activeClients int
-	h.DB.QueryRow(`
-		SELECT COUNT(DISTINCT bt.client_id)
-		FROM bill_totals bt
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		WHERE bt.merchant_id = ? AND bt.client IS NOT NULL AND cn.id IS NULL
-	`, companyID).Scan(&activeClients)
+	totalClients := toInt64(counts.TotalClients)
+	activeClients := toInt64(counts.ActiveClients)
 	inactiveClients := totalClients - activeClients
 	if inactiveClients < 0 {
 		inactiveClients = 0
 	}
 
-	// ── ASSEMBLE RESPONSE ──────────────────────────────────────────
-	avgInvoiceValue := 0.0
-	if totalInvoices > 0 {
-		avgInvoiceValue = totalRevenue / float64(totalInvoices)
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"stats": gin.H{
-			"total_invoices":       totalInvoices,
-			"total_revenue":        fmt.Sprintf("%.2f", totalRevenue),
-			"total_vat":            fmt.Sprintf("%.2f", totalVAT),
-			"total_discount":       fmt.Sprintf("%.2f", totalDiscount),
-			"total_products":       totalProducts,
-			"total_clients":        totalClients,
-			"total_suppliers":      totalSuppliers,
-			"total_stores":         totalStores,
-			"total_branches":       totalBranches,
-			"pending_invoices":     pendingCount,
-			"pending_amount":       fmt.Sprintf("%.2f", pendingAmount),
-			"total_purchases":      fmt.Sprintf("%.2f", totalPurchases),
-			"total_purchase_bills": totalPurchaseBills,
-			"total_purchase_vat":   fmt.Sprintf("%.2f", totalPurchaseVAT),
-			"gross_profit":         fmt.Sprintf("%.2f", grossProfit),
-			"gross_margin":         fmt.Sprintf("%.1f", grossMargin),
-			"avg_invoice_value":    fmt.Sprintf("%.2f", avgInvoiceValue),
-			"low_stock_count":      lowStockCount,
-			"credit_note_count":    creditNoteCount,
-			"credit_note_total":    fmt.Sprintf("%.2f", creditNoteTotal),
-			"inv_turnover":         fmt.Sprintf("%.2f", invTurnover),
-			"fulfillment_rate":     fmt.Sprintf("%.1f", fulfillmentRate),
-			"return_rate":          fmt.Sprintf("%.1f", returnRate),
+	c.JSON(http.StatusOK, model.DashboardResponse{
+		Stats: model.DashboardStats{
+			TotalInvoices:       totalInvoices,
+			TotalRevenue:        fmt.Sprintf("%.2f", totalRevenue),
+			TotalVAT:            fmt.Sprintf("%.2f", totalVAT),
+			TotalDiscount:       fmt.Sprintf("%.2f", totalDiscount),
+			TotalProducts:       toInt64(counts.TotalProducts),
+			TotalClients:        totalClients,
+			TotalSuppliers:      toInt64(counts.TotalSuppliers),
+			TotalStores:         toInt64(counts.TotalStores),
+			TotalBranches:       toInt64(counts.TotalBranches),
+			PendingInvoices:     statusCounts["draft"] + statusCounts["processing"],
+			PendingAmount:       fmt.Sprintf("%.2f", pendingAmount),
+			TotalPurchases:      fmt.Sprintf("%.2f", totalPurchases),
+			TotalPurchaseBills:  toInt64(purchases.PurchaseCount),
+			TotalPurchaseVAT:    fmt.Sprintf("%.2f", totalPurchaseVAT),
+			GrossProfit:         fmt.Sprintf("%.2f", grossProfit),
+			GrossMargin:         fmt.Sprintf("%.1f", grossMargin),
+			AvgInvoiceValue:     fmt.Sprintf("%.2f", avgInvoiceValue),
+			LowStockCount:       toInt64(counts.LowStockCount),
+			CreditNoteCount:     toInt64(credit.CreditNoteCount),
+			CreditNoteTotal:     fmt.Sprintf("%.2f", creditNoteTotal),
+			InvTurnover:         fmt.Sprintf("%.2f", invTurnover),
+			FulfillmentRate:     fmt.Sprintf("%.1f", fulfillmentRate),
+			ReturnRate:          fmt.Sprintf("%.1f", returnRate),
+			TotalOrders:         toInt64(orderStats.TotalOrders),
+			PendingOrders:       toInt64(orderStats.PendingOrders),
+			CompletedOrders:     toInt64(orderStats.CompletedOrders),
+			CancelledOrders:     toInt64(orderStats.CancelledOrders),
+			TotalOrdersAmount:   fmt.Sprintf("%.2f", toFloat(orderStats.TotalOrdersAmount)),
+			AvgProcessingDays:   fmt.Sprintf("%.1f", toFloat(avgProcessing)),
+			ClientConcentration: fmt.Sprintf("%.1f", clientConcentration),
 		},
-		"status_counts": statusCounts,
-		"charts": gin.H{
-			"month_labels":      monthLabels,
-			"monthly_revenue":   monthlyRevenue,
-			"monthly_purchases": monthlyPurchases,
-			"monthly_profit":    monthlyProfit,
-			"yoy_revenue":       yoyRevenue,
-			"weekday_revenue":   weekdayRevenues,
-			"monthly_returns":   monthlyReturns,
+		StatusCounts: statusCounts,
+		Charts: model.DashboardCharts{
+			MonthLabels:      monthLabels,
+			MonthlyRevenue:   monthlyRevenueOut,
+			MonthlyPurchases: monthlyPurchasesOut,
+			MonthlyProfit:    monthlyProfitOut,
+			YoYRevenue:       yoyRevenue,
+			WeekdayRevenue:   weekdayRevenuesOut,
+			MonthlyReturns:   monthlyReturnsOut,
 		},
-		"recent_invoices":    recentInvoices,
-		"low_stock_products": lowStock,
-		"top_products":       topProducts,
-		"margin_tiers":       marginTiers,
-		"supplier_perf":      supplierPerfs,
-		"top_clients":        topClients,
-		"client_distribution": gin.H{
-			"active":   activeClients,
-			"inactive": inactiveClients,
+		RecentInvoices:   recentInvoices,
+		LowStockProducts: lowStockOut,
+		TopProducts:      topProductsOut,
+		MarginTiers:      marginTiers,
+		SupplierPerf:     supplierPerfsOut,
+		TopClients:       topClientsOut,
+		TopCLV:           topCLVOut,
+		ClientDistribution: model.DashboardClientDist{
+			Active:   activeClients,
+			Inactive: inactiveClients,
 		},
-		"filters": gin.H{
-			"state":      stateFilter,
-			"start_date": startDate,
-			"end_date":   endDate,
-			"months":     numMonths,
+		Filters: model.DashboardFilters{
+			State:     stateFilter,
+			StartDate: startDate,
+			EndDate:   endDate,
+			Months:    numMonths,
 		},
 	})
 }
 
 // ── GET /api/v2/dashboard/analytics ─────────────────────────────────────────
-// AR/AP aging, cash flow, P&L statement, KPI trends.
 
 func (h *handler) GetDashboardAnalytics(c *gin.Context) {
-	companyID := h.getUserCompany(c)
-
 	startDate := c.Query("start_date")
 	endDate := c.Query("end_date")
 	monthsParam := c.DefaultQuery("months", "6")
@@ -756,400 +400,507 @@ func (h *handler) GetDashboardAnalytics(c *gin.Context) {
 	}
 
 	now := time.Now()
-	monthLabels := make([]string, numMonths)
-	for i := numMonths - 1; i >= 0; i-- {
-		m := now.AddDate(0, -i, 0)
-		monthLabels[numMonths-1-i] = m.Format("01/2006")
-	}
+	monthLabels := buildMonthLabels(now, numMonths)
+	months := int32(numMonths)
 
-	// ── 1. ACCOUNTS RECEIVABLE AGING (unpaid invoices) ─────────────
-	type agingBucket struct {
-		Label string `json:"label"`
-		Count int    `json:"count"`
-		Total string `json:"total"`
-	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
 
-	arBuckets := []agingBucket{
-		{Label: "0-30 أيام (حالي)", Count: 0, Total: "0.00"},
-		{Label: "31-60 أيام (متأخر)", Count: 0, Total: "0.00"},
-		{Label: "61-90 أيام (متأخر جداً)", Count: 0, Total: "0.00"},
-		{Label: "90+ أيام (حرج)", Count: 0, Total: "0.00"},
-	}
+	q := h.queries
 
-	arRows, err := h.DB.Query(`
-		SELECT
-			CASE
-				WHEN DATEDIFF(NOW(), bt.effective_date) <= 30 THEN 0
-				WHEN DATEDIFF(NOW(), bt.effective_date) <= 60 THEN 1
-				WHEN DATEDIFF(NOW(), bt.effective_date) <= 90 THEN 2
-				ELSE 3
-			END AS bucket,
-			COUNT(*) AS cnt,
-			COALESCE(SUM(bt.total), 0) AS total
-		FROM bill_totals bt
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		WHERE bt.merchant_id = ? AND bt.state IN (0, 1) AND cn.id IS NULL
-		GROUP BY bucket
-		ORDER BY bucket
-	`, companyID)
-	if err == nil {
-		defer arRows.Close()
-		for arRows.Next() {
-			var bucket, cnt int
-			var total float64
-			if arRows.Scan(&bucket, &cnt, &total) == nil && bucket >= 0 && bucket < 4 {
-				arBuckets[bucket].Count = cnt
-				arBuckets[bucket].Total = fmt.Sprintf("%.2f", total)
+	// KPI-trend period (default = trailing 7d)
+	periodStart, periodEnd := now.AddDate(0, 0, -7), now
+	if startDate != "" && endDate != "" {
+		if ps, err := time.Parse("2006-01-02", startDate); err == nil {
+			if pe, err := time.Parse("2006-01-02", endDate); err == nil {
+				periodStart = ps
+				periodEnd = pe.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
 			}
 		}
 	}
+	duration := periodEnd.Sub(periodStart)
+	prevEnd := periodStart.Add(-time.Nanosecond)
+	prevStart := prevEnd.Add(-duration)
 
-	// ── 2. ACCOUNTS PAYABLE AGING (purchase bills) ─────────────────
-	apBuckets := []agingBucket{
-		{Label: "0-30 أيام (حالي)", Count: 0, Total: "0.00"},
-		{Label: "31-60 أيام (متأخر)", Count: 0, Total: "0.00"},
-		{Label: "61-90 أيام (متأخر جداً)", Count: 0, Total: "0.00"},
-		{Label: "90+ أيام (حرج)", Count: 0, Total: "0.00"},
+	var (
+		arRows     []db.GetDashboardARAgingRow
+		apRows     []db.GetDashboardAPAgingRow
+		monthlyRev []db.GetMonthlyRevenueRow
+		monthlyPur []db.GetMonthlyPurchasesRow
+		curInv     db.GetDashboardPeriodInvoicesRow
+		prevInv    db.GetDashboardPeriodInvoicesRow
+		curPurch   float64
+		prevPurch  float64
+		vatQRows   []db.GetDashboardVATQuarterlyRow
+	)
+
+	var wg sync.WaitGroup
+	run := func(fn func()) {
+		wg.Add(1)
+		go func() { defer wg.Done(); fn() }()
 	}
 
-	apRows, err := h.DB.Query(`
-		SELECT
-			CASE
-				WHEN DATEDIFF(NOW(), pbt.effective_date) <= 30 THEN 0
-				WHEN DATEDIFF(NOW(), pbt.effective_date) <= 60 THEN 1
-				WHEN DATEDIFF(NOW(), pbt.effective_date) <= 90 THEN 2
-				ELSE 3
-			END AS bucket,
-			COUNT(*) AS cnt,
-			COALESCE(SUM(pbt.total), 0) AS total
-		FROM purchase_bill_totals pbt
-		WHERE pbt.merchant_id = ? AND pbt.state != 3
-		GROUP BY bucket
-		ORDER BY bucket
-	`, companyID)
-	if err == nil {
-		defer apRows.Close()
-		for apRows.Next() {
-			var bucket, cnt int
-			var total float64
-			if apRows.Scan(&bucket, &cnt, &total) == nil && bucket >= 0 && bucket < 4 {
-				apBuckets[bucket].Count = cnt
-				apBuckets[bucket].Total = fmt.Sprintf("%.2f", total)
-			}
+	run(func() { arRows, _ = q.GetDashboardARAging(ctx) })
+	run(func() { apRows, _ = q.GetDashboardAPAging(ctx) })
+	run(func() { monthlyRev, _ = q.GetMonthlyRevenue(ctx, months) })
+	run(func() { monthlyPur, _ = q.GetMonthlyPurchases(ctx, months) })
+	run(func() {
+		curInv, _ = q.GetDashboardPeriodInvoices(ctx, db.GetDashboardPeriodInvoicesParams{
+			StartDate: periodStart,
+			EndDate:   periodEnd,
+		})
+	})
+	run(func() {
+		prevInv, _ = q.GetDashboardPeriodInvoices(ctx, db.GetDashboardPeriodInvoicesParams{
+			StartDate: prevStart,
+			EndDate:   prevEnd,
+		})
+	})
+	run(func() {
+		v, _ := q.GetDashboardPeriodPurchases(ctx, db.GetDashboardPeriodPurchasesParams{
+			StartDate: periodStart,
+			EndDate:   periodEnd,
+		})
+		curPurch = toFloat(v)
+	})
+	run(func() {
+		v, _ := q.GetDashboardPeriodPurchases(ctx, db.GetDashboardPeriodPurchasesParams{
+			StartDate: prevStart,
+			EndDate:   prevEnd,
+		})
+		prevPurch = toFloat(v)
+	})
+	run(func() { vatQRows, _ = q.GetDashboardVATQuarterly(ctx) })
+
+	wg.Wait()
+
+	// AR / AP buckets
+	bucketLabels := []string{
+		"0-30 أيام (حالي)", "31-60 أيام (متأخر)",
+		"61-90 أيام (متأخر جداً)", "90+ أيام (حرج)",
+	}
+	makeBuckets := func() []model.DashboardAgingBucket {
+		out := make([]model.DashboardAgingBucket, 4)
+		for i, l := range bucketLabels {
+			out[i] = model.DashboardAgingBucket{Label: l, Count: 0, Total: "0.00"}
+		}
+		return out
+	}
+	arBuckets := makeBuckets()
+	for _, r := range arRows {
+		idx := toInt(r.Bucket)
+		if idx >= 0 && idx < 4 {
+			arBuckets[idx].Count = toInt(r.BillCount)
+			arBuckets[idx].Total = fmt.Sprintf("%.2f", toFloat(r.Total))
+		}
+	}
+	apBuckets := makeBuckets()
+	for _, r := range apRows {
+		idx := toInt(r.Bucket)
+		if idx >= 0 && idx < 4 {
+			apBuckets[idx].Count = toInt(r.BillCount)
+			apBuckets[idx].Total = fmt.Sprintf("%.2f", toFloat(r.Total))
 		}
 	}
 
-	// ── 3. CASH FLOW (monthly inflow vs outflow) ───────────────────
-	type cashFlowPoint struct {
-		Month   string `json:"month"`
-		Inflow  string `json:"inflow"`
-		Outflow string `json:"outflow"`
-		Net     string `json:"net"`
+	// Cash flow + P&L
+	revMap := map[string]float64{}
+	for _, r := range monthlyRev {
+		revMap[r.MonthKey] = toFloat(r.Revenue)
+	}
+	purMap := map[string]float64{}
+	for _, r := range monthlyPur {
+		purMap[r.MonthKey] = toFloat(r.Purchases)
 	}
 
-	cfMap := make(map[string]*struct{ Inflow, Outflow float64 })
-	for _, label := range monthLabels {
-		cfMap[label] = &struct{ Inflow, Outflow float64 }{}
-	}
-
-	// Inflows = invoice revenue by month (via bill_totals)
-	cfInRows, err := h.DB.Query(`
-		SELECT DATE_FORMAT(bt.effective_date, '%m/%Y') AS mkey,
-		       COALESCE(SUM(bt.total), 0)
-		FROM bill_totals bt
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		WHERE bt.merchant_id = ? AND cn.id IS NULL
-		  AND bt.effective_date >= DATE_SUB(NOW(), INTERVAL ? MONTH)
-		GROUP BY mkey
-	`, companyID, numMonths)
-	if err == nil {
-		defer cfInRows.Close()
-		for cfInRows.Next() {
-			var key string
-			var val float64
-			if cfInRows.Scan(&key, &val) == nil {
-				if cf, ok := cfMap[key]; ok {
-					cf.Inflow = val
-				}
-			}
-		}
-	}
-
-	// Outflows = purchase bill totals by month
-	cfOutRows, err := h.DB.Query(`
-		SELECT DATE_FORMAT(pbt.effective_date, '%m/%Y') AS mkey,
-		       COALESCE(SUM(pbt.total), 0)
-		FROM purchase_bill_totals pbt
-		WHERE pbt.merchant_id = ?
-		  AND pbt.effective_date >= DATE_SUB(NOW(), INTERVAL ? MONTH)
-		GROUP BY mkey
-	`, companyID, numMonths)
-	if err == nil {
-		defer cfOutRows.Close()
-		for cfOutRows.Next() {
-			var key string
-			var val float64
-			if cfOutRows.Scan(&key, &val) == nil {
-				if cf, ok := cfMap[key]; ok {
-					cf.Outflow = val
-				}
-			}
-		}
-	}
-
-	cashFlow := make([]cashFlowPoint, numMonths)
-	for i, label := range monthLabels {
-		cf := cfMap[label]
-		cashFlow[i] = cashFlowPoint{
-			Month:   label,
-			Inflow:  fmt.Sprintf("%.2f", cf.Inflow),
-			Outflow: fmt.Sprintf("%.2f", cf.Outflow),
-			Net:     fmt.Sprintf("%.2f", cf.Inflow-cf.Outflow),
-		}
-	}
-
-	// ── 4. P&L STATEMENT ───────────────────────────────────────────
-	type pnlStatement struct {
-		Revenue      string   `json:"revenue"`
-		COGS         string   `json:"cogs"`
-		GrossProfit  string   `json:"gross_profit"`
-		GrossMargin  string   `json:"gross_margin"`
-		MonthLabels  []string `json:"month_labels"`
-		MonthRevenue []string `json:"month_revenue"`
-		MonthCOGS    []string `json:"month_cogs"`
-		MonthProfit  []string `json:"month_profit"`
-	}
-
-	var totalRev, totalCOGS float64
+	cashFlow := make([]model.DashboardCashFlowMonth, numMonths)
 	monthRev := make([]string, numMonths)
 	monthCOGS := make([]string, numMonths)
 	monthProfit := make([]string, numMonths)
-
+	var totalRev, totalCOGS float64
 	for i, label := range monthLabels {
-		cf := cfMap[label]
-		totalRev += cf.Inflow
-		totalCOGS += cf.Outflow
-		monthRev[i] = fmt.Sprintf("%.2f", cf.Inflow)
-		monthCOGS[i] = fmt.Sprintf("%.2f", cf.Outflow)
-		monthProfit[i] = fmt.Sprintf("%.2f", cf.Inflow-cf.Outflow)
+		inflow, outflow := revMap[label], purMap[label]
+		net := inflow - outflow
+		cashFlow[i] = model.DashboardCashFlowMonth{
+			Month:   label,
+			Inflow:  fmt.Sprintf("%.2f", inflow),
+			Outflow: fmt.Sprintf("%.2f", outflow),
+			Net:     fmt.Sprintf("%.2f", net),
+		}
+		totalRev += inflow
+		totalCOGS += outflow
+		monthRev[i] = fmt.Sprintf("%.2f", inflow)
+		monthCOGS[i] = fmt.Sprintf("%.2f", outflow)
+		monthProfit[i] = fmt.Sprintf("%.2f", net)
 	}
 
 	gp := totalRev - totalCOGS
-	gm := 0.0
-	if totalRev > 0 {
-		gm = gp * 100 / totalRev
-	}
-
-	pnl := pnlStatement{
+	pnl := model.DashboardPnL{
 		Revenue:      fmt.Sprintf("%.2f", totalRev),
 		COGS:         fmt.Sprintf("%.2f", totalCOGS),
 		GrossProfit:  fmt.Sprintf("%.2f", gp),
-		GrossMargin:  fmt.Sprintf("%.1f", gm),
+		GrossMargin:  fmt.Sprintf("%.1f", pct(gp, totalRev)),
 		MonthLabels:  monthLabels,
 		MonthRevenue: monthRev,
 		MonthCOGS:    monthCOGS,
 		MonthProfit:  monthProfit,
 	}
 
-	// ── 5. KPI TRENDS (current vs previous period) ─────────────────
-	type kpiTrend struct {
-		Direction string `json:"direction"`
-		Percent   string `json:"percent"`
-		Arrow     string `json:"arrow"`
-	}
-
-	var periodStart, periodEnd time.Time
-	if startDate != "" && endDate != "" {
-		ps, _ := time.Parse("2006-01-02", startDate)
-		pe, _ := time.Parse("2006-01-02", endDate)
-		if !ps.IsZero() && !pe.IsZero() {
-			periodStart = ps
-			periodEnd = pe.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-		}
-	}
-	if periodStart.IsZero() || periodEnd.IsZero() {
-		periodEnd = now
-		periodStart = now.AddDate(0, 0, -7)
-	}
-
-	duration := periodEnd.Sub(periodStart)
-	prevEnd := periodStart.Add(-time.Nanosecond)
-	prevStart := prevEnd.Add(-duration)
-
-	var curRev, prevRev, curPurch, prevPurch float64
-	var curInvCount, prevInvCount int
-
-	h.DB.QueryRow(`
-		SELECT COUNT(*), COALESCE(SUM(bt.total), 0)
-		FROM bill_totals bt
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		WHERE bt.merchant_id = ? AND cn.id IS NULL
-		  AND bt.effective_date >= ? AND bt.effective_date <= ?
-	`, companyID,
-		periodStart.Format(time.RFC3339),
-		periodEnd.Format(time.RFC3339)).Scan(&curInvCount, &curRev)
-
-	h.DB.QueryRow(`
-		SELECT COUNT(*), COALESCE(SUM(bt.total), 0)
-		FROM bill_totals bt
-		LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-		WHERE bt.merchant_id = ? AND cn.id IS NULL
-		  AND bt.effective_date >= ? AND bt.effective_date <= ?
-	`, companyID,
-		prevStart.Format(time.RFC3339),
-		prevEnd.Format(time.RFC3339)).Scan(&prevInvCount, &prevRev)
-
-	h.DB.QueryRow(`
-		SELECT COALESCE(SUM(pbt.total), 0)
-		FROM purchase_bill_totals pbt
-		WHERE pbt.merchant_id = ?
-		  AND pbt.effective_date >= ? AND pbt.effective_date <= ?
-	`, companyID,
-		periodStart.Format(time.RFC3339),
-		periodEnd.Format(time.RFC3339)).Scan(&curPurch)
-
-	h.DB.QueryRow(`
-		SELECT COALESCE(SUM(pbt.total), 0)
-		FROM purchase_bill_totals pbt
-		WHERE pbt.merchant_id = ?
-		  AND pbt.effective_date >= ? AND pbt.effective_date <= ?
-	`, companyID,
-		prevStart.Format(time.RFC3339),
-		prevEnd.Format(time.RFC3339)).Scan(&prevPurch)
-
-	makeTrendFn := func(cur, prev float64) kpiTrend {
-		if prev == 0 && cur == 0 {
-			return kpiTrend{Direction: "flat", Percent: "0", Arrow: "—"}
-		}
-		if prev == 0 {
-			return kpiTrend{Direction: "up", Percent: "100", Arrow: "↑"}
-		}
-		pct := ((cur - prev) / math.Abs(prev)) * 100
-		pctStr := fmt.Sprintf("%.1f", math.Abs(pct))
-		dir := "flat"
-		arrow := "—"
-		if pct > 0.5 {
-			dir = "up"
-			arrow = "↑"
-		} else if pct < -0.5 {
-			dir = "down"
-			arrow = "↓"
-		}
-		return kpiTrend{Direction: dir, Percent: pctStr, Arrow: arrow}
-	}
-
+	curRev := toFloat(curInv.Revenue)
+	prevRev := toFloat(prevInv.Revenue)
 	curProfit := curRev - curPurch
 	prevProfit := prevRev - prevPurch
 
-	kpiTrends := gin.H{
-		"invoices":        makeTrendFn(float64(curInvCount), float64(prevInvCount)),
-		"revenue":         makeTrendFn(curRev, prevRev),
-		"purchases_total": makeTrendFn(curPurch, prevPurch),
-		"gross_profit":    makeTrendFn(curProfit, prevProfit),
+	// VAT quarterly
+	vatQuarterly := make([]model.DashboardVATQuarter, 0, len(vatQRows))
+	for _, r := range vatQRows {
+		out := toFloat(r.OutputVat)
+		in := toFloat(r.InputVat)
+		vatQuarterly = append(vatQuarterly, model.DashboardVATQuarter{
+			Quarter:   fmt.Sprintf("Q%d/%d", toInt(r.Quarter), toInt(r.Year)),
+			OutputVAT: fmt.Sprintf("%.2f", out),
+			InputVAT:  fmt.Sprintf("%.2f", in),
+			NetVAT:    fmt.Sprintf("%.2f", out-in),
+		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"ar_aging":   arBuckets,
-		"ap_aging":   apBuckets,
-		"cash_flow":  cashFlow,
-		"pnl":        pnl,
-		"kpi_trends": kpiTrends,
+	c.JSON(http.StatusOK, model.DashboardAnalyticsResponse{
+		ARAging:  arBuckets,
+		APAging:  apBuckets,
+		CashFlow: cashFlow,
+		PnL:      pnl,
+		KPITrends: model.DashboardKPITrends{
+			Invoices:       makeTrend(float64(toInt64(curInv.InvoiceCount)), float64(toInt64(prevInv.InvoiceCount))),
+			Revenue:        makeTrend(curRev, prevRev),
+			PurchasesTotal: makeTrend(curPurch, prevPurch),
+			GrossProfit:    makeTrend(curProfit, prevProfit),
+		},
+		VATQuarterly: vatQuarterly,
 	})
 }
 
 // ── GET /api/v2/dashboard/compare ───────────────────────────────────────────
-// Compares two arbitrary date periods side by side.
 
 func (h *handler) GetDashboardCompare(c *gin.Context) {
-	companyID := h.getUserCompany(c)
-
 	aStart := c.Query("a_start")
 	aEnd := c.Query("a_end")
 	bStart := c.Query("b_start")
 	bEnd := c.Query("b_end")
-
 	if aStart == "" || aEnd == "" || bStart == "" || bEnd == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "يرجى تحديد فترتين للمقارنة"})
 		return
 	}
 
-	type periodStats struct {
-		Invoices   int    `json:"invoices"`
-		Revenue    string `json:"revenue"`
-		Purchases  string `json:"purchases"`
-		Profit     string `json:"profit"`
-		AvgInvoice string `json:"avg_invoice"`
-		Pending    string `json:"pending"`
-		Margin     string `json:"margin"`
-		Issued     int    `json:"issued"`
-		Draft      int    `json:"draft"`
+	aStartT, errAS := time.Parse("2006-01-02", aStart)
+	aEndT, errAE := time.Parse("2006-01-02", aEnd)
+	bStartT, errBS := time.Parse("2006-01-02", bStart)
+	bEndT, errBE := time.Parse("2006-01-02", bEnd)
+	if errAS != nil || errAE != nil || errBS != nil || errBE != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "تواريخ غير صحيحة (YYYY-MM-DD)"})
+		return
 	}
 
-	computePeriod := func(start, end string) periodStats {
-		var ps periodStats
-		var revenue, purchases, pending float64
-		var issued, draft int
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
 
-		h.DB.QueryRow(`
-			SELECT COUNT(*), COALESCE(SUM(bt.total), 0)
-			FROM bill_totals bt
-			LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-			WHERE bt.merchant_id = ? AND cn.id IS NULL
-			  AND DATE(bt.effective_date) >= ? AND DATE(bt.effective_date) <= ?
-		`, companyID, start, end).Scan(&ps.Invoices, &revenue)
+	q := h.queries
 
-		h.DB.QueryRow(`
-			SELECT COALESCE(SUM(bt.total), 0) FROM bill_totals bt
-			LEFT JOIN credit_note cn ON cn.bill_id = bt.id
-			WHERE bt.merchant_id = ? AND cn.id IS NULL
-			  AND bt.state IN (0, 1)
-			  AND DATE(bt.effective_date) >= ? AND DATE(bt.effective_date) <= ?
-		`, companyID, start, end).Scan(&pending)
+	type periodOut struct {
+		Stats model.DashboardComparePeriod
+		Err   error
+	}
+	compute := func(start, end time.Time) periodOut {
+		invRow, errA := q.GetDashboardPeriodInvoices(ctx, db.GetDashboardPeriodInvoicesParams{
+			StartDate: start, EndDate: end,
+		})
+		purSum, errB := q.GetDashboardPeriodPurchases(ctx, db.GetDashboardPeriodPurchasesParams{
+			StartDate: start, EndDate: end,
+		})
+		if errA != nil && !errors.Is(errA, sql.ErrNoRows) {
+			return periodOut{Err: errA}
+		}
+		if errB != nil && !errors.Is(errB, sql.ErrNoRows) {
+			return periodOut{Err: errB}
+		}
 
-		h.DB.QueryRow(`
-			SELECT COUNT(*) FROM bill b
-			LEFT JOIN credit_note cn ON cn.bill_id = b.id
-			WHERE b.merchant_id = ? AND cn.id IS NULL AND b.state = 3
-			  AND DATE(b.effective_date) >= ? AND DATE(b.effective_date) <= ?
-		`, companyID, start, end).Scan(&issued)
-
-		h.DB.QueryRow(`
-			SELECT COUNT(*) FROM bill b
-			LEFT JOIN credit_note cn ON cn.bill_id = b.id
-			WHERE b.merchant_id = ? AND cn.id IS NULL AND b.state = 0
-			  AND DATE(b.effective_date) >= ? AND DATE(b.effective_date) <= ?
-		`, companyID, start, end).Scan(&draft)
-
-		h.DB.QueryRow(`
-			SELECT COALESCE(SUM(pbt.total), 0) FROM purchase_bill_totals pbt
-			WHERE pbt.merchant_id = ?
-			  AND DATE(pbt.effective_date) >= ? AND DATE(pbt.effective_date) <= ?
-		`, companyID, start, end).Scan(&purchases)
-
+		revenue := toFloat(invRow.Revenue)
+		purchases := toFloat(purSum)
+		pending := toFloat(invRow.PendingAmount)
 		profit := revenue - purchases
+		invCount := toInt64(invRow.InvoiceCount)
 		avg := 0.0
-		if ps.Invoices > 0 {
-			avg = revenue / float64(ps.Invoices)
+		if invCount > 0 {
+			avg = revenue / float64(invCount)
 		}
-		margin := 0.0
-		if revenue > 0 {
-			margin = profit * 100 / revenue
-		}
-
-		ps.Revenue = fmt.Sprintf("%.2f", revenue)
-		ps.Purchases = fmt.Sprintf("%.2f", purchases)
-		ps.Profit = fmt.Sprintf("%.2f", profit)
-		ps.AvgInvoice = fmt.Sprintf("%.2f", avg)
-		ps.Pending = fmt.Sprintf("%.2f", pending)
-		ps.Margin = fmt.Sprintf("%.1f", margin)
-		ps.Issued = issued
-		ps.Draft = draft
-
-		return ps
+		return periodOut{Stats: model.DashboardComparePeriod{
+			Invoices:   invCount,
+			Revenue:    fmt.Sprintf("%.2f", revenue),
+			Purchases:  fmt.Sprintf("%.2f", purchases),
+			Profit:     fmt.Sprintf("%.2f", profit),
+			AvgInvoice: fmt.Sprintf("%.2f", avg),
+			Pending:    fmt.Sprintf("%.2f", pending),
+			Margin:     fmt.Sprintf("%.1f", pct(profit, revenue)),
+			Issued:     toInt64(invRow.IssuedCount),
+			Draft:      toInt64(invRow.DraftCount),
+		}}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"period_a": computePeriod(aStart, aEnd),
-		"period_b": computePeriod(bStart, bEnd),
+	var (
+		wg   sync.WaitGroup
+		a, b periodOut
+	)
+	wg.Add(2)
+	go func() { defer wg.Done(); a = compute(aStartT, aEndT) }()
+	go func() { defer wg.Done(); b = compute(bStartT, bEndT) }()
+	wg.Wait()
+
+	if a.Err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": a.Err.Error()})
+		return
+	}
+	if b.Err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": b.Err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, model.DashboardCompareResponse{
+		PeriodA: a.Stats,
+		PeriodB: b.Stats,
 	})
+}
+
+// ── helpers ────────────────────────────────────────────────────────────────
+
+func buildMonthLabels(now time.Time, n int) []string {
+	out := make([]string, n)
+	for i := n - 1; i >= 0; i-- {
+		out[n-1-i] = now.AddDate(0, -i, 0).Format("01/2006")
+	}
+	return out
+}
+
+// optInt32 returns nil for empty / invalid input so sqlc's pointer-typed
+// narg params (e.g. *int32) can be passed directly.
+func optInt32(s string) *int32 {
+	if s == "" {
+		return nil
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return nil
+	}
+	n := int32(v)
+	return &n
+}
+
+// optDate parses "YYYY-MM-DD" and returns a *time.Time anchored at start or
+// end of day. Returns nil for empty / unparsable input.
+func optDate(s string, endOfDay bool) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return nil
+	}
+	if endOfDay {
+		t = t.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+	}
+	return &t
+}
+
+// toFloat handles whatever sqlc generates for DECIMAL / SUM / AVG columns:
+// float64, string, []byte, nil, or any int. SUM(DECIMAL) is usually `string`.
+func toFloat(v any) float64 {
+	switch x := v.(type) {
+	case nil:
+		return 0
+	case float64:
+		return x
+	case float32:
+		return float64(x)
+	case int64:
+		return float64(x)
+	case int32:
+		return float64(x)
+	case int:
+		return float64(x)
+	case uint64:
+		return float64(x)
+	case uint32:
+		return float64(x)
+	case string:
+		f, _ := strconv.ParseFloat(x, 64)
+		return f
+	case []byte:
+		f, _ := strconv.ParseFloat(string(x), 64)
+		return f
+	case *float64:
+		if x == nil {
+			return 0
+		}
+		return *x
+	case *int64:
+		if x == nil {
+			return 0
+		}
+		return float64(*x)
+	case *int32:
+		if x == nil {
+			return 0
+		}
+		return float64(*x)
+	case *string:
+		if x == nil {
+			return 0
+		}
+		f, _ := strconv.ParseFloat(*x, 64)
+		return f
+	}
+	return 0
+}
+
+// toInt64 / toInt accept whatever sqlc generates for COUNT, plain INTs, etc.
+func toInt64(v any) int64 {
+	switch x := v.(type) {
+	case nil:
+		return 0
+	case int64:
+		return x
+	case int32:
+		return int64(x)
+	case int:
+		return int64(x)
+	case uint64:
+		return int64(x)
+	case uint32:
+		return int64(x)
+	case float64:
+		return int64(x)
+	case string:
+		n, _ := strconv.ParseInt(x, 10, 64)
+		return n
+	case []byte:
+		n, _ := strconv.ParseInt(string(x), 10, 64)
+		return n
+	case *int64:
+		if x == nil {
+			return 0
+		}
+		return *x
+	case *int32:
+		if x == nil {
+			return 0
+		}
+		return int64(*x)
+	}
+	return 0
+}
+
+func toInt(v any) int { return int(toInt64(v)) }
+func toBool(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case int64:
+		return x != 0
+	case int32:
+		return x != 0
+	case int:
+		return x != 0
+	case []byte:
+		return len(x) > 0 && x[0] != '0'
+	case string:
+		return x != "" && x != "0"
+	}
+	return false
+}
+
+func toString(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	case []byte:
+		return string(x)
+	case time.Time:
+		if x.IsZero() {
+			return ""
+		}
+		return x.Format("2006-01-02")
+	case *time.Time:
+		if x == nil || x.IsZero() {
+			return ""
+		}
+		return x.Format("2006-01-02")
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+// derefStr returns the dereferenced *string or nil for JSON encoding.
+func derefStr(p *string) any {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+func pct(a, b float64) float64 {
+	if b == 0 {
+		return 0
+	}
+	return (a / b) * 100
+}
+
+func stateLabel(s int) string {
+	switch s {
+	case 0:
+		return "مسودة"
+	case 1:
+		return "قيد المعالجة"
+	case 2:
+		return "تمت المعالجة"
+	case 3:
+		return "صادرة"
+	default:
+		return "غير معروف"
+	}
+}
+
+func makeTrend(cur, prev float64) model.DashboardTrend {
+	if prev == 0 && cur == 0 {
+		return model.DashboardTrend{Direction: "flat", Percent: "0", Arrow: "—"}
+	}
+	if prev == 0 {
+		return model.DashboardTrend{Direction: "up", Percent: "100", Arrow: "↑"}
+	}
+	p := ((cur - prev) / math.Abs(prev)) * 100
+	dir, arrow := "flat", "—"
+	if p > 0.5 {
+		dir, arrow = "up", "↑"
+	} else if p < -0.5 {
+		dir, arrow = "down", "↓"
+	}
+	return model.DashboardTrend{Direction: dir, Percent: fmt.Sprintf("%.1f", math.Abs(p)), Arrow: arrow}
+}
+
+// concentrationRisk returns the % of total value held by the topN entries.
+// Input slice MUST already be sorted descending (the CLV query orders by
+// total_value DESC, so we just sum the first topN entries against the total).
+func concentrationRisk(values []float64, topN int) float64 {
+	if len(values) == 0 || topN <= 0 {
+		return 0
+	}
+	var total, top float64
+	for i, v := range values {
+		total += v
+		if i < topN {
+			top += v
+		}
+	}
+	if total == 0 {
+		return 0
+	}
+	return (top / total) * 100
 }

@@ -16,6 +16,29 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
+-- Table structure for table `account`
+--
+
+DROP TABLE IF EXISTS `account`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `account` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `code` varchar(16) NOT NULL,
+  `name` varchar(64) NOT NULL,
+  `type` enum('asset','liability','equity','revenue','expense') NOT NULL,
+  `subtype` varchar(32) DEFAULT NULL,
+  `parent_id` int DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_account_code` (`code`),
+  KEY `idx_account_type_sub` (`type`,`subtype`),
+  KEY `fk_account_parent` (`parent_id`),
+  CONSTRAINT `fk_account_parent` FOREIGN KEY (`parent_id`) REFERENCES `account` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `ambrand`
 --
 
@@ -468,6 +491,12 @@ CREATE TABLE `bill` (
   `branch_id` int unsigned DEFAULT NULL,
   `payment_method` int NOT NULL DEFAULT '10' COMMENT 'ZATCA payment method: 10=Cash, 30=Credit, 42=Bank, 48=Card',
   `deliver_date` date DEFAULT NULL COMMENT 'Expected delivery date',
+  `invoice_xml_path` varchar(500) DEFAULT NULL COMMENT 'Filesystem path of signed XML (relative to xml-dir)',
+  `total_before_vat` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `total_vat` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `total` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `discount_amount` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `amount_paid` decimal(14,2) NOT NULL DEFAULT '0.00',
   PRIMARY KEY (`id`),
   KEY `fk_bill_branch` (`branch_id`),
   KEY `idx_bill_merchant_date` (`merchant_id`,`effective_date`),
@@ -487,15 +516,60 @@ DROP TABLE IF EXISTS `bill_payment`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `bill_payment` (
-  `id` int NOT NULL,
-  `bill_id` int NOT NULL,
+  `id` int NOT NULL AUTO_INCREMENT,
+  `bill_id` bigint unsigned NOT NULL,
   `date` datetime NOT NULL,
-  `amount` bigint NOT NULL,
+  `paid_at` datetime NOT NULL,
+  `amount` decimal(12,2) NOT NULL,
   `currency_id` int NOT NULL,
-  `pyament_method` int NOT NULL,
-  PRIMARY KEY (`id`)
+  `payment_method` int NOT NULL,
+  `recorded_by` int DEFAULT NULL,
+  `note` varchar(255) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `fk_bill_payment_user` (`recorded_by`),
+  KEY `idx_bill_payment_bill` (`bill_id`),
+  KEY `idx_bill_payment_paid_at` (`paid_at`),
+  CONSTRAINT `fk_bill_payment_bill` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_bill_payment_user` FOREIGN KEY (`recorded_by`) REFERENCES `user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 
 --
 -- Table structure for table `bill_product`
@@ -528,6 +602,30 @@ CREATE TABLE `bill_product` (
   CONSTRAINT `chk_quantity` CHECK ((`quantity` > 0))
 ) ENGINE=InnoDB AUTO_INCREMENT=862 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 
 --
 -- Temporary view structure for view `bill_totals`
@@ -630,6 +728,14 @@ CREATE TABLE `branch_zatca_config` (
   `zatca_registered_at` datetime DEFAULT NULL,
   `zatca_status` tinyint NOT NULL DEFAULT '3' COMMENT '0=deleted, 1=active, 2=expired, 3=not active',
   `zatca_onboarded_at` datetime DEFAULT NULL,
+  `csr_tin` varchar(9) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '9-digit EGS serial used in CSR CommonName',
+  `csr_computer_number` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT 'EGS UUID used in CSR SerialNumber (3-{uuid})',
+  `csr_invoice_type` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '1100' COMMENT '1100=both, 1000=B2B only, 0100=B2C only',
+  `onboard_state` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'not_started' COMMENT 'not_started|csr|compliance|invoices|done|failed',
+  `last_error` text COLLATE utf8mb4_unicode_ci,
+  `last_attempt_at` datetime DEFAULT NULL,
+  `previous_invoice_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'base64(sha256(prev_signed_xml)); null = first document',
+  `last_icv` bigint unsigned NOT NULL DEFAULT '0' COMMENT 'Strictly increasing per-EGS Invoice Counter Value (shared across bill/credit/debit)',
   PRIMARY KEY (`branch_id`),
   CONSTRAINT `fk_bzc_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -807,7 +913,7 @@ CREATE TABLE `cash_voucher` (
   CONSTRAINT `chk_cv_amount` CHECK ((`amount` > 0)),
   CONSTRAINT `chk_cv_bank_fields` CHECK (((`payment_method` <> _utf8mb4'bank_transfer') or ((`bank_name` is not null) and (`bank_account` is not null)))),
   CONSTRAINT `chk_cv_state` CHECK ((`state` in (0,1,2)))
-) ENGINE=InnoDB AUTO_INCREMENT=50 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=58 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -943,6 +1049,7 @@ CREATE TABLE `credit_note` (
   `invoice_uuid` char(36) DEFAULT NULL,
   `invoice_hash` varchar(128) DEFAULT NULL,
   `invoice_qr` mediumtext,
+  `invoice_xml_path` varchar(500) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_bill_id` (`bill_id`),
   KEY `idx_cn_bill_id` (`bill_id`),
@@ -969,6 +1076,102 @@ CREATE TABLE `criteria` (
   `successorId` bigint DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='List of all criterias';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `dashboard_daily_rollup`
+--
+
+DROP TABLE IF EXISTS `dashboard_daily_rollup`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `dashboard_daily_rollup` (
+  `merchant_id` int NOT NULL,
+  `store_id` int NOT NULL,
+  `bucket_date` date NOT NULL,
+  `invoice_count` int NOT NULL DEFAULT '0',
+  `revenue` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `revenue_before_vat` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `output_vat` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `discount` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `purchase_count` int NOT NULL DEFAULT '0',
+  `purchases_total` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `purchases_before_vat` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `input_vat` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `credit_note_count` int NOT NULL DEFAULT '0',
+  `credit_note_total` decimal(14,2) NOT NULL DEFAULT '0.00',
+  PRIMARY KEY (`merchant_id`,`store_id`,`bucket_date`),
+  KEY `idx_rollup_merchant_date` (`merchant_id`,`bucket_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `debit_note`
+--
+
+DROP TABLE IF EXISTS `debit_note`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `debit_note` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `bill_id` bigint unsigned NOT NULL,
+  `state` int DEFAULT NULL COMMENT '1=pending, 3=submitted',
+  `note` text COMMENT 'KSA-10 reason',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `invoice_uuid` char(36) DEFAULT NULL,
+  `invoice_hash` varchar(128) DEFAULT NULL,
+  `invoice_qr` mediumtext,
+  `invoice_xml_path` varchar(500) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_dn_bill_id` (`bill_id`),
+  KEY `idx_dn_state` (`state`),
+  CONSTRAINT `fk_debit_note_bill` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `expense`
+--
+
+DROP TABLE IF EXISTS `expense`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `expense` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `merchant_id` int NOT NULL,
+  `store_id` int NOT NULL,
+  `category_id` int NOT NULL,
+  `amount` decimal(12,2) NOT NULL,
+  `vat_amount` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `spent_at` date NOT NULL,
+  `note` varchar(255) DEFAULT NULL,
+  `created_by` int NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_expense_merchant_date` (`merchant_id`,`spent_at`),
+  KEY `idx_expense_store_date` (`store_id`,`spent_at`),
+  KEY `idx_expense_cat` (`category_id`),
+  KEY `fk_expense_user` (`created_by`),
+  CONSTRAINT `fk_expense_cat` FOREIGN KEY (`category_id`) REFERENCES `expense_category` (`id`),
+  CONSTRAINT `fk_expense_store` FOREIGN KEY (`store_id`) REFERENCES `store` (`id`),
+  CONSTRAINT `fk_expense_user` FOREIGN KEY (`created_by`) REFERENCES `user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `expense_category`
+--
+
+DROP TABLE IF EXISTS `expense_category`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `expense_category` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `code` varchar(32) NOT NULL,
+  `name` varchar(64) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_expense_cat_code` (`code`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1000,6 +1203,56 @@ CREATE TABLE `genericarticlesgroups` (
   `lang` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `usageDesignation` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Generic articles groups';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `journal_entry`
+--
+
+DROP TABLE IF EXISTS `journal_entry`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `journal_entry` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `merchant_id` int NOT NULL,
+  `store_id` int NOT NULL,
+  `posted_at` date NOT NULL,
+  `source_type` varchar(32) NOT NULL COMMENT '''bill'',''purchase_bill'',''expense'',''bill_payment'',''pb_payment'',''manual''',
+  `source_id` bigint unsigned DEFAULT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `created_by` int NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_je_merchant_date` (`merchant_id`,`posted_at`),
+  KEY `idx_je_store_date` (`store_id`,`posted_at`),
+  KEY `idx_je_source` (`source_type`,`source_id`),
+  KEY `fk_je_user` (`created_by`),
+  CONSTRAINT `fk_je_store` FOREIGN KEY (`store_id`) REFERENCES `store` (`id`),
+  CONSTRAINT `fk_je_user` FOREIGN KEY (`created_by`) REFERENCES `user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `journal_line`
+--
+
+DROP TABLE IF EXISTS `journal_line`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `journal_line` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `entry_id` int NOT NULL,
+  `account_id` int NOT NULL,
+  `debit` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `credit` decimal(14,2) NOT NULL DEFAULT '0.00',
+  PRIMARY KEY (`id`),
+  KEY `idx_jl_account` (`account_id`),
+  KEY `idx_jl_entry` (`entry_id`),
+  CONSTRAINT `fk_jl_account` FOREIGN KEY (`account_id`) REFERENCES `account` (`id`),
+  CONSTRAINT `fk_jl_entry` FOREIGN KEY (`entry_id`) REFERENCES `journal_entry` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `chk_jl_nonzero` CHECK (((`debit` + `credit`) > 0)),
+  CONSTRAINT `chk_jl_one_side` CHECK (((`debit` = 0) or (`credit` = 0)))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1478,7 +1731,7 @@ CREATE TABLE `product` (
   KEY `idx_product_store_price` (`store_id`,`price`),
   CONSTRAINT `ch_product_price` CHECK ((`price` > 0)),
   CONSTRAINT `ch_product_quantity` CHECK ((`quantity` >= 0))
-) ENGINE=InnoDB AUTO_INCREMENT=285209041 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=285209073 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1505,6 +1758,10 @@ CREATE TABLE `purchase_bill` (
   `deliver_date` date DEFAULT NULL COMMENT 'Expected delivery date',
   `received_at` datetime DEFAULT NULL COMMENT 'When goods were confirmed received',
   `received_by` int DEFAULT NULL COMMENT 'FK to user.id — who confirmed receipt',
+  `total_before_vat` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `total_vat` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `total` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `amount_paid` decimal(14,2) NOT NULL DEFAULT '0.00',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_pb_supplier_seq` (`supplier_id`,`supplier_sequence_number`),
   UNIQUE KEY `uq_pb_sequence` (`sequence_number`),
@@ -1512,7 +1769,7 @@ CREATE TABLE `purchase_bill` (
   KEY `idx_pb_supplier_merchant` (`supplier_id`,`merchant_id`),
   KEY `idx_pb_payment_method` (`payment_method`),
   KEY `idx_pb_deliver_date` (`deliver_date`)
-) ENGINE=InnoDB AUTO_INCREMENT=352 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=387 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1545,15 +1802,32 @@ DROP TABLE IF EXISTS `purchase_bill_payment`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `purchase_bill_payment` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `purchase_register_id` int NOT NULL,
+  `purchase_bill_id` bigint unsigned NOT NULL,
   `date` datetime DEFAULT NULL,
-  `amount` decimal(10,0) NOT NULL,
+  `paid_at` datetime NOT NULL,
+  `amount` decimal(12,2) NOT NULL,
   `currency_id` int DEFAULT NULL,
   `payment_method` int DEFAULT NULL,
-  `product_id` int NOT NULL,
-  PRIMARY KEY (`id`)
+  `product_id` int DEFAULT NULL,
+  `recorded_by` int DEFAULT NULL,
+  `note` varchar(255) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `fk_pbp_pb_user` (`recorded_by`),
+  KEY `idx_pbp_pb` (`purchase_bill_id`),
+  KEY `idx_pbp_paid_at` (`paid_at`),
+  CONSTRAINT `fk_pbp_pb_bill` FOREIGN KEY (`purchase_bill_id`) REFERENCES `purchase_bill` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pbp_pb_user` FOREIGN KEY (`recorded_by`) REFERENCES `user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 
 --
 -- Table structure for table `purchase_bill_product`
@@ -1579,12 +1853,16 @@ CREATE TABLE `purchase_bill_product` (
   CONSTRAINT `fk_pbp_product_id` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`),
   CONSTRAINT `chpk_price` CHECK ((`price` > 0)),
   CONSTRAINT `chpk_quantity` CHECK ((`quantity` > 0))
-) ENGINE=InnoDB AUTO_INCREMENT=548 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=580 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Temporary view structure for view `purchase_bill_totals`
---
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 
 DROP TABLE IF EXISTS `purchase_bill_totals`;
 /*!50001 DROP VIEW IF EXISTS `purchase_bill_totals`*/;
@@ -2073,6 +2351,33 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `zatca_submission`
+--
+
+DROP TABLE IF EXISTS `zatca_submission`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `zatca_submission` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `bill_id` bigint unsigned NOT NULL,
+  `status` tinyint NOT NULL DEFAULT '0' COMMENT '0=pending,1=submitted,2=accepted,3=rejected,4=warning',
+  `rejection_code` varchar(32) DEFAULT NULL,
+  `rejection_msg` varchar(512) DEFAULT NULL,
+  `submitted_at` datetime DEFAULT NULL,
+  `cleared_at` datetime DEFAULT NULL,
+  `response_xml` mediumtext,
+  `retry_count` int NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_zatca_bill` (`bill_id`),
+  KEY `idx_zatca_status` (`status`),
+  KEY `idx_zatca_submitted` (`submitted_at`),
+  CONSTRAINT `fk_zatca_bill` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Final view structure for view `bill_totals`
 --
 
@@ -2135,4 +2440,4 @@ CREATE TABLE `vin_cache` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-24 16:15:24
+-- Dump completed on 2026-04-25 13:08:59

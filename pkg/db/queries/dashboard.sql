@@ -270,7 +270,6 @@ FROM purchase_bill pb
 WHERE DATE(pb.effective_date) >= sqlc.arg('start_date')
   AND DATE(pb.effective_date) <= sqlc.arg('end_date');
 
-
 -- ── 16. orders summary (pending count + totals) ──────────────────
 
 -- name: GetDashboardOrderStats :one
@@ -336,3 +335,98 @@ FROM (
 ) d
 GROUP BY YEAR(d.dt), QUARTER(d.dt)
 ORDER BY YEAR(d.dt), QUARTER(d.dt);
+
+-- ── 20. balance sheet (Assets / Liabilities / Equity by subtype) ──
+-- Sums journal_line balances grouped by account.type/subtype. Subtype values
+-- expected: 'cash','bank','accounts_receivable','inventory','fixed_asset','other'
+-- for assets, 'accounts_payable','short_term_debt','long_term_debt','other'
+-- for liabilities. Frontend can pivot by subtype to render Balance Sheet rows.
+
+-- name: GetDashboardBalanceSheet :many
+SELECT
+    a.type                                                  AS acct_type,
+    COALESCE(NULLIF(a.subtype,''),'other')                  AS acct_subtype,
+    COALESCE(SUM(jl.debit - jl.credit), 0)                  AS net_balance
+FROM journal_line jl
+INNER JOIN journal_entry je ON je.id = jl.entry_id
+INNER JOIN account a       ON a.id = jl.account_id
+WHERE je.posted_at <= sqlc.arg('as_of')
+GROUP BY a.type, acct_subtype;
+
+-- ── 21. operating expenses (period totals + by-category breakdown) ──
+
+-- name: GetDashboardOpExSummary :one
+SELECT
+    COALESCE(SUM(e.amount), 0)     AS total_opex,
+    COALESCE(SUM(e.vat_amount), 0) AS opex_vat,
+    COUNT(*)                       AS expense_count
+FROM expense e
+WHERE e.spent_at >= sqlc.arg('start_date')
+  AND e.spent_at <= sqlc.arg('end_date');
+
+-- name: GetDashboardOpExByCategory :many
+SELECT
+    ec.id                          AS category_id,
+    ec.code                        AS category_code,
+    ec.name                        AS category_name,
+    COALESCE(SUM(e.amount), 0)     AS total_amount,
+    COUNT(*)                       AS expense_count
+FROM expense e
+INNER JOIN expense_category ec ON ec.id = e.category_id
+WHERE e.spent_at >= sqlc.arg('start_date')
+  AND e.spent_at <= sqlc.arg('end_date')
+GROUP BY ec.id, ec.code, ec.name
+ORDER BY total_amount DESC;
+
+-- ── 22. ZATCA compliance ────────────────────────────────────────
+
+-- name: GetDashboardZATCAStats :one
+SELECT
+    COUNT(*)                                                          AS total_submissions,
+    COUNT(CASE WHEN status = 0 THEN 1 END)                            AS pending_count,
+    COUNT(CASE WHEN status = 1 THEN 1 END)                            AS submitted_count,
+    COUNT(CASE WHEN status = 2 THEN 1 END)                            AS accepted_count,
+    COUNT(CASE WHEN status = 3 THEN 1 END)                            AS rejected_count,
+    COUNT(CASE WHEN status = 4 THEN 1 END)                            AS warning_count,
+    COALESCE(AVG(retry_count), 0)                                     AS avg_retries,
+    COALESCE(AVG(CASE WHEN cleared_at IS NOT NULL AND submitted_at IS NOT NULL
+        THEN TIMESTAMPDIFF(SECOND, submitted_at, cleared_at) END), 0) AS avg_clearance_seconds
+FROM zatca_submission;
+
+-- name: GetDashboardPaymentTracking :one
+SELECT
+    -- AR: bills not fully paid
+    (SELECT COUNT(*)
+       FROM bill b
+       LEFT JOIN credit_note cn ON cn.bill_id = b.id
+       LEFT JOIN (SELECT bill_id, SUM(amount) AS paid FROM bill_payment GROUP BY bill_id) p
+              ON p.bill_id = b.id
+       WHERE cn.id IS NULL
+         AND b.state = 3
+         AND COALESCE(p.paid, 0) < b.total)                              AS ar_outstanding_count,
+    (SELECT COALESCE(SUM(b.total - COALESCE(p.paid, 0)), 0)
+       FROM bill b
+       LEFT JOIN credit_note cn ON cn.bill_id = b.id
+       LEFT JOIN (SELECT bill_id, SUM(amount) AS paid FROM bill_payment GROUP BY bill_id) p
+              ON p.bill_id = b.id
+       WHERE cn.id IS NULL
+         AND b.state = 3
+         AND COALESCE(p.paid, 0) < b.total)                              AS ar_outstanding_total,
+    -- AP: purchase bills not fully paid
+    (SELECT COUNT(*)
+       FROM purchase_bill pb
+       LEFT JOIN (SELECT purchase_bill_id, SUM(amount) AS paid FROM purchase_bill_payment GROUP BY purchase_bill_id) p
+              ON p.purchase_bill_id = pb.id
+       WHERE COALESCE(p.paid, 0) < pb.total)                             AS ap_outstanding_count,
+    (SELECT COALESCE(SUM(pb.total - COALESCE(p.paid, 0)), 0)
+       FROM purchase_bill pb
+       LEFT JOIN (SELECT purchase_bill_id, SUM(amount) AS paid FROM purchase_bill_payment GROUP BY purchase_bill_id) p
+              ON p.purchase_bill_id = pb.id
+       WHERE COALESCE(p.paid, 0) < pb.total)                             AS ap_outstanding_total,
+    -- payments received / paid in current period
+    (SELECT COALESCE(SUM(bp.amount), 0) FROM bill_payment bp
+       WHERE bp.paid_at >= sqlc.arg('start_date')
+         AND bp.paid_at <= sqlc.arg('end_date'))                         AS payments_received,
+    (SELECT COALESCE(SUM(pbp.amount), 0) FROM purchase_bill_payment pbp
+       WHERE pbp.paid_at >= sqlc.arg('start_date')
+         AND pbp.paid_at <= sqlc.arg('end_date'))                        AS payments_made;

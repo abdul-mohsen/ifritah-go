@@ -432,6 +432,11 @@ func (h *handler) GetDashboardAnalytics(c *gin.Context) {
 		curPurch   float64
 		prevPurch  float64
 		vatQRows   []db.GetDashboardVATQuarterlyRow
+		bsRows     []db.GetDashboardBalanceSheetRow
+		opexSum    db.GetDashboardOpExSummaryRow
+		opexCats   []db.GetDashboardOpExByCategoryRow
+		zatca      db.GetDashboardZATCAStatsRow
+		payTrack   db.GetDashboardPaymentTrackingRow
 	)
 
 	var wg sync.WaitGroup
@@ -471,6 +476,26 @@ func (h *handler) GetDashboardAnalytics(c *gin.Context) {
 		prevPurch = toFloat(v)
 	})
 	run(func() { vatQRows, _ = q.GetDashboardVATQuarterly(ctx) })
+	run(func() { bsRows, _ = q.GetDashboardBalanceSheet(ctx, periodEnd) })
+	run(func() {
+		opexSum, _ = q.GetDashboardOpExSummary(ctx, db.GetDashboardOpExSummaryParams{
+			StartDate: periodStart,
+			EndDate:   periodEnd,
+		})
+	})
+	run(func() {
+		opexCats, _ = q.GetDashboardOpExByCategory(ctx, db.GetDashboardOpExByCategoryParams{
+			StartDate: periodStart,
+			EndDate:   periodEnd,
+		})
+	})
+	run(func() { zatca, _ = q.GetDashboardZATCAStats(ctx) })
+	run(func() {
+		payTrack, _ = q.GetDashboardPaymentTracking(ctx, db.GetDashboardPaymentTrackingParams{
+			StartDate: periodStart,
+			EndDate:   periodEnd,
+		})
+	})
 
 	wg.Wait()
 
@@ -564,6 +589,152 @@ func (h *handler) GetDashboardAnalytics(c *gin.Context) {
 		})
 	}
 
+	// ── Balance Sheet (account.type → grouped subtype amounts) ────
+	var totalAssets, totalLiab, totalEquity float64
+	subtypeMaps := map[string]map[string]float64{
+		"asset":     {},
+		"liability": {},
+		"equity":    {},
+	}
+	for _, r := range bsRows {
+		t := toString(r.AcctType)
+		st := toString(r.AcctSubtype)
+		amt := toFloat(r.NetBalance)
+		// Liabilities & Equity carry credit balances → flip sign so they're positive.
+		switch t {
+		case "asset":
+			totalAssets += amt
+		case "liability":
+			amt = -amt
+			totalLiab += amt
+		case "equity":
+			amt = -amt
+			totalEquity += amt
+		default:
+			continue
+		}
+		subtypeMaps[t][st] += amt
+	}
+	groupOf := func(m map[string]float64) []model.DashboardAccountGroup {
+		out := make([]model.DashboardAccountGroup, 0, len(m))
+		for k, v := range m {
+			out = append(out, model.DashboardAccountGroup{
+				Subtype: k,
+				Amount:  fmt.Sprintf("%.2f", v),
+			})
+		}
+		return out
+	}
+	balanceSheet := model.DashboardBalanceSheet{
+		AsOf:             periodEnd.Format("2006-01-02"),
+		TotalAssets:      fmt.Sprintf("%.2f", totalAssets),
+		TotalLiabilities: fmt.Sprintf("%.2f", totalLiab),
+		TotalEquity:      fmt.Sprintf("%.2f", totalEquity),
+		NetWorth:         fmt.Sprintf("%.2f", totalAssets-totalLiab),
+		Assets:           groupOf(subtypeMaps["asset"]),
+		Liabilities:      groupOf(subtypeMaps["liability"]),
+		Equity:           groupOf(subtypeMaps["equity"]),
+	}
+
+	// ── Operating Expenses ────────────────────────────────────────
+	totalOpEx := toFloat(opexSum.TotalOpex)
+	netIncome := curRev - curPurch - totalOpEx
+	opexRatio := pct(totalOpEx, curRev)
+	opexCatsOut := make([]model.DashboardExpenseCategory, 0, len(opexCats))
+	for _, r := range opexCats {
+		opexCatsOut = append(opexCatsOut, model.DashboardExpenseCategory{
+			CategoryID:   toInt(r.CategoryID),
+			Code:         r.CategoryCode,
+			Name:         r.CategoryName,
+			TotalAmount:  fmt.Sprintf("%.2f", toFloat(r.TotalAmount)),
+			ExpenseCount: toInt64(r.ExpenseCount),
+		})
+	}
+	opex := model.DashboardOpEx{
+		StartDate:    periodStart.Format("2006-01-02"),
+		EndDate:      periodEnd.Format("2006-01-02"),
+		TotalOpEx:    fmt.Sprintf("%.2f", totalOpEx),
+		OpExVAT:      fmt.Sprintf("%.2f", toFloat(opexSum.OpexVat)),
+		ExpenseCount: toInt64(opexSum.ExpenseCount),
+		NetIncome:    fmt.Sprintf("%.2f", netIncome),
+		OpExRatio:    fmt.Sprintf("%.1f", opexRatio),
+		ByCategory:   opexCatsOut,
+	}
+
+	// ── ZATCA ─────────────────────────────────────────────────────
+	totalSubs := toInt64(zatca.TotalSubmissions)
+	acceptanceRate := 0.0
+	if totalSubs > 0 {
+		acceptanceRate = float64(toInt64(zatca.AcceptedCount)) * 100 / float64(totalSubs)
+	}
+	zatcaOut := model.DashboardZATCAStats{
+		TotalSubmissions:    totalSubs,
+		PendingCount:        toInt64(zatca.PendingCount),
+		SubmittedCount:      toInt64(zatca.SubmittedCount),
+		AcceptedCount:       toInt64(zatca.AcceptedCount),
+		RejectedCount:       toInt64(zatca.RejectedCount),
+		WarningCount:        toInt64(zatca.WarningCount),
+		AcceptanceRate:      fmt.Sprintf("%.1f", acceptanceRate),
+		AvgRetries:          fmt.Sprintf("%.2f", toFloat(zatca.AvgRetries)),
+		AvgClearanceSeconds: fmt.Sprintf("%.1f", toFloat(zatca.AvgClearanceSeconds)),
+	}
+
+	// ── Payment Tracking ──────────────────────────────────────────
+	arOut := toFloat(payTrack.ArOutstandingTotal)
+	apOut := toFloat(payTrack.ApOutstandingTotal)
+	payRecv := toFloat(payTrack.PaymentsReceived)
+	payMade := toFloat(payTrack.PaymentsMade)
+	paymentTracking := model.DashboardPaymentTracking{
+		AROutstandingCount: toInt64(payTrack.ArOutstandingCount),
+		AROutstandingTotal: fmt.Sprintf("%.2f", arOut),
+		APOutstandingCount: toInt64(payTrack.ApOutstandingCount),
+		APOutstandingTotal: fmt.Sprintf("%.2f", apOut),
+		PaymentsReceived:   fmt.Sprintf("%.2f", payRecv),
+		PaymentsMade:       fmt.Sprintf("%.2f", payMade),
+		NetCashPosition:    fmt.Sprintf("%.2f", arOut-apOut),
+	}
+
+	// ── Liquidity (derived from balance sheet subtypes) ──────────
+	curAssets := subtypeMaps["asset"]["current_asset"] +
+		subtypeMaps["asset"]["cash"] +
+		subtypeMaps["asset"]["bank"] +
+		subtypeMaps["asset"]["accounts_receivable"]
+	inventory := subtypeMaps["asset"]["inventory"]
+	if curAssets == 0 {
+		// fallback: anything not fixed_asset is treated as current
+		for k, v := range subtypeMaps["asset"] {
+			if k != "fixed_asset" {
+				curAssets += v
+			}
+		}
+	}
+	curLiab := subtypeMaps["liability"]["current_liability"] +
+		subtypeMaps["liability"]["accounts_payable"] +
+		subtypeMaps["liability"]["short_term_debt"]
+	if curLiab == 0 {
+		for k, v := range subtypeMaps["liability"] {
+			if k != "long_term_debt" {
+				curLiab += v
+			}
+		}
+	}
+	curRatio, quickRatio, debtToEq := 0.0, 0.0, 0.0
+	if curLiab > 0 {
+		curRatio = curAssets / curLiab
+		quickRatio = (curAssets - inventory) / curLiab
+	}
+	if totalEquity > 0 {
+		debtToEq = totalLiab / totalEquity
+	}
+	liquidity := model.DashboardLiquidity{
+		CurrentAssets:      fmt.Sprintf("%.2f", curAssets),
+		CurrentLiabilities: fmt.Sprintf("%.2f", curLiab),
+		Inventory:          fmt.Sprintf("%.2f", inventory),
+		CurrentRatio:       fmt.Sprintf("%.2f", curRatio),
+		QuickRatio:         fmt.Sprintf("%.2f", quickRatio),
+		DebtToEquity:       fmt.Sprintf("%.2f", debtToEq),
+	}
+
 	c.JSON(http.StatusOK, model.DashboardAnalyticsResponse{
 		ARAging:  arBuckets,
 		APAging:  apBuckets,
@@ -575,7 +746,12 @@ func (h *handler) GetDashboardAnalytics(c *gin.Context) {
 			PurchasesTotal: makeTrend(curPurch, prevPurch),
 			GrossProfit:    makeTrend(curProfit, prevProfit),
 		},
-		VATQuarterly: vatQuarterly,
+		VATQuarterly:    vatQuarterly,
+		BalanceSheet:    balanceSheet,
+		OpEx:            opex,
+		ZATCA:           zatcaOut,
+		PaymentTracking: paymentTracking,
+		Liquidity:       liquidity,
 	})
 }
 

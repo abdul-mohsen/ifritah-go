@@ -156,12 +156,88 @@ type DashboardFilters struct {
 // ── /api/v2/dashboard/analytics ─────────────────────────────────────────────
 
 type DashboardAnalyticsResponse struct {
-	ARAging      []DashboardAgingBucket   `json:"ar_aging"`
-	APAging      []DashboardAgingBucket   `json:"ap_aging"`
-	CashFlow     []DashboardCashFlowMonth `json:"cash_flow"`
-	PnL          DashboardPnL             `json:"pnl"`
-	KPITrends    DashboardKPITrends       `json:"kpi_trends"`
-	VATQuarterly []DashboardVATQuarter    `json:"vat_quarterly"`
+	ARAging         []DashboardAgingBucket   `json:"ar_aging"`
+	APAging         []DashboardAgingBucket   `json:"ap_aging"`
+	CashFlow        []DashboardCashFlowMonth `json:"cash_flow"`
+	PnL             DashboardPnL             `json:"pnl"`
+	KPITrends       DashboardKPITrends       `json:"kpi_trends"`
+	VATQuarterly    []DashboardVATQuarter    `json:"vat_quarterly"`
+	BalanceSheet    DashboardBalanceSheet    `json:"balance_sheet"`
+	OpEx            DashboardOpEx            `json:"opex"`
+	ZATCA           DashboardZATCAStats      `json:"zatca"`
+	PaymentTracking DashboardPaymentTracking `json:"payment_tracking"`
+	Liquidity       DashboardLiquidity       `json:"liquidity"`
+}
+
+// Balance Sheet — totals plus subtype breakdown for both Assets and Liabilities.
+type DashboardBalanceSheet struct {
+	AsOf             string                  `json:"as_of"`
+	TotalAssets      string                  `json:"total_assets"`
+	TotalLiabilities string                  `json:"total_liabilities"`
+	TotalEquity      string                  `json:"total_equity"`
+	NetWorth         string                  `json:"net_worth"`
+	Assets           []DashboardAccountGroup `json:"assets"`
+	Liabilities      []DashboardAccountGroup `json:"liabilities"`
+	Equity           []DashboardAccountGroup `json:"equity"`
+}
+
+type DashboardAccountGroup struct {
+	Subtype string `json:"subtype"`
+	Amount  string `json:"amount"`
+}
+
+// Operating Expenses — period totals + per-category breakdown + derived ratios.
+type DashboardOpEx struct {
+	StartDate    string                     `json:"start_date"`
+	EndDate      string                     `json:"end_date"`
+	TotalOpEx    string                     `json:"total_opex"`
+	OpExVAT      string                     `json:"opex_vat"`
+	ExpenseCount int64                      `json:"expense_count"`
+	NetIncome    string                     `json:"net_income"`
+	OpExRatio    string                     `json:"opex_ratio"`
+	ByCategory   []DashboardExpenseCategory `json:"by_category"`
+}
+
+type DashboardExpenseCategory struct {
+	CategoryID   int    `json:"category_id"`
+	Code         string `json:"code"`
+	Name         string `json:"name"`
+	TotalAmount  string `json:"total_amount"`
+	ExpenseCount int64  `json:"expense_count"`
+}
+
+// ZATCA submission stats.
+type DashboardZATCAStats struct {
+	TotalSubmissions    int64  `json:"total_submissions"`
+	PendingCount        int64  `json:"pending_count"`
+	SubmittedCount      int64  `json:"submitted_count"`
+	AcceptedCount       int64  `json:"accepted_count"`
+	RejectedCount       int64  `json:"rejected_count"`
+	WarningCount        int64  `json:"warning_count"`
+	AcceptanceRate      string `json:"acceptance_rate"`
+	AvgRetries          string `json:"avg_retries"`
+	AvgClearanceSeconds string `json:"avg_clearance_seconds"`
+}
+
+// Payment tracking from real bill_payment / purchase_bill_payment tables.
+type DashboardPaymentTracking struct {
+	AROutstandingCount int64  `json:"ar_outstanding_count"`
+	AROutstandingTotal string `json:"ar_outstanding_total"`
+	APOutstandingCount int64  `json:"ap_outstanding_count"`
+	APOutstandingTotal string `json:"ap_outstanding_total"`
+	PaymentsReceived   string `json:"payments_received"`
+	PaymentsMade       string `json:"payments_made"`
+	NetCashPosition    string `json:"net_cash_position"`
+}
+
+// Liquidity ratios derived from the Balance Sheet subtypes.
+type DashboardLiquidity struct {
+	CurrentAssets      string `json:"current_assets"`
+	CurrentLiabilities string `json:"current_liabilities"`
+	Inventory          string `json:"inventory"`
+	CurrentRatio       string `json:"current_ratio"`
+	QuickRatio         string `json:"quick_ratio"`
+	DebtToEquity       string `json:"debt_to_equity"`
 }
 
 type DashboardVATQuarter struct {

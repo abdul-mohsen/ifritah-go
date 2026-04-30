@@ -35,7 +35,6 @@ func (h *handler) CreditBill(c *gin.Context) {
 	var request BillCredit
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -46,7 +45,7 @@ func (h *handler) CreditBill(c *gin.Context) {
 	tx, err := h.DB.Begin()
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
@@ -62,13 +61,13 @@ func (h *handler) CreditBill(c *gin.Context) {
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	CreditNoteID, err := res.LastInsertId()
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 	creditNoteID := uint64(CreditNoteID)
 
@@ -90,7 +89,7 @@ func (h *handler) CreditBill(c *gin.Context) {
 
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	c.Status(http.StatusCreated)
@@ -127,7 +126,7 @@ func (h *handler) GetCreditBillPDF(c *gin.Context) {
 		fontDir := "fonts"
 		pdfBytes, err := pdf.GenerateInvoiceBytes(invoice, fontDir)
 		if err != nil {
-			log.Panic(err)
+			return
 		}
 
 		if err := os.WriteFile(filename, pdfBytes, 0644); err != nil {

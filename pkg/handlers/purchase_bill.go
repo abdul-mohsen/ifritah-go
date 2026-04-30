@@ -28,7 +28,8 @@ func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, u
 	bills, err := h.queries.GetAllPurchaseBill(c.Request.Context(), args)
 
 	if err != nil {
-		log.Panic(err)
+		log.Printf("getPurchaseBills: %v", err)
+		return nil
 	}
 
 	return bills
@@ -40,7 +41,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	id := uint64(Id)
@@ -53,7 +54,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	if err := c.BindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
-		log.Panic(err)
+		return
 	}
 
 	userSession := GetSessionInfo(c)
@@ -62,32 +63,34 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	if !slices.Contains(storeIds, request.StoreId) {
 		c.Status(http.StatusBadRequest)
-		log.Panic("invalid store id")
+		return
 	}
 
 	var paymentDueDate *time.Time
 	if request.PaymentDueDate != nil {
-		parsedTime, err := time.Parse(time.RFC3339, *request.PaymentDueDate)
-		paymentDueDate = &parsedTime
+		parsedTime, err := parseFlexibleDate(*request.PaymentDueDate)
 		if err != nil {
-			log.Panic("Error parsing date:", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payment_due_date"})
+			return
 		}
+		paymentDueDate = &parsedTime
 	}
 
 	effectiveDate := time.Now()
 	if request.EffectiveDate != nil {
-		parsedTime, err := time.Parse(time.DateOnly, *request.EffectiveDate)
-		effectiveDate = parsedTime
+		parsedTime, err := parseFlexibleDate(*request.EffectiveDate)
 		if err != nil {
-			log.Panic("Error parsing date:", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid effective_date"})
+			return
 		}
+		effectiveDate = parsedTime
 	}
 
 	tx, err := h.DB.Begin()
 
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	defer tx.Rollback()
@@ -117,7 +120,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 			c.AbortWithError(http.StatusBadRequest, err)
 		}
 
-		log.Panic(err)
+		return
 	}
 
 	// ── Stock tracking: reverse old stock before deleting products ──
@@ -128,13 +131,13 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 				"detail": err.Error(),
 				"type":   "stock_error",
 			})
-			log.Panic(err)
+			return
 		}
 	}
 
 	if err = qtx.DeleteProductPurchaseBill(c.Request.Context(), id); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	// TODO @ssda work around when the frontend send id when he should not
@@ -147,7 +150,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
-		log.Panic(err)
+		return
 	}
 
 	// ── Stock tracking: add new stock for updated products ──
@@ -167,7 +170,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	c.Status(http.StatusOK)
@@ -184,7 +187,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	if err := c.BindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
-		log.Panic(err)
+		return
 	}
 
 	userSession := GetSessionInfo(c)
@@ -193,31 +196,33 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	if !slices.Contains(storeIds, request.StoreId) {
 		c.Status(http.StatusBadRequest)
-		log.Panic("invalid store id")
+		return
 	}
 
 	var paymentDueDate *time.Time
 	if request.PaymentDueDate != nil {
-		parsedTime, err := time.Parse(time.RFC3339, *request.PaymentDueDate)
-		paymentDueDate = &parsedTime
+		parsedTime, err := parseFlexibleDate(*request.PaymentDueDate)
 		if err != nil {
-			log.Panic("Error parsing date:", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payment_due_date"})
+			return
 		}
+		paymentDueDate = &parsedTime
 	}
 
 	effectiveDate := time.Now()
 	if request.EffectiveDate != nil {
-		parsedTime, err := time.Parse(time.RFC3339, *request.EffectiveDate)
-		effectiveDate = parsedTime
+		parsedTime, err := parseFlexibleDate(*request.EffectiveDate)
 		if err != nil {
-			log.Panic("Error parsing date:", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid effective_date"})
+			return
 		}
+		effectiveDate = parsedTime
 	}
 	tx, err := h.DB.Begin()
 
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	defer tx.Rollback()
@@ -246,7 +251,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		} else {
 			c.Status(http.StatusBadRequest)
 		}
-		log.Panic(err)
+		return
 	}
 
 	Id, err := res.LastInsertId()
@@ -254,7 +259,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	if err != nil {
 		c.Status(http.StatusBadRequest)
-		log.Panic(err)
+		return
 	}
 
 	// TODO @ssda work around when the frontend send id when he should not
@@ -267,7 +272,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId)
 	if err != nil {
 		c.Status(http.StatusBadRequest)
-		log.Panic(err)
+		return
 	}
 
 	// ── Stock tracking: add stock for catalog products ──
@@ -282,14 +287,13 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 				"detail": err.Error(),
 				"type":   "stock_error",
 			})
-			log.Panic(err)
 			return
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	var attachment []string
@@ -366,7 +370,7 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 
 	if err := c.BindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
-		log.Panic(err)
+		return
 	}
 
 	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds == nil || len(request.StoreIds) == 0 {
@@ -394,7 +398,7 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	id := uint64(Id)
@@ -408,14 +412,14 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	xProducts, err := h.queries.GetPurchaseBillProducts(c.Request.Context(), id)
 
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	products := make(map[int8][]db.PurchaseBillProduct)
@@ -426,7 +430,7 @@ func (h *handler) GetPurchaseBillDetail(c *gin.Context) {
 	a, err := h.queries.GetPurchaseBillAttachments(c.Request.Context(), id)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 	var attachments []string
 	for _, x := range a {
@@ -473,7 +477,7 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 	tx, err := h.DB.Begin()
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
@@ -491,13 +495,13 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 	res, err := tx.Exec("UPDATE purchase_bill SET state = -1 WHERE id = ?", pbID)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	affectedRows, err := res.RowsAffected()
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	if affectedRows == 0 {
@@ -507,7 +511,7 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	c.Status(http.StatusOK)

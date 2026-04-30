@@ -3,7 +3,6 @@ package handlers
 import (
 	"database/sql"
 	db "ifritah/web-service-gin/pkg/db/gen"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -113,7 +112,7 @@ func (h *handler) UpdateNotificationConfig(c *gin.Context) {
 	err := h.queries.UpsertNotificationSettings(c.Request.Context(), args)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to save notification config"})
-		log.Panic(err)
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"detail": "success"})

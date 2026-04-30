@@ -3,7 +3,6 @@ package handlers
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"slices"
 	"strconv"
@@ -40,19 +39,19 @@ func (h *handler) AddQuantity(c *gin.Context) {
 	var request AddQuantityRequest
 	if err := c.BindJSON(&request); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	storeIds := h.getStoreIds(c)
 
 	if len(request.Products) == 0 {
 		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("ERR: missing required value"))
-		log.Panic("ERR: missing required value")
+		return
 	}
 
 	if !slices.Contains(storeIds, request.StoreId) {
 		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("ERR: store id does not match"))
-		log.Panic("ERR: store id does not match")
+		return
 	}
 
 	for _, value := range request.Products {
@@ -70,7 +69,7 @@ func (h *handler) AddQuantity(c *gin.Context) {
 			if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
 				c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Product already exists in this store"))
 			}
-			log.Panic(err)
+			return
 		}
 	}
 
@@ -84,7 +83,7 @@ func (h *handler) UpdateProduct(c *gin.Context) {
 
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	id := uint64(Id)
@@ -92,7 +91,7 @@ func (h *handler) UpdateProduct(c *gin.Context) {
 	var request UpdateProductRequest
 	if err := c.BindJSON(&request); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	args := db.UpdateProductParams{
@@ -104,7 +103,7 @@ func (h *handler) UpdateProduct(c *gin.Context) {
 	}
 	if err := h.queries.UpdateProduct(c.Request.Context(), args); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	c.Status(http.StatusOK)
@@ -120,7 +119,7 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+		return
 	}
 
 	args := db.GetAllProductParams{
@@ -132,7 +131,7 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 	products, err := h.queries.GetAllProduct(c.Request.Context(), args)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic("Error in query", err)
+		return
 	}
 
 	c.JSON(http.StatusOK, products)
@@ -142,7 +141,7 @@ func (h *handler) DeleteProduct(c *gin.Context) {
 	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	id := uint64(Id)
@@ -150,7 +149,7 @@ func (h *handler) DeleteProduct(c *gin.Context) {
 	err = h.queries.DeleteProduct(c.Request.Context(), id)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic("Error in query", err)
+		return
 	}
 
 	c.Status(http.StatusOK)
@@ -162,7 +161,7 @@ func (h *handler) GetProduct(c *gin.Context) {
 	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	id := uint64(Id)
@@ -170,7 +169,7 @@ func (h *handler) GetProduct(c *gin.Context) {
 	res, err := h.queries.GetProduct(c.Request.Context(), id)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic("Error in query", err)
+		return
 	}
 
 	c.JSON(http.StatusOK, res)
@@ -205,7 +204,7 @@ func (h *handler) SearchProducts(c *gin.Context) {
 	products, err := h.queries.SearchProduct(c.Request.Context(), args)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic("Error in query", err)
+		return
 	}
 
 	c.JSON(http.StatusOK, products)

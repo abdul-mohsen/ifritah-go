@@ -18,14 +18,14 @@ func (h *handler) GetAllCompanies(c *gin.Context) {
 	rows, err := h.DB.Query("SELECT id, name  FROM company ")
 
 	if err != nil {
-		log.Panic(err)
+		return
 	}
 	var companyResponses []CompanyResponse
 	for rows.Next() {
 		var companyResponse CompanyResponse
 
 		if err := rows.Scan(&companyResponse.Id, &companyResponse.Name); err != nil {
-			log.Panic(err)
+			return
 		}
 
 		companyResponses = append(companyResponses, companyResponse)

@@ -387,13 +387,13 @@ func (h *handler) StockAdjust(c *gin.Context) {
 	var req model.StockAdjustRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
-		log.Panic(err)
+		return
 	}
 
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement == model.StockEnforcementDisable {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "stock tracking is disabled"})
-		log.Panic("stock tracking is disabled")
+		return
 	}
 
 	userID := GetSessionInfo(c).id
@@ -402,7 +402,7 @@ func (h *handler) StockAdjust(c *gin.Context) {
 	_, currentQty, err := h.getProductStock(c, req.ProductID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "product not found"})
-		log.Panic(err)
+		return
 	}
 
 	// Check if adjustment would make stock negative (enforce mode)
@@ -413,21 +413,21 @@ func (h *handler) StockAdjust(c *gin.Context) {
 			"available": currentQty.String(),
 			"requested": req.QuantityChange.Abs().String(),
 		})
-		log.Panic(err)
+		return
 	}
 
 	// Transaction: update product + insert movement
 	tx, err := h.DB.Begin()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "transaction error"})
-		log.Panic(err)
+		return
 	}
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
 
 	if err := updateProductQuantity(qtx, c, req.ProductID, req.QuantityChange); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update stock"})
-		log.Panic(err)
+		return
 	}
 
 	refType := model.ReferenceTypeManual
@@ -438,12 +438,12 @@ func (h *handler) StockAdjust(c *gin.Context) {
 		req.QuantityChange, model.MovementTypeAdjustment, refType,
 		nil, nil, &reason, &note, &uid, time.Now()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to record movement"})
-		log.Panic(err)
+		return
 	}
 
 	if err := tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "commit error"})
-		log.Panic(err)
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -545,7 +545,7 @@ func (h *handler) GetStockMovements(c *gin.Context) {
 	rows, err := h.DB.Query(query, args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "query failed"})
-		log.Panic(err)
+		return
 	}
 	defer rows.Close()
 

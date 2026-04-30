@@ -276,14 +276,10 @@ func (h *handler) CreateCashVoucher(c *gin.Context) {
 	merchantID := int32(getMerchantID(c))
 
 	// Parse effective_date
-	effectiveDate, err := time.Parse(time.RFC3339, req.EffectiveDate)
+	effectiveDate, err := parseFlexibleDate(req.EffectiveDate)
 	if err != nil {
-		// Try date-only format
-		effectiveDate, err = time.Parse("2006-01-02", req.EffectiveDate)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "تاريخ غير صالح"})
-			return
-		}
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "تاريخ غير صالح"})
+		return
 	}
 
 	// Verify store exists
@@ -391,13 +387,10 @@ func (h *handler) UpdateCashVoucher(c *gin.Context) {
 	merchantID := getMerchantID(c)
 
 	// Parse effective_date
-	effectiveDate, err := time.Parse(time.RFC3339, req.EffectiveDate)
+	effectiveDate, err := parseFlexibleDate(req.EffectiveDate)
 	if err != nil {
-		effectiveDate, err = time.Parse("2006-01-02", req.EffectiveDate)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "تاريخ غير صالح"})
-			return
-		}
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "تاريخ غير صالح"})
+		return
 	}
 
 	// Verify the voucher exists and is in draft state

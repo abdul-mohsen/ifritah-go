@@ -105,25 +105,15 @@ func (h *handler) AddBill(c *gin.Context) {
 		return
 	}
 
-	var paymentDueDate *time.Time
-	if request.PaymentDueDate != nil {
-
-		parsedTime, err := parseFlexibleDate(*request.PaymentDueDate)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payment_due_date"})
-			return
-		}
-		paymentDueDate = &parsedTime
+	paymentDueDate, ok := parseOptionalRequestDate(c, request.PaymentDueDate, "payment_due_date")
+	if !ok {
+		return
 	}
-
 	effectiveDate := time.Now()
-	if request.EffectiveDate != nil {
-		parsedTime, err := parseFlexibleDate(*request.EffectiveDate)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid effective_date"})
-			return
-		}
-		effectiveDate = parsedTime
+	if ed, ok := parseOptionalRequestDate(c, request.EffectiveDate, "effective_date"); !ok {
+		return
+	} else if ed != nil {
+		effectiveDate = *ed
 	}
 	tx, err := h.DB.Begin()
 
@@ -265,14 +255,9 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		return
 	}
 
-	var paymentDueDate *time.Time
-	if request.PaymentDueDate != nil {
-		parsedTime, err := parseFlexibleDate(*request.PaymentDueDate)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payment_due_date"})
-			return
-		}
-		paymentDueDate = &parsedTime
+	paymentDueDate, ok := parseOptionalRequestDate(c, request.PaymentDueDate, "payment_due_date")
+	if !ok {
+		return
 	}
 
 	tx, err := h.DB.Begin()

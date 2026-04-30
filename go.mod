@@ -5,7 +5,6 @@ go 1.25.0
 require (
 	github.com/abdul-mohsen/go-arabic-pdf-lib v1.2.3
 	github.com/gin-contrib/cache v1.4.1
-	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/go-sql-driver/mysql v1.9.3

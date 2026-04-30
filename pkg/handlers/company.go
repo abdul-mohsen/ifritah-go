@@ -41,7 +41,8 @@ func (h *handler) getUserCompany(c *gin.Context) int {
 	err := h.DB.QueryRow("SELECT COALESCE(company_id,1) FROM user WHERE id = ?", session.id).Scan(&companyID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to resolve company"})
-		log.Panic("ERROR CreateBranch: could not get user company: %v", err)
+		log.Printf("ERROR CreateBranch: could not get user company: %v", err)
+		return 0
 	}
 	return companyID
 

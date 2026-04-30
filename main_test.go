@@ -1,8 +1,10 @@
 package main
 
-import "github.com/gin-gonic/gin"
+import "testing"
 
-func TestMain(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	router := setupRouter()
+// TestPlaceholder keeps `go test ./...` green until proper integration tests
+// are added. The previous stub referenced an undefined `setupRouter()` and was
+// missing `import "testing"`, which broke CI on every PR.
+func TestPlaceholder(t *testing.T) {
+	t.Log("placeholder test — replace with real coverage")
 }

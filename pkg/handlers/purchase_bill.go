@@ -17,7 +17,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, userID int32) []db.PurchaseBill {
+func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, userID int32) []db.PurchaseBillTotal {
 
 	args := db.GetAllPurchaseBillParams{
 		ID:     userID,

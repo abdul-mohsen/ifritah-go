@@ -9,7 +9,6 @@ import (
 	"ifritah/web-service-gin/pkg/model"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -51,7 +50,7 @@ func (h *handler) Login(c *gin.Context) {
 
 	var request model.LoginRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": invalidRequestDetail(err)})
 		return
 	}
 
@@ -67,51 +66,57 @@ func (h *handler) Login(c *gin.Context) {
 	if err == sql.ErrNoRows {
 		// Constant-time comparison to prevent timing attacks
 		bcrypt.CompareHashAndPassword([]byte("$2a$12$dummy.hash.for.timing.attack.prevention.xxxxx"), []byte(request.Password))
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": ErrInvalidCredentials})
 		return
 	}
 	if err != nil {
 		log.Printf("login db error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDatabase})
 		return
 	}
 
 	if !isActive {
-		c.JSON(http.StatusForbidden, gin.H{"detail": "account is deactivated"})
+		c.JSON(http.StatusForbidden, gin.H{"detail": ErrAccountDeactivated})
 		return
 	}
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(request.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": ErrInvalidCredentials})
 		return
 	}
 
 	accessToken, err := GenerateAccessToken(userID, request.Username, role)
 	if err != nil {
 		log.Printf("access token error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "could not generate access token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrGenerateAccessTok})
 		return
 	}
 
 	refreshToken, err := GenerateRefreshToken(userID, request.Username)
 	if err != nil {
 		log.Printf("refresh token error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "could not generate refresh token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrGenerateRefreshTok})
 		return
 	}
 
-	// Store refresh token hash in DB for revocation support
+	// Store refresh token hash in DB for revocation support.
+	// Best-effort: failure here doesn't block login but is logged so we can
+	// detect refresh-token storage outages.
 	tokenHash := sha256Hex(refreshToken)
-	_, _ = h.DB.Exec(
+	if _, err := h.DB.Exec(
 		"INSERT INTO refresh_token (user_id, token_hash, device_name, ip_address, expires_at) VALUES (?, ?, ?, ?, ?)",
 		userID, tokenHash,
 		c.GetHeader("User-Agent"), c.ClientIP(),
 		time.Now().Add(model.JWTSettings.RefreshExpiration),
-	)
+	); err != nil {
+		log.Printf("Login: store refresh token: %v", err)
+	}
 
-	// Update last_login
-	_, _ = h.DB.Exec("UPDATE user SET last_login = NOW() WHERE id = ?", userID)
+	// Update last_login (best-effort).
+	if _, err := h.DB.Exec("UPDATE user SET last_login = NOW() WHERE id = ?", userID); err != nil {
+		log.Printf("Login: update last_login: %v", err)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  accessToken,
@@ -126,24 +131,14 @@ func generateSessionID() string {
 	return "s_" + hex.EncodeToString(b)
 }
 
-// abortJSON ends the request with the given status and a uniform JSON body so
-// the frontend can show a useful message instead of an empty body.
-func abortJSON(c *gin.Context, status int, detail string) {
-	c.AbortWithStatusJSON(status, gin.H{
-		"detail": detail,
-		"error":  http.StatusText(status),
-		"status": status,
-	})
-}
+// abortJSON / extractBearerToken now live in pkg/handlers/responses.go.
 
 func JWTVerifyMiddleware(c *gin.Context) {
-	authHeader := c.GetHeader("Authorization")
-	parts := strings.SplitN(authHeader, "Bearer ", 2)
-	if len(parts) != 2 || parts[1] == "" {
-		abortJSON(c, http.StatusUnauthorized, "missing or invalid authorization header")
+	tokenString, ok := extractBearerToken(c.GetHeader("Authorization"))
+	if !ok {
+		abortJSON(c, http.StatusUnauthorized, ErrMissingAuthHeader)
 		return
 	}
-	tokenString := parts[1]
 
 	secretKey := []byte(model.JWTSettings.JWTSecertKey)
 	token, err := jwt.ParseWithClaims(tokenString, &model.Claims{},
@@ -154,18 +149,21 @@ func JWTVerifyMiddleware(c *gin.Context) {
 			return secretKey, nil
 		})
 	if err != nil || token == nil || !token.Valid {
-		abortJSON(c, http.StatusUnauthorized, "invalid or expired token")
+		if err != nil {
+			log.Printf("JWTVerifyMiddleware: parse token: %v", err)
+		}
+		abortJSON(c, http.StatusUnauthorized, ErrInvalidOrExpired)
 		return
 	}
 
 	claims, ok := token.Claims.(*model.Claims)
 	if !ok {
-		abortJSON(c, http.StatusUnauthorized, "invalid token claims")
+		abortJSON(c, http.StatusUnauthorized, ErrInvalidTokenClaims)
 		return
 	}
 
 	if claims.Expiration > 0 && time.Unix(claims.Expiration, 0).Before(time.Now()) {
-		abortJSON(c, http.StatusUnauthorized, "token expired")
+		abortJSON(c, http.StatusUnauthorized, ErrTokenExpired)
 		return
 	}
 
@@ -235,13 +233,11 @@ func RequireManagerOrAbove() gin.HandlerFunc {
 // because the access token is expired when this is called.
 func (h *handler) Refresh(c *gin.Context) {
 	// Extract refresh token from Authorization header
-	authHeader := c.GetHeader("Authorization")
-	parts := strings.SplitN(authHeader, "Bearer ", 2)
-	if len(parts) != 2 || parts[1] == "" {
+	tokenString, ok := extractBearerToken(c.GetHeader("Authorization"))
+	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "no refresh token provided"})
 		return
 	}
-	tokenString := parts[1]
 
 	// Parse and validate the refresh token
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
@@ -251,13 +247,16 @@ func (h *handler) Refresh(c *gin.Context) {
 		return []byte(model.JWTSettings.JWTSecertKey), nil
 	})
 	if err != nil || !token.Valid {
+		if err != nil {
+			log.Printf("Refresh: parse refresh token: %v", err)
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "invalid or expired refresh token"})
 		return
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "invalid token claims"})
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": ErrInvalidTokenClaims})
 		return
 	}
 
@@ -273,7 +272,7 @@ func (h *handler) Refresh(c *gin.Context) {
 	userID := int64(userIDFloat)
 
 	if username == "" || userID == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "invalid token claims"})
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": ErrInvalidTokenClaims})
 		return
 	}
 
@@ -285,6 +284,9 @@ func (h *handler) Refresh(c *gin.Context) {
 		tokenHash,
 	).Scan(&sessionID)
 	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("Refresh: lookup refresh token: %v", err)
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "refresh token revoked or not found"})
 		return
 	}
@@ -297,6 +299,9 @@ func (h *handler) Refresh(c *gin.Context) {
 		userID,
 	).Scan(&role, &isActive)
 	if err != nil || !isActive {
+		if err != nil && err != sql.ErrNoRows {
+			log.Printf("Refresh: lookup user: %v", err)
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "user not found or inactive"})
 		return
 	}
@@ -304,23 +309,27 @@ func (h *handler) Refresh(c *gin.Context) {
 	// Generate new tokens (token rotation)
 	newAccessToken, err := GenerateAccessToken(userID, username, role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to generate access token"})
+		log.Printf("Refresh: generate access token: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrGenerateAccessTok})
 		return
 	}
 	newRefreshToken, err := GenerateRefreshToken(userID, username)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to generate refresh token"})
+		log.Printf("Refresh: generate refresh token: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrGenerateRefreshTok})
 		return
 	}
 
 	// Rotate: update the session with new tokens
 	newHash := sha256Hex(newRefreshToken)
-	_, _ = h.DB.Exec(
+	if _, err := h.DB.Exec(
 		"UPDATE refresh_token SET token_hash = ?, expires_at = ? WHERE id = ?",
 		newHash,
 		time.Now().Add(model.JWTSettings.RefreshExpiration),
 		sessionID,
-	)
+	); err != nil {
+		log.Printf("Refresh: rotate refresh token: %v", err)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  newAccessToken,
@@ -349,30 +358,39 @@ type RegisterRequest struct {
 func (h *handler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": invalidRequestDetail(err)})
 		return
 	}
 
 	// Check username not already taken
 	var exists int
-	h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE username = ?", req.Username).Scan(&exists)
+	if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE username = ?", req.Username).Scan(&exists); err != nil {
+		log.Printf("Register: username uniqueness check: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDatabase})
+		return
+	}
 	if exists > 0 {
-		c.JSON(http.StatusConflict, gin.H{"detail": "username already exists"})
+		c.JSON(http.StatusConflict, gin.H{"detail": ErrUsernameExists})
 		return
 	}
 
 	// Check email not already taken
-	h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE email = ?", req.Email).Scan(&exists)
+	if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE email = ?", req.Email).Scan(&exists); err != nil {
+		log.Printf("Register: email uniqueness check: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDatabase})
+		return
+	}
 	if exists > 0 {
-		c.JSON(http.StatusConflict, gin.H{"detail": "email already exists"})
+		c.JSON(http.StatusConflict, gin.H{"detail": ErrEmailExists})
 		return
 	}
 
 	// Hash password
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to hash password"})
-		log.Panic(err)
+		log.Printf("Register: hash password: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrHashPassword})
+		return
 	}
 
 	// Insert user with default role "employee"
@@ -381,19 +399,23 @@ func (h *handler) Register(c *gin.Context) {
 		req.Username, req.Email, string(hash), req.FullName, req.Phone,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create user"})
-		log.Panic(err)
+		log.Printf("Register: insert user: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrCreateUser})
+		return
 	}
 
 	userID, _ := result.LastInsertId()
 
-	// Seed default permissions for the new user (view-only on most resources)
+	// Seed default permissions for the new user (view-only on most resources).
+	// Best-effort: failures are logged but don't fail the registration.
 	defaultPerms := []string{"invoices", "products", "clients", "suppliers", "stores", "orders"}
 	for _, resource := range defaultPerms {
-		_, _ = h.DB.Exec(
+		if _, err := h.DB.Exec(
 			"INSERT INTO user_permission (user_id, resource, can_view, can_add, can_edit, can_delete) VALUES (?, ?, 1, 0, 0, 0)",
 			userID, resource,
-		)
+		); err != nil {
+			log.Printf("Register: seed permission %q for user %d: %v", resource, userID, err)
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -426,6 +448,9 @@ func (h *handler) ForgotPassword(c *gin.Context) {
 	var userID int64
 	err := h.DB.QueryRow("SELECT id FROM user WHERE email = ? AND is_active = 1", req.Email).Scan(&userID)
 	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("ForgotPassword: lookup user: %v", err)
+		}
 		// User not found — still return 200 to prevent email enumeration
 		c.JSON(http.StatusOK, gin.H{"detail": "if the email exists, a reset link has been sent"})
 		return
@@ -434,6 +459,7 @@ func (h *handler) ForgotPassword(c *gin.Context) {
 	// Generate secure reset token
 	tokenBytes := make([]byte, 64)
 	if _, err := rand.Read(tokenBytes); err != nil {
+		log.Printf("ForgotPassword: rand.Read: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to generate token"})
 		return
 	}
@@ -441,10 +467,12 @@ func (h *handler) ForgotPassword(c *gin.Context) {
 
 	// Store hashed token in DB (expires in 1 hour)
 	tokenHash := sha256Hex(resetToken)
-	_, _ = h.DB.Exec(
+	if _, err := h.DB.Exec(
 		"INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
 		userID, tokenHash, time.Now().Add(1*time.Hour),
-	)
+	); err != nil {
+		log.Printf("ForgotPassword: insert reset token: %v", err)
+	}
 
 	// TODO: Send email with reset link containing the raw resetToken
 	// For now, log it (remove in production)
@@ -477,6 +505,9 @@ func (h *handler) ResetPassword(c *gin.Context) {
 		tokenHash,
 	).Scan(&tokenID, &userID)
 	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("ResetPassword: lookup reset token: %v", err)
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid or expired reset token"})
 		return
 	}
@@ -484,22 +515,28 @@ func (h *handler) ResetPassword(c *gin.Context) {
 	// Hash new password
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to hash password"})
+		log.Printf("ResetPassword: hash password: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrHashPassword})
 		return
 	}
 
 	// Update password
 	_, err = h.DB.Exec("UPDATE user SET password = ? WHERE id = ?", string(hash), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update password"})
+		log.Printf("ResetPassword: update password: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrUpdatePassword})
 		return
 	}
 
-	// Mark token as used
-	_, _ = h.DB.Exec("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = ?", tokenID)
+	// Mark token as used (best-effort)
+	if _, err := h.DB.Exec("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = ?", tokenID); err != nil {
+		log.Printf("ResetPassword: mark token used: %v", err)
+	}
 
 	// Invalidate all sessions for this user (force re-login)
-	_, _ = h.DB.Exec("DELETE FROM sessions WHERE user_id = ?", userID)
+	if _, err := h.DB.Exec("DELETE FROM sessions WHERE user_id = ?", userID); err != nil {
+		log.Printf("ResetPassword: delete sessions: %v", err)
+	}
 
 	c.JSON(http.StatusOK, gin.H{"detail": "password updated successfully"})
 }
@@ -516,8 +553,10 @@ func (h *handler) ResetPassword(c *gin.Context) {
 func (h *handler) Logout(c *gin.Context) {
 	userID := c.GetInt64("userId") // from JWT middleware
 
-	// Delete all sessions for this user
-	_, _ = h.DB.Exec("DELETE FROM refresh_token WHERE user_id = ?", userID)
+	// Delete all sessions for this user (best-effort).
+	if _, err := h.DB.Exec("DELETE FROM refresh_token WHERE user_id = ?", userID); err != nil {
+		log.Printf("Logout: delete refresh tokens for user %d: %v", userID, err)
+	}
 
 	c.JSON(http.StatusOK, gin.H{"detail": "logged out"})
 }

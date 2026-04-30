@@ -55,7 +55,7 @@ func (h *handler) ListUsers(c *gin.Context) {
 	`)
 	if err != nil {
 		log.Printf("ListUsers query: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to list users"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrListUsers})
 		return
 	}
 	defer rows.Close()
@@ -87,7 +87,7 @@ func (h *handler) ListUsers(c *gin.Context) {
 func (h *handler) GetUserByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid user id"})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidUserID})
 		return
 	}
 
@@ -102,12 +102,12 @@ func (h *handler) GetUserByID(c *gin.Context) {
 	`, id).Scan(&u.ID, &u.Username, &u.FullName, &u.Email, &u.Phone,
 		&u.Role, &u.IsActive, &companyID, &lastLogin)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"detail": "user not found"})
+		c.JSON(http.StatusNotFound, gin.H{"detail": ErrUserNotFound})
 		return
 	}
 	if err != nil {
 		log.Printf("GetUserByID: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to fetch user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrFetchUser})
 		return
 	}
 	if companyID.Valid {
@@ -136,18 +136,20 @@ type adminCreateUserRequest struct {
 func (h *handler) CreateUser(c *gin.Context) {
 	var req adminCreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": invalidRequestDetail(err)})
 		return
 	}
 	if !allowedRoles[req.Role] {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid role; expected admin, manager or employee"})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidRole + "; expected admin, manager or employee"})
 		return
 	}
 
 	// Default company to the caller's company if not provided.
 	if req.CompanyID == nil {
 		var c64 sql.NullInt64
-		_ = h.DB.QueryRow("SELECT company_id FROM user WHERE id = ?", GetSessionInfo(c).id).Scan(&c64)
+		if err := h.DB.QueryRow("SELECT company_id FROM user WHERE id = ?", GetSessionInfo(c).id).Scan(&c64); err != nil && err != sql.ErrNoRows {
+			log.Printf("CreateUser: lookup caller company_id: %v", err)
+		}
 		if c64.Valid {
 			req.CompanyID = &c64.Int64
 		}
@@ -155,15 +157,23 @@ func (h *handler) CreateUser(c *gin.Context) {
 
 	// Username uniqueness
 	var exists int
-	_ = h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE username = ?", req.Username).Scan(&exists)
+	if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE username = ?", req.Username).Scan(&exists); err != nil {
+		log.Printf("CreateUser: username uniqueness check: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDatabase})
+		return
+	}
 	if exists > 0 {
-		c.JSON(http.StatusConflict, gin.H{"detail": "username already exists"})
+		c.JSON(http.StatusConflict, gin.H{"detail": ErrUsernameExists})
 		return
 	}
 	if req.Email != "" {
-		_ = h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE email = ?", req.Email).Scan(&exists)
+		if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE email = ?", req.Email).Scan(&exists); err != nil {
+			log.Printf("CreateUser: email uniqueness check: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDatabase})
+			return
+		}
 		if exists > 0 {
-			c.JSON(http.StatusConflict, gin.H{"detail": "email already exists"})
+			c.JSON(http.StatusConflict, gin.H{"detail": ErrEmailExists})
 			return
 		}
 	}
@@ -171,7 +181,7 @@ func (h *handler) CreateUser(c *gin.Context) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Printf("CreateUser hash: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrHashPassword})
 		return
 	}
 
@@ -186,7 +196,7 @@ func (h *handler) CreateUser(c *gin.Context) {
 	`, req.Username, req.FullName, string(hash), req.Email, req.Phone, req.CompanyID, active, req.Role)
 	if err != nil {
 		log.Printf("CreateUser insert: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to create user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrCreateUser})
 		return
 	}
 	id, _ := res.LastInsertId()
@@ -214,27 +224,31 @@ type adminUpdateUserRequest struct {
 func (h *handler) UpdateUser(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid user id"})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidUserID})
 		return
 	}
 
 	var req adminUpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": invalidRequestDetail(err)})
 		return
 	}
 	if req.Role != nil && !allowedRoles[*req.Role] {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid role"})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidRole})
 		return
 	}
 
 	// Prevent the only admin from being demoted or deactivated by mistake.
 	if (req.Role != nil && *req.Role != RoleAdmin) || (req.IsActive != nil && !*req.IsActive) {
 		var currentRole string
-		_ = h.DB.QueryRow("SELECT role FROM user WHERE id = ?", id).Scan(&currentRole)
+		if err := h.DB.QueryRow("SELECT role FROM user WHERE id = ?", id).Scan(&currentRole); err != nil && err != sql.ErrNoRows {
+			log.Printf("UpdateUser: lookup current role: %v", err)
+		}
 		if currentRole == RoleAdmin {
 			var adminCount int
-			_ = h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE role = 'admin' AND is_active = 1").Scan(&adminCount)
+			if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE role = 'admin' AND is_active = 1").Scan(&adminCount); err != nil {
+				log.Printf("UpdateUser: count admins: %v", err)
+			}
 			if adminCount <= 1 {
 				c.JSON(http.StatusBadRequest, gin.H{"detail": "cannot demote or deactivate the last admin"})
 				return
@@ -287,7 +301,7 @@ func (h *handler) UpdateUser(c *gin.Context) {
 		hasUpdate = true
 	}
 	if !hasUpdate {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "no fields to update"})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrNoFieldsToUpdate})
 		return
 	}
 
@@ -304,12 +318,12 @@ func (h *handler) UpdateUser(c *gin.Context) {
 	)
 	if err != nil {
 		log.Printf("UpdateUser: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrUpdateUser})
 		return
 	}
 	rows, _ := res.RowsAffected()
 	if rows == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"detail": "user not found"})
+		c.JSON(http.StatusNotFound, gin.H{"detail": ErrUserNotFound})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"detail": "updated"})
@@ -320,7 +334,7 @@ func (h *handler) UpdateUser(c *gin.Context) {
 func (h *handler) DeleteUser(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid user id"})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidUserID})
 		return
 	}
 
@@ -333,16 +347,18 @@ func (h *handler) DeleteUser(c *gin.Context) {
 	// Refuse to deactivate the last active admin.
 	var role string
 	if err := h.DB.QueryRow("SELECT role FROM user WHERE id = ?", id).Scan(&role); err == sql.ErrNoRows {
-		c.JSON(http.StatusNotFound, gin.H{"detail": "user not found"})
+		c.JSON(http.StatusNotFound, gin.H{"detail": ErrUserNotFound})
 		return
 	} else if err != nil {
 		log.Printf("DeleteUser lookup: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to delete user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDeleteUser})
 		return
 	}
 	if role == RoleAdmin {
 		var adminCount int
-		_ = h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE role = 'admin' AND is_active = 1").Scan(&adminCount)
+		if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE role = 'admin' AND is_active = 1").Scan(&adminCount); err != nil {
+			log.Printf("DeleteUser: count admins: %v", err)
+		}
 		if adminCount <= 1 {
 			c.JSON(http.StatusBadRequest, gin.H{"detail": "cannot deactivate the last admin"})
 			return
@@ -351,7 +367,7 @@ func (h *handler) DeleteUser(c *gin.Context) {
 
 	if _, err := h.DB.Exec("UPDATE user SET is_active = 0 WHERE id = ?", id); err != nil {
 		log.Printf("DeleteUser: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to delete user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDeleteUser})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"detail": "user deactivated"})
@@ -366,34 +382,36 @@ type adminResetPasswordRequest struct {
 func (h *handler) AdminResetUserPassword(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid user id"})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidUserID})
 		return
 	}
 	var req adminResetPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"detail": invalidRequestDetail(err)})
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
 		log.Printf("AdminResetUserPassword hash: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrHashPassword})
 		return
 	}
 	res, err := h.DB.Exec("UPDATE user SET password = ? WHERE id = ?", string(hash), id)
 	if err != nil {
 		log.Printf("AdminResetUserPassword: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to reset password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrResetPassword})
 		return
 	}
 	rows, _ := res.RowsAffected()
 	if rows == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"detail": "user not found"})
+		c.JSON(http.StatusNotFound, gin.H{"detail": ErrUserNotFound})
 		return
 	}
 
 	// Invalidate all refresh tokens for this user so they have to log in again.
-	_, _ = h.DB.Exec("DELETE FROM refresh_token WHERE user_id = ?", id)
+	if _, err := h.DB.Exec("DELETE FROM refresh_token WHERE user_id = ?", id); err != nil {
+		log.Printf("AdminResetUserPassword: revoke refresh tokens: %v", err)
+	}
 
 	c.JSON(http.StatusOK, gin.H{"detail": "password reset"})
 }

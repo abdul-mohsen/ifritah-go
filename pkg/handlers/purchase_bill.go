@@ -35,6 +35,28 @@ func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, u
 	return bills
 }
 
+// preparePurchaseBillDates validates store ownership and parses optional
+// payment_due_date / effective_date fields. Writes its own 4xx response on
+// failure and returns ok=false so callers just `return`.
+func (h *handler) preparePurchaseBillDates(c *gin.Context, request *model.AddPurchaseBillRequest) (paymentDueDate *time.Time, effectiveDate time.Time, ok bool) {
+	storeIds := h.getStoreIds(c)
+	if !slices.Contains(storeIds, request.StoreId) {
+		c.Status(http.StatusBadRequest)
+		return nil, time.Time{}, false
+	}
+	pdd, parsedOk := parseOptionalRequestDate(c, request.PaymentDueDate, "payment_due_date")
+	if !parsedOk {
+		return nil, time.Time{}, false
+	}
+	eff := time.Now()
+	if ed, parsedOk2 := parseOptionalRequestDate(c, request.EffectiveDate, "effective_date"); !parsedOk2 {
+		return nil, time.Time{}, false
+	} else if ed != nil {
+		eff = *ed
+	}
+	return pdd, eff, true
+}
+
 func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -59,22 +81,9 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
 
-	storeIds := h.getStoreIds(c)
-
-	if !slices.Contains(storeIds, request.StoreId) {
-		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	paymentDueDate, ok := parseOptionalRequestDate(c, request.PaymentDueDate, "payment_due_date")
+	paymentDueDate, effectiveDate, ok := h.preparePurchaseBillDates(c, &request)
 	if !ok {
 		return
-	}
-	effectiveDate := time.Now()
-	if ed, ok := parseOptionalRequestDate(c, request.EffectiveDate, "effective_date"); !ok {
-		return
-	} else if ed != nil {
-		effectiveDate = *ed
 	}
 
 	tx, err := h.DB.Begin()
@@ -183,22 +192,9 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
 
-	storeIds := h.getStoreIds(c)
-
-	if !slices.Contains(storeIds, request.StoreId) {
-		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	paymentDueDate, ok := parseOptionalRequestDate(c, request.PaymentDueDate, "payment_due_date")
+	paymentDueDate, effectiveDate, ok := h.preparePurchaseBillDates(c, &request)
 	if !ok {
 		return
-	}
-	effectiveDate := time.Now()
-	if ed, ok := parseOptionalRequestDate(c, request.EffectiveDate, "effective_date"); !ok {
-		return
-	} else if ed != nil {
-		effectiveDate = *ed
 	}
 	tx, err := h.DB.Begin()
 

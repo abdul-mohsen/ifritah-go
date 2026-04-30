@@ -33,6 +33,34 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// checkBillStoreAccess returns true when the caller has access to the given
+// store; otherwise it writes a 400 response and returns false.
+func (h *handler) checkBillStoreAccess(c *gin.Context, storeID int32) bool {
+	storeIds := h.getStoreIds(c)
+	if !slices.Contains(storeIds, storeID) {
+		c.Status(http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+// parseBillDates parses the optional payment_due_date and effective_date
+// fields of a bill request. On error it writes a 4xx response and returns
+// ok=false. effectiveDate falls back to time.Now() when not supplied.
+func parseBillDates(c *gin.Context, rawDue, rawEff *string) (paymentDueDate *time.Time, effectiveDate time.Time, ok bool) {
+	pdd, parsedOk := parseOptionalRequestDate(c, rawDue, "payment_due_date")
+	if !parsedOk {
+		return nil, time.Time{}, false
+	}
+	eff := time.Now()
+	if ed, parsedOk2 := parseOptionalRequestDate(c, rawEff, "effective_date"); !parsedOk2 {
+		return nil, time.Time{}, false
+	} else if ed != nil {
+		eff = *ed
+	}
+	return pdd, eff, true
+}
+
 func (h *handler) GetBills(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
@@ -98,22 +126,13 @@ func (h *handler) AddBill(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
 
-	storeIds := h.getStoreIds(c)
-
-	if !slices.Contains(storeIds, request.StoreId) {
-		c.Status(http.StatusBadRequest)
+	if !h.checkBillStoreAccess(c, request.StoreId) {
 		return
 	}
 
-	paymentDueDate, ok := parseOptionalRequestDate(c, request.PaymentDueDate, "payment_due_date")
+	paymentDueDate, effectiveDate, ok := parseBillDates(c, request.PaymentDueDate, request.EffectiveDate)
 	if !ok {
 		return
-	}
-	effectiveDate := time.Now()
-	if ed, ok := parseOptionalRequestDate(c, request.EffectiveDate, "effective_date"); !ok {
-		return
-	} else if ed != nil {
-		effectiveDate = *ed
 	}
 	tx, err := h.DB.Begin()
 
@@ -248,10 +267,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
 
-	storeIds := h.getStoreIds(c)
-
-	if !slices.Contains(storeIds, request.StoreId) {
-		c.Status(http.StatusBadRequest)
+	if !h.checkBillStoreAccess(c, request.StoreId) {
 		return
 	}
 

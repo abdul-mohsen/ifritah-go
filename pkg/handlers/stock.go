@@ -85,7 +85,7 @@ func (h *handler) getProductStock(c *gin.Context, productID uint64) (storeID int
 	if err != nil {
 		return 0, decimal.Zero, err
 	}
-	return storeID, row.Quantity, err
+	return row.StoreID, row.Quantity, nil
 }
 
 // ============================================================================
@@ -199,18 +199,22 @@ func (h *handler) reverseSaleMovements(tx *db.Queries, c *gin.Context, billID ui
 	now := time.Now()
 
 	for _, row := range rows {
-		if err := updateProductQuantity(tx, c, uint64(row.ID), row.Quantity); err != nil {
-			return fmt.Errorf("failed to restore stock for product %d: %w", *row.ProductID, err)
+		if row.ProductID == nil {
+			continue
+		}
+		productID := *row.ProductID
+		if err := updateProductQuantity(tx, c, productID, row.Quantity); err != nil {
+			return fmt.Errorf("failed to restore stock for product %d: %w", productID, err)
 		}
 
 		// Record deletion movement (positive = stock returned)
 		refType := model.ReferenceTypeBill
 		note := fmt.Sprintf("إلغاء فاتورة #%d", row.SequenceNumber)
 		uid := userID
-		if err := insertStockMovement(tx, c, uint64(row.ID), row.StoreID,
+		if err := insertStockMovement(tx, c, productID, row.StoreID,
 			row.Quantity, model.MovementTypeDeletion, refType,
 			&billID, &row.ID, nil, &note, &uid, now); err != nil {
-			return fmt.Errorf("failed to record deletion movement for product %d: %w", *row.ProductID, err)
+			return fmt.Errorf("failed to record deletion movement for product %d: %w", productID, err)
 		}
 	}
 
@@ -237,7 +241,7 @@ func recordPurchaseMovements(tx *db.Queries, c *gin.Context, pbID uint64, storeI
 	Products, err := tx.GetPurchaseBillProducts(c.Request.Context(), pbID)
 
 	if err != nil {
-		return nil
+		return fmt.Errorf("failed to load purchase bill %d products: %w", pbID, err)
 	}
 
 	for _, p := range Products {
@@ -348,13 +352,24 @@ func (h *handler) recordCreditNoteMovements(tx *db.Queries, c *gin.Context, cred
 	now := time.Now()
 
 	for _, item := range rows {
+		if item.ProductID == nil {
+			continue
+		}
+		productID := *item.ProductID
+
+		// 1. Actually restore product.quantity for the returned units.
+		if err := updateProductQuantity(tx, c, productID, item.Quantity); err != nil {
+			return fmt.Errorf("failed to restore stock for product %d: %w", productID, err)
+		}
+
+		// 2. Record the matching stock movement.
 		refType := model.ReferenceTypeCreditNote
 		note := fmt.Sprintf("إشعار دائن #%d لفاتورة #%d", creditNoteID, row.SequenceNumber)
 		uid := userID
-		if err := insertStockMovement(tx, c, *item.ProductID, row.StoreID,
+		if err := insertStockMovement(tx, c, productID, row.StoreID,
 			item.Quantity, model.MovementTypeCreditNote, refType,
 			&creditNoteID, &item.ID, nil, &note, &uid, now); err != nil {
-			return fmt.Errorf("failed to record credit note movement for product %d: %w", *item.ProductID, err)
+			return fmt.Errorf("failed to record credit note movement for product %d: %w", productID, err)
 		}
 	}
 

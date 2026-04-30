@@ -88,8 +88,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 	}
 
 	// Tenant isolation: merchant_id on purchase_bill / cash_voucher.
-	// Adjust based on how your auth middleware exposes it.
-	merchantID := c.GetInt("merchant_id")
+	merchantID := int32(getMerchantID(c))
 
 	// Parse date range (default: last 12 months)
 	now := time.Now()
@@ -118,16 +117,16 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 
 	// 1. Fetch supplier info
 	// Uses existing GetSupplier query (same as GET /api/v2/supplier/:id)
-	supplier, err := h.queries.GetSupplier(c, int64(supplierID))
+	supplier, err := h.queries.GetSupplier(c.Request.Context(), int64(supplierID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "supplier not found"})
 		return
 	}
 
 	// 2. Fetch bill summary (totals from purchase_bill_product GENERATED columns)
-	summary, err := h.queries.GetSupplierBillSummary(c, db.GetSupplierBillSummaryParams{
+	summary, err := h.queries.GetSupplierBillSummary(c.Request.Context(), db.GetSupplierBillSummaryParams{
 		SupplierID: int32(supplierID),
-		MerchantID: int32(merchantID),
+		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,
 	})
@@ -138,9 +137,9 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 
 	// 3. Fetch payment summary from cash_voucher
 	supplierID32 := int32(supplierID)
-	paymentSummary, err := h.queries.GetSupplierPaymentSummary(c, db.GetSupplierPaymentSummaryParams{
+	paymentSummary, err := h.queries.GetSupplierPaymentSummary(c.Request.Context(), db.GetSupplierPaymentSummaryParams{
 		SupplierID: &supplierID32,
-		MerchantID: int32(merchantID),
+		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,
 	})
@@ -153,9 +152,9 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 	closingBalance := summary.TotalSpent.Sub(paymentSummary.TotalPayments)
 
 	// 4. Fetch bills (with totals from purchase_bill_product GENERATED columns)
-	bills, err := h.queries.GetPurchaseBillsBySupplier(c, db.GetPurchaseBillsBySupplierParams{
+	bills, err := h.queries.GetPurchaseBillsBySupplier(c.Request.Context(), db.GetPurchaseBillsBySupplierParams{
 		SupplierID: int32(supplierID),
-		MerchantID: int32(merchantID),
+		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,
 	})
@@ -165,9 +164,9 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 	}
 
 	// 5. Fetch payments (cash_voucher disbursements to supplier)
-	payments, err := h.queries.GetSupplierPayments(c, db.GetSupplierPaymentsParams{
+	payments, err := h.queries.GetSupplierPayments(c.Request.Context(), db.GetSupplierPaymentsParams{
 		SupplierID: &supplierID32,
-		MerchantID: int32(merchantID),
+		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,
 	})
@@ -176,9 +175,9 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 	}
 
 	// 6. Fetch top items (from purchase_bill_product, NOT bill_product)
-	topItems, err := h.queries.GetTopPurchasedItems(c, db.GetTopPurchasedItemsParams{
+	topItems, err := h.queries.GetTopPurchasedItems(c.Request.Context(), db.GetTopPurchasedItemsParams{
 		SupplierID: int32(supplierID),
-		MerchantID: int32(merchantID),
+		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,
 	})
@@ -187,18 +186,18 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 	}
 
 	// 7. Fetch aging buckets (unpaid bills by overdue period)
-	aging, err := h.queries.GetSupplierAgingBuckets(c, db.GetSupplierAgingBucketsParams{
+	aging, err := h.queries.GetSupplierAgingBuckets(c.Request.Context(), db.GetSupplierAgingBucketsParams{
 		SupplierID: int32(supplierID),
-		MerchantID: int32(merchantID),
+		MerchantID: merchantID,
 	})
 	if err != nil {
 		aging = nil // non-fatal
 	}
 
 	// 8. Fetch monthly spending trend
-	monthlySpending, err := h.queries.GetSupplierMonthlySpending(c, db.GetSupplierMonthlySpendingParams{
+	monthlySpending, err := h.queries.GetSupplierMonthlySpending(c.Request.Context(), db.GetSupplierMonthlySpendingParams{
 		SupplierID: int32(supplierID),
-		MerchantID: int32(merchantID),
+		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,
 	})
@@ -244,13 +243,13 @@ func (h *handler) MarkBillReceived(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid bill ID"})
 		return
 	}
-	merchantID := c.GetInt("merchant_id")
-	userID := c.GetInt64("userId") // from GetSessionInfo / JWTVerifyMiddleware
-	userID32 := int32(userID)
+	session := GetSessionInfo(c)
+	merchantID := int32(session.id)
+	userID32 := int32(session.id)
 
-	err = h.queries.MarkPurchaseBillReceived(c, db.MarkPurchaseBillReceivedParams{
+	err = h.queries.MarkPurchaseBillReceived(c.Request.Context(), db.MarkPurchaseBillReceivedParams{
 		ID:         uint64(billID),
-		MerchantID: int32(merchantID),
+		MerchantID: merchantID,
 		ReceivedBy: &userID32, // received_by is INT FK to user.id (see migration)
 	})
 	if err != nil {
@@ -270,11 +269,11 @@ func (h *handler) UnmarkBillReceived(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid bill ID"})
 		return
 	}
-	merchantID := c.GetInt("merchant_id")
+	merchantID := int32(getMerchantID(c))
 
-	err = h.queries.UnmarkPurchaseBillReceived(c, db.UnmarkPurchaseBillReceivedParams{
+	err = h.queries.UnmarkPurchaseBillReceived(c.Request.Context(), db.UnmarkPurchaseBillReceivedParams{
 		ID:         uint64(billID),
-		MerchantID: int32(merchantID),
+		MerchantID: merchantID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to clear receipt status"})

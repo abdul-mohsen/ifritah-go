@@ -152,43 +152,37 @@ func (h *handler) ListUsers(c *gin.Context) {
 		per = 20
 	}
 
-	var (
-		whereClauses = []string{"is_deleted = 0"}
-		args         []any
-	)
-	if q != "" {
-		whereClauses = append(whereClauses, "(username LIKE ? OR email LIKE ? OR full_name LIKE ?)")
-		like := "%" + q + "%"
-		args = append(args, like, like, like)
-	}
 	if role != "" {
 		if _, ok := validRoles[role]; !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role"})
 			return
 		}
-		whereClauses = append(whereClauses, "role = ?")
-		args = append(args, role)
 	}
-	whereSQL := "WHERE " + strings.Join(whereClauses, " AND ")
+	like := "%" + q + "%"
+	// Static SQL with sentinel filters: empty q/role means "no filter".
+	const filterSQL = `is_deleted = 0
+          AND (? = '' OR username LIKE ? OR email LIKE ? OR full_name LIKE ?)
+          AND (? = '' OR role = ?)`
 
-	// Total count
 	var total int64
-	if err := h.DB.QueryRow("SELECT COUNT(*) FROM user "+whereSQL, args...).Scan(&total); err != nil {
+	if err := h.DB.QueryRow(
+		`SELECT COUNT(*) FROM user WHERE `+filterSQL,
+		q, like, like, like, role, role,
+	).Scan(&total); err != nil {
 		log.Printf("ListUsers count: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to count users"})
 		return
 	}
 
-	// Page rows
-	listArgs := append(append([]any{}, args...), per, page*per)
-	rows, err := h.DB.Query(`
-        SELECT id, username, email, COALESCE(full_name,'') AS full_name,
-               COALESCE(phone,'') AS phone, role, is_active, manager_id,
-               created_at, last_login
-        FROM user
-        `+whereSQL+`
-        ORDER BY id ASC
-        LIMIT ? OFFSET ?`, listArgs...)
+	rows, err := h.DB.Query(
+		`SELECT id, username, email, COALESCE(full_name,'') AS full_name,
+                COALESCE(phone,'') AS phone, role, is_active, manager_id,
+                created_at, last_login
+         FROM user
+         WHERE `+filterSQL+`
+         ORDER BY id ASC
+         LIMIT ? OFFSET ?`,
+		q, like, like, like, role, role, per, page*per)
 	if err != nil {
 		log.Printf("ListUsers query: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list users"})
@@ -375,19 +369,29 @@ func (h *handler) UpdateUser(c *gin.Context) {
 		}
 	}
 
-	sets := []string{}
-	args := []any{}
+	// Translate the optional pointer fields into SQL-safe COALESCE inputs.
+	// nil pointer ⇒ pass nil (driver -> NULL) ⇒ COALESCE keeps the existing value.
+	hasUpdate := false
+	var (
+		emailArg     any = nil
+		fullNameArg  any = nil
+		phoneArg     any = nil
+		passwordArg  any = nil
+		roleArg      any = nil
+		managerIDArg any = nil
+		activeArg    any = nil
+	)
 	if req.Email != nil {
-		sets = append(sets, "email = ?")
-		args = append(args, nullableString(*req.Email))
+		emailArg = nullableString(*req.Email)
+		hasUpdate = true
 	}
 	if req.FullName != nil {
-		sets = append(sets, "full_name = ?")
-		args = append(args, nullableString(*req.FullName))
+		fullNameArg = nullableString(*req.FullName)
+		hasUpdate = true
 	}
 	if req.Phone != nil {
-		sets = append(sets, "phone = ?")
-		args = append(args, nullableString(*req.Phone))
+		phoneArg = nullableString(*req.Phone)
+		hasUpdate = true
 	}
 	if req.Password != nil && *req.Password != "" {
 		hash, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
@@ -396,30 +400,38 @@ func (h *handler) UpdateUser(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
 			return
 		}
-		sets = append(sets, "password = ?")
-		args = append(args, string(hash))
+		passwordArg = string(hash)
+		hasUpdate = true
 	}
 	if req.Role != nil {
-		sets = append(sets, "role = ?")
-		args = append(args, *req.Role)
+		roleArg = *req.Role
+		hasUpdate = true
 	}
 	if req.ManagerID != nil {
-		sets = append(sets, "manager_id = ?")
-		args = append(args, *req.ManagerID)
+		managerIDArg = *req.ManagerID
+		hasUpdate = true
 	}
 	if req.Active != nil {
-		sets = append(sets, "is_active = ?")
-		args = append(args, boolToInt(*req.Active))
+		activeArg = boolToInt(*req.Active)
+		hasUpdate = true
 	}
-	if len(sets) == 0 {
+	if !hasUpdate {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no fields to update"})
 		return
 	}
-	args = append(args, id)
 
-	if _, err := h.DB.Exec(
-		"UPDATE user SET "+strings.Join(sets, ", ")+" WHERE id = ? AND is_deleted = 0",
-		args...,
+	const updateSQL = `UPDATE user SET
+            email = COALESCE(?, email),
+            full_name = COALESCE(?, full_name),
+            phone = COALESCE(?, phone),
+            password = COALESCE(?, password),
+            role = COALESCE(?, role),
+            manager_id = COALESCE(?, manager_id),
+            is_active = COALESCE(?, is_active)
+        WHERE id = ? AND is_deleted = 0`
+	if _, err := h.DB.Exec(updateSQL,
+		emailArg, fullNameArg, phoneArg, passwordArg,
+		roleArg, managerIDArg, activeArg, id,
 	); err != nil {
 		log.Printf("UpdateUser: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})

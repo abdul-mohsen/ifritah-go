@@ -164,6 +164,15 @@ func main() {
 		// ── Purchase Bill Receipt Tracking ──────────────────────────────
 		authorized.PUT("purchase_bill/:id/received", h.MarkBillReceived)
 		authorized.DELETE("purchase_bill/:id/received", h.UnmarkBillReceived)
+
+		// ── User management (admin/manager) ─────────────────────────────
+		authorized.GET("users", h.ListUsers)
+		authorized.GET("users/:id", h.GetUserByID)
+		authorized.POST("users", h.CreateUser)
+		authorized.PUT("users/:id", h.UpdateUser)
+		authorized.DELETE("users/:id", h.DeleteUser)
+		authorized.PUT("users/:id/active", h.ToggleUserActive)
+		authorized.PUT("users/:id/permissions", h.UpdateUserPermissions)
 	}
 
 	nonAuthGroup := router.Group(baseUrl)

@@ -159,14 +159,13 @@ func (h *handler) ListUsers(c *gin.Context) {
 		}
 	}
 	like := "%" + q + "%"
-	// Static SQL with sentinel filters: empty q/role means "no filter".
-	const filterSQL = `is_deleted = 0
-          AND (? = '' OR username LIKE ? OR email LIKE ? OR full_name LIKE ?)
-          AND (? = '' OR role = ?)`
 
 	var total int64
 	if err := h.DB.QueryRow(
-		`SELECT COUNT(*) FROM user WHERE `+filterSQL,
+		`SELECT COUNT(*) FROM user
+         WHERE is_deleted = 0
+           AND (? = '' OR username LIKE ? OR email LIKE ? OR full_name LIKE ?)
+           AND (? = '' OR role = ?)`,
 		q, like, like, like, role, role,
 	).Scan(&total); err != nil {
 		log.Printf("ListUsers count: %v", err)
@@ -179,7 +178,9 @@ func (h *handler) ListUsers(c *gin.Context) {
                 COALESCE(phone,'') AS phone, role, is_active, manager_id,
                 created_at, last_login
          FROM user
-         WHERE `+filterSQL+`
+         WHERE is_deleted = 0
+           AND (? = '' OR username LIKE ? OR email LIKE ? OR full_name LIKE ?)
+           AND (? = '' OR role = ?)
          ORDER BY id ASC
          LIMIT ? OFFSET ?`,
 		q, like, like, like, role, role, per, page*per)

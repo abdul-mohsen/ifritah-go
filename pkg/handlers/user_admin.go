@@ -242,41 +242,66 @@ func (h *handler) UpdateUser(c *gin.Context) {
 		}
 	}
 
-	// Build dynamic UPDATE.
-	sets := []string{}
-	args := []any{}
+	// Build a static UPDATE: nil pointer ⇒ NULL ⇒ COALESCE keeps the row's
+	// existing value. Avoids dynamic SQL formatting (Sonar S2077).
+	hasUpdate := false
+	var (
+		fullNameArg  any = nil
+		emailArg     any = nil
+		phoneArg     any = nil
+		roleArg      any = nil
+		isActiveArg  any = nil
+		companyIDArg any = nil
+	)
 	if req.FullName != nil {
-		sets = append(sets, "full_name = ?")
-		args = append(args, *req.FullName)
+		fullNameArg = *req.FullName
+		hasUpdate = true
 	}
 	if req.Email != nil {
-		sets = append(sets, "email = NULLIF(?, '')")
-		args = append(args, *req.Email)
+		// Empty string normalised to NULL (matches NULLIF behaviour).
+		if *req.Email == "" {
+			emailArg = nil
+		} else {
+			emailArg = *req.Email
+		}
+		hasUpdate = true
 	}
 	if req.Phone != nil {
-		sets = append(sets, "phone = NULLIF(?, '')")
-		args = append(args, *req.Phone)
+		if *req.Phone == "" {
+			phoneArg = nil
+		} else {
+			phoneArg = *req.Phone
+		}
+		hasUpdate = true
 	}
 	if req.Role != nil {
-		sets = append(sets, "role = ?")
-		args = append(args, *req.Role)
+		roleArg = *req.Role
+		hasUpdate = true
 	}
 	if req.IsActive != nil {
-		sets = append(sets, "is_active = ?")
-		args = append(args, *req.IsActive)
+		isActiveArg = *req.IsActive
+		hasUpdate = true
 	}
 	if req.CompanyID != nil {
-		sets = append(sets, "company_id = ?")
-		args = append(args, *req.CompanyID)
+		companyIDArg = *req.CompanyID
+		hasUpdate = true
 	}
-	if len(sets) == 0 {
+	if !hasUpdate {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "no fields to update"})
 		return
 	}
 
-	q := "UPDATE user SET " + joinStrings(sets, ", ") + " WHERE id = ?"
-	args = append(args, id)
-	res, err := h.DB.Exec(q, args...)
+	const updateSQL = `UPDATE user SET
+            full_name  = COALESCE(?, full_name),
+            email      = COALESCE(?, email),
+            phone      = COALESCE(?, phone),
+            role       = COALESCE(?, role),
+            is_active  = COALESCE(?, is_active),
+            company_id = COALESCE(?, company_id)
+        WHERE id = ?`
+	res, err := h.DB.Exec(updateSQL,
+		fullNameArg, emailArg, phoneArg, roleArg, isActiveArg, companyIDArg, id,
+	)
 	if err != nil {
 		log.Printf("UpdateUser: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update user"})
@@ -371,17 +396,4 @@ func (h *handler) AdminResetUserPassword(c *gin.Context) {
 	_, _ = h.DB.Exec("DELETE FROM refresh_token WHERE user_id = ?", id)
 
 	c.JSON(http.StatusOK, gin.H{"detail": "password reset"})
-}
-
-// joinStrings is a tiny helper that avoids pulling in strings.Join just for the
-// dynamic UPDATE above.
-func joinStrings(parts []string, sep string) string {
-	out := ""
-	for i, p := range parts {
-		if i > 0 {
-			out += sep
-		}
-		out += p
-	}
-	return out
 }

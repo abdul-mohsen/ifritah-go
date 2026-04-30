@@ -218,12 +218,12 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 		limit = 50
 	}
 
-	args := []any{}
-	where := "WHERE 1=1"
+	// Sentinel filters keep the SQL static for code-scanners (Sonar S2077).
+	pendingFlag := ""    // "y" => match status IN (0,1)
+	statusCode := -1     // -1 => no exact-status match
+	var branchID int64 = 0 // 0 => no branch filter
 
 	if s := c.Query("status"); s != "" {
-		// Accept either the numeric code or the string label.
-		statusCode := -1
 		switch s {
 		case "accepted":
 			statusCode = 2
@@ -232,19 +232,14 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 		case "warning":
 			statusCode = 4
 		case "pending":
-			// pending covers 0 and 1
-			where += " AND zs.status IN (0,1)"
+			pendingFlag = "y"
 		default:
-			if n, err := strconv.Atoi(s); err == nil {
-				statusCode = n
-			} else {
+			n, err := strconv.Atoi(s)
+			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
 				return
 			}
-		}
-		if statusCode >= 0 {
-			where += " AND zs.status = ?"
-			args = append(args, statusCode)
+			statusCode = n
 		}
 	}
 	if bs := c.Query("branch_id"); bs != "" {
@@ -253,10 +248,8 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid branch_id"})
 			return
 		}
-		where += " AND bl.branch_id = ?"
-		args = append(args, bid)
+		branchID = bid
 	}
-	args = append(args, limit)
 
 	rows, err := h.DB.Query(`
         SELECT
@@ -271,9 +264,12 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
         FROM zatca_submission zs
         JOIN bill bl     ON bl.id = zs.bill_id
         LEFT JOIN branches b ON b.id = bl.branch_id
-        `+where+`
+        WHERE (? = '' OR zs.status IN (0,1))
+          AND (? = -1 OR zs.status = ?)
+          AND (? = 0 OR bl.branch_id = ?)
         ORDER BY zs.submitted_at DESC
-        LIMIT ?`, args...)
+        LIMIT ?`,
+		pendingFlag, statusCode, statusCode, branchID, branchID, limit)
 	if err != nil {
 		log.Printf("ZatcaMonitorSubmissions query: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load submissions"})

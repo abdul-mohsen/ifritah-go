@@ -53,15 +53,23 @@ func main() {
 	authorized := router.Group(baseUrl)
 	authorized.Use(handlers.JWTVerifyMiddleware)
 	{
+		// Convenience aliases for role-gated routes.
+		admin := handlers.RequireAdmin()
+		mgr := handlers.RequireManagerOrAbove()
+
+		// ── Suppliers (employees can read/create, manager+ can edit/delete) ──
 		authorized.POST("supplier/all", h.GetAllSupplier)
 		authorized.GET("supplier/:id", h.GetSupplier)
 		authorized.POST("supplier", h.AddSupplier)
-		authorized.PUT("supplier/:id", h.EditSupplier)
-		authorized.DELETE("supplier/:id", h.DeleteSupplier)
+		authorized.PUT("supplier/:id", mgr, h.EditSupplier)
+		authorized.DELETE("supplier/:id", mgr, h.DeleteSupplier)
 
+		// ── Companies (read for everyone, edit admin-only) ─────────────
 		authorized.GET("company/all", h.GetAllCompanies)
 		authorized.GET("company", h.GetCompany)
-		authorized.PUT("company", h.UpdateCompany)
+		authorized.PUT("company", admin, h.UpdateCompany)
+
+		// ── VIN / car_part lookups (any auth) ──────────────────────────
 		authorized.GET("vin/car/info/:vin", h.GetCarInfoByVin)
 		authorized.GET("vin/car/:vin", h.GetCarsByVin)
 		authorized.POST("vin/part/details/:vin", h.GetPartByVinDetails)
@@ -72,73 +80,75 @@ func main() {
 		authorized.GET("vin/:vin", h.SearchByVin)
 		authorized.GET("car_part/:id", h.GetAllCachedVin)
 
-		// Bills
+		// ── Bills (delete is manager+) ─────────────────────────────────
 		authorized.GET("bill/:id", h.GetBillDetail)
 		authorized.POST("bill/all", h.GetBills)
 		authorized.POST("bill", h.AddBill)
 		authorized.PUT("bill/:id", h.SubmitDraftBill)
-		authorized.DELETE("bill/:id", h.DeleteBillDetail)
+		authorized.DELETE("bill/:id", mgr, h.DeleteBillDetail)
 
 		authorized.GET("credit_bill/:id", h.GetBillCreditDetail)
 		authorized.POST("bill/credit", h.CreditBill)
 
+		// ── Purchase Bills (delete & receipt-tracking are manager+) ────
 		authorized.GET("purchase_bill/:id", h.GetPurchaseBillDetail)
 		authorized.POST("purchase_bill", h.AddPurchaseBill)
 		authorized.POST("purchase_bill/all", h.GetAllPurchaseBill)
 		authorized.PUT("purchase_bill/:id", h.UpdatePurchaseBill)
-		authorized.DELETE("purchase_bill/:id", h.DeletePurchaseBillDetail)
+		authorized.DELETE("purchase_bill/:id", mgr, h.DeletePurchaseBillDetail)
 
+		// ── Products (delete is manager+) ──────────────────────────────
 		authorized.POST("product/search", h.SearchProducts)
 		authorized.GET("product/:id", h.GetProduct)
 		authorized.POST("product/all", h.GetAllProducts)
 		authorized.POST("product", h.AddQuantity)
 		authorized.PUT("product/:id", h.UpdateProduct)
-		authorized.DELETE("product/:id", h.DeleteProduct)
+		authorized.DELETE("product/:id", mgr, h.DeleteProduct)
 
+		// ── Clients (delete is manager+) ───────────────────────────────
 		authorized.GET("client/:id", h.GetClient)
 		authorized.POST("client/all", h.GetAllClient)
 		authorized.POST("client", h.CreateClient)
 		authorized.PUT("client/:id", h.UpdateClient)
-		authorized.DELETE("client/:id", h.DeleteClient)
+		authorized.DELETE("client/:id", mgr, h.DeleteClient)
 
-		// ── Branches ────────────────────────────────────────────────────
+		// ── Branches (write is admin-only) ─────────────────────────────
 		authorized.POST("branch/all", h.ListBranches)
 		authorized.GET("branch/:id", h.GetBranch)
-		authorized.POST("branch", h.CreateBranch)
-		authorized.PUT("branch/:id", h.UpdateBranch)
-		authorized.DELETE("branch/:id", h.DeleteBranch)
+		authorized.POST("branch", admin, h.CreateBranch)
+		authorized.PUT("branch/:id", admin, h.UpdateBranch)
+		authorized.DELETE("branch/:id", admin, h.DeleteBranch)
 
-		// ── Branch ZATCA Config ─────────────────────────────────────────
+		// ── Branch ZATCA Config (admin-only writes) ────────────────────
 		authorized.GET("branch/:id/zatca", h.GetBranchZatcaConfig)
-		authorized.PUT("branch/:id/zatca", h.UpdateBranchZatcaConfig)
-		authorized.POST("branch/:id/zatca/onboard", h.OnboardBranchZatca)
+		authorized.PUT("branch/:id/zatca", admin, h.UpdateBranchZatcaConfig)
+		authorized.POST("branch/:id/zatca/onboard", admin, h.OnboardBranchZatca)
 
-		// ── Stores (new CRUD — keep existing GET stores/all) ────────────
-		// authorized.GET("stores/all", h.GetStores)   ← already exists, keep it
+		// ── Stores (write is admin-only) ───────────────────────────────
 		authorized.GET("stores/all", h.GetStores)
 		authorized.GET("store/:id", h.GetStore)
-		authorized.POST("store", h.CreateStore)
-		authorized.PUT("store/:id", h.UpdateStore)
-		authorized.DELETE("store/:id", h.DeleteStore)
+		authorized.POST("store", admin, h.CreateStore)
+		authorized.PUT("store/:id", admin, h.UpdateStore)
+		authorized.DELETE("store/:id", admin, h.DeleteStore)
 
-		// Settings (admin only)
+		// ── Settings (read for everyone, write admin-only) ─────────────
 		authorized.GET("settings", h.GetSettings)
-		authorized.PUT("settings", h.UpdateSettings)
+		authorized.PUT("settings", admin, h.UpdateSettings)
 
-		// Stock / Inventory Management
+		// ── Stock / Inventory (any auth) ───────────────────────────────
 		authorized.POST("stock/adjust", h.StockAdjust)
 		authorized.POST("stock/check", h.StockCheck)
 		authorized.GET("stock/movements/:product_id", h.GetStockMovements)
 		authorized.GET("stock/enforcement", h.GetStockEnforcement)
 
-		// Notifications
+		// ── Notifications (config writes admin-only) ───────────────────
 		authorized.GET("notification", h.GetNotifications)
 		authorized.GET("notification/config", h.GetNotificationConfig)
-		authorized.PUT("notification/config", h.UpdateNotificationConfig)
+		authorized.PUT("notification/config", admin, h.UpdateNotificationConfig)
 		authorized.PUT("notification/:id/read", h.MarkNotificationRead)
 		authorized.PUT("notification/read-all", h.MarkAllNotificationsRead)
 
-		// Dashboard API (GET endpoints — read-only, no CSRF needed)
+		// ── Dashboard (any auth, read-only) ────────────────────────────
 		authorized.GET("dashboard", h.GetDashboard)
 		authorized.GET("dashboard/analytics", h.GetDashboardAnalytics)
 		authorized.GET("dashboard/compare", h.GetDashboardCompare)
@@ -146,34 +156,45 @@ func main() {
 		authorized.GET("part/type", cache.CachePage(store, time.Minute*60*24, h.GetPartType))
 		authorized.POST("part/", h.GetPart)
 
-		// Purchase Bill File Uploads (filesystem storage)
+		// ── File uploads (delete manager+) ─────────────────────────────
 		authorized.POST("upload", h.UploadFile)
 		authorized.GET("files/:key", h.DownloadFile)
-		authorized.DELETE("files/:key", h.DeleteFile)
+		authorized.DELETE("files/:key", mgr, h.DeleteFile)
 
-		// ── NEW: Orders CRUD ────────────────────────────────────────
+		// ── Orders (delete manager+) ───────────────────────────────────
 		authorized.POST("order/all", h.GetOrders)
 		authorized.GET("order/:id", h.GetOrder)
 		authorized.POST("order", h.CreateOrder)
 		authorized.PUT("order/:id", h.UpdateOrder)
-		authorized.DELETE("order/:id", h.DeleteOrder)
+		authorized.DELETE("order/:id", mgr, h.DeleteOrder)
 
-		// Cash Vouchers (سندات الصرف والقبض)
+		// ── Cash Vouchers (approve/post/delete manager+) ───────────────
 		authorized.POST("cash_voucher/all", h.ListCashVouchers)
 		authorized.GET("cash_voucher/summary", h.GetCashVoucherSummary)
 		authorized.GET("cash_voucher/:id", h.GetCashVoucher)
 		authorized.POST("cash_voucher", h.CreateCashVoucher)
 		authorized.PUT("cash_voucher/:id", h.UpdateCashVoucher)
-		authorized.DELETE("cash_voucher/:id", h.DeleteCashVoucher)
-		authorized.POST("cash_voucher/:id/approve", h.ApproveCashVoucher) // manager+ only
-		authorized.POST("cash_voucher/:id/post", h.PostCashVoucher)
+		authorized.DELETE("cash_voucher/:id", mgr, h.DeleteCashVoucher)
+		authorized.POST("cash_voucher/:id/approve", mgr, h.ApproveCashVoucher)
+		authorized.POST("cash_voucher/:id/post", mgr, h.PostCashVoucher)
 
-		// ── Supplier Report / كشف حساب المورد ──────────────────────────
+		// ── Supplier Report ────────────────────────────────────────────
 		authorized.GET("supplier/:id/report", h.GetSupplierReport)
 
-		// ── Purchase Bill Receipt Tracking ──────────────────────────────
-		authorized.PUT("purchase_bill/:id/received", h.MarkBillReceived)
-		authorized.DELETE("purchase_bill/:id/received", h.UnmarkBillReceived)
+		// ── Purchase Bill Receipt Tracking (manager+) ──────────────────
+		authorized.PUT("purchase_bill/:id/received", mgr, h.MarkBillReceived)
+		authorized.DELETE("purchase_bill/:id/received", mgr, h.UnmarkBillReceived)
+
+		// ── Self profile (any auth) ────────────────────────────────────
+		authorized.GET("users/me", h.GetMe)
+
+		// ── User management (admin-only) ───────────────────────────────
+		authorized.GET("user/all", admin, h.ListUsers)
+		authorized.GET("user/:id", admin, h.GetUserByID)
+		authorized.POST("user", admin, h.CreateUser)
+		authorized.PUT("user/:id", admin, h.UpdateUser)
+		authorized.DELETE("user/:id", admin, h.DeleteUser)
+		authorized.POST("user/:id/password", admin, h.AdminResetUserPassword)
 	}
 
 	nonAuthGroup := router.Group(baseUrl)

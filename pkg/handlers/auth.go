@@ -50,8 +50,9 @@ func checkPassword(hashedPassword []byte, password string) error {
 func (h *handler) Login(c *gin.Context) {
 
 	var request model.LoginRequest
-	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
+		return
 	}
 
 	// Look up user by username
@@ -70,31 +71,34 @@ func (h *handler) Login(c *gin.Context) {
 		return
 	}
 	if err != nil {
+		log.Printf("login db error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "database error"})
-		log.Panic(err)
+		return
 	}
 
 	if !isActive {
 		c.JSON(http.StatusForbidden, gin.H{"detail": "account is deactivated"})
-		log.Panic("not activate user")
+		return
 	}
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(request.Password)); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "invalid credentials"})
-		log.Panic(err)
+		return
 	}
 
 	accessToken, err := GenerateAccessToken(userID, request.Username, role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate access token"})
-		log.Panic(err)
+		log.Printf("access token error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "could not generate access token"})
+		return
 	}
 
 	refreshToken, err := GenerateRefreshToken(userID, request.Username)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate refresh token"})
-		log.Panic(err)
+		log.Printf("refresh token error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "could not generate refresh token"})
+		return
 	}
 
 	// Store refresh token hash in DB for revocation support
@@ -122,50 +126,99 @@ func generateSessionID() string {
 	return "s_" + hex.EncodeToString(b)
 }
 
+// abortJSON ends the request with the given status and a uniform JSON body so
+// the frontend can show a useful message instead of an empty body.
+func abortJSON(c *gin.Context, status int, detail string) {
+	c.AbortWithStatusJSON(status, gin.H{
+		"detail": detail,
+		"error":  http.StatusText(status),
+		"status": status,
+	})
+}
+
 func JWTVerifyMiddleware(c *gin.Context) {
-	// Get the JWT token from the Authorization header
-	fullTokenString := c.GetHeader("Authorization")
-	split := strings.Split(fullTokenString, "Bearer ")
-	if len(split) != 2 {
-		c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("no access token found"))
+	authHeader := c.GetHeader("Authorization")
+	parts := strings.SplitN(authHeader, "Bearer ", 2)
+	if len(parts) != 2 || parts[1] == "" {
+		abortJSON(c, http.StatusUnauthorized, "missing or invalid authorization header")
+		return
 	}
+	tokenString := parts[1]
 
-	tokenString := split[1]
-
-	// Define the secret key used to sign the token
 	secretKey := []byte(model.JWTSettings.JWTSecertKey)
 	token, err := jwt.ParseWithClaims(tokenString, &model.Claims{},
 		func(token *jwt.Token) (any, error) {
-			// Verify the signing method
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-
-			// Return the secret key
-			return []byte(secretKey), nil
+			return secretKey, nil
 		})
-
-	if err != nil {
-		if err == jwt.ErrSignatureInvalid {
-			c.Status(http.StatusUnauthorized)
-			return
-		}
-		c.Status(http.StatusBadRequest)
+	if err != nil || token == nil || !token.Valid {
+		abortJSON(c, http.StatusUnauthorized, "invalid or expired token")
 		return
 	}
-	if claims, ok := token.Claims.(*model.Claims); ok && token.Valid {
 
-		if !time.Unix(claims.Expiration, 0).Before(time.Now()) {
-			// Store the decoded JWT in the context for later use
-			c.Set("decoded_jwt", claims)
-
-			// Continue the request processing
-			c.Next()
-			return
-		}
+	claims, ok := token.Claims.(*model.Claims)
+	if !ok {
+		abortJSON(c, http.StatusUnauthorized, "invalid token claims")
+		return
 	}
 
-	c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("Token is invalid"))
+	if claims.Expiration > 0 && time.Unix(claims.Expiration, 0).Before(time.Now()) {
+		abortJSON(c, http.StatusUnauthorized, "token expired")
+		return
+	}
+
+	// Expose claims for handlers and downstream middleware (e.g. RequireRole).
+	c.Set("decoded_jwt", claims)
+	c.Set("user_id", claims.Id)
+	c.Set("userId", claims.Id) // back-compat for handlers using GetInt64("userId")
+	c.Set("username", claims.Username)
+	c.Set("user_role", claims.Role)
+
+	c.Next()
+}
+
+// ============================================================================
+// Role-based access control
+// ============================================================================
+
+// RoleAdmin / RoleManager / RoleEmployee match the enum on the user table.
+const (
+	RoleAdmin    = "admin"
+	RoleManager  = "manager"
+	RoleEmployee = "employee"
+)
+
+// RequireRole returns a middleware that allows the request through only if the
+// authenticated user's role is in the allowed list. The JWT middleware must run
+// first so that "user_role" is set on the context.
+func RequireRole(allowed ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, _ := c.Get("user_role")
+		roleStr, _ := role.(string)
+		for _, a := range allowed {
+			if a == roleStr {
+				c.Next()
+				return
+			}
+		}
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+			"detail":         "insufficient permissions",
+			"error":          "forbidden",
+			"status":         http.StatusForbidden,
+			"required_roles": allowed,
+			"your_role":      roleStr,
+		})
+	}
+}
+
+// RequireAdmin is a shorthand for admin-only routes.
+func RequireAdmin() gin.HandlerFunc { return RequireRole(RoleAdmin) }
+
+// RequireManagerOrAbove allows admin and manager.
+func RequireManagerOrAbove() gin.HandlerFunc {
+	return RequireRole(RoleAdmin, RoleManager)
 }
 
 // ============================================================================
@@ -338,7 +391,7 @@ func (h *handler) Register(c *gin.Context) {
 	defaultPerms := []string{"invoices", "products", "clients", "suppliers", "stores", "orders"}
 	for _, resource := range defaultPerms {
 		_, _ = h.DB.Exec(
-			"INSERT INTO permissions (user_id, resource, can_view, can_add, can_edit, can_delete) VALUES (?, ?, 1, 0, 0, 0)",
+			"INSERT INTO user_permission (user_id, resource, can_view, can_add, can_edit, can_delete) VALUES (?, ?, 1, 0, 0, 0)",
 			userID, resource,
 		)
 	}
@@ -502,40 +555,39 @@ func (h *handler) GetMe(c *gin.Context) {
 		return
 	}
 
-	// Fetch permissions
-	rows, err := h.DB.Query(
-		"SELECT resource, can_view, can_add, can_edit, can_delete FROM permissions WHERE user_id = ?",
-		userID,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to fetch permissions"})
-		return
-	}
-	defer rows.Close()
-
+	// Fetch permissions (best-effort — table name varies between deploys).
 	type Permission struct {
 		Resource string   `json:"resource"`
 		Actions  []string `json:"actions"`
 	}
-	var permissions []Permission
-	for rows.Next() {
-		var resource string
-		var canView, canAdd, canEdit, canDelete bool
-		rows.Scan(&resource, &canView, &canAdd, &canEdit, &canDelete)
-		var actions []string
-		if canView {
-			actions = append(actions, "view")
+	permissions := []Permission{}
+	rows, err := h.DB.Query(
+		"SELECT resource, can_view, can_add, can_edit, can_delete FROM user_permission WHERE user_id = ?",
+		userID,
+	)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var resource string
+			var canView, canAdd, canEdit, canDelete bool
+			rows.Scan(&resource, &canView, &canAdd, &canEdit, &canDelete)
+			var actions []string
+			if canView {
+				actions = append(actions, "view")
+			}
+			if canAdd {
+				actions = append(actions, "add")
+			}
+			if canEdit {
+				actions = append(actions, "edit")
+			}
+			if canDelete {
+				actions = append(actions, "delete")
+			}
+			permissions = append(permissions, Permission{Resource: resource, Actions: actions})
 		}
-		if canAdd {
-			actions = append(actions, "add")
-		}
-		if canEdit {
-			actions = append(actions, "edit")
-		}
-		if canDelete {
-			actions = append(actions, "delete")
-		}
-		permissions = append(permissions, Permission{Resource: resource, Actions: actions})
+	} else {
+		log.Printf("GetMe permissions query failed (non-fatal): %v", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{

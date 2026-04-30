@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
 	"log"
 	"net/http"
@@ -55,14 +56,7 @@ func (h *handler) Login(c *gin.Context) {
 	}
 
 	// Look up user by username
-	var userID int64
-	var passwordHash, role string
-	var isActive bool
-	err := h.DB.QueryRow(
-		"SELECT id, password, role, is_active FROM user WHERE username = ? LIMIT 1",
-		request.Username,
-	).Scan(&userID, &passwordHash, &role, &isActive)
-
+	u, err := h.queries.GetUserForLogin(c.Request.Context(), request.Username)
 	if err == sql.ErrNoRows {
 		// Constant-time comparison to prevent timing attacks
 		bcrypt.CompareHashAndPassword([]byte("$2a$12$dummy.hash.for.timing.attack.prevention.xxxxx"), []byte(request.Password))
@@ -75,16 +69,19 @@ func (h *handler) Login(c *gin.Context) {
 		return
 	}
 
-	if !isActive {
+	if !u.IsActive {
 		c.JSON(http.StatusForbidden, gin.H{"detail": ErrAccountDeactivated})
 		return
 	}
 
 	// Verify password
-	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(request.Password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(request.Password)); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": ErrInvalidCredentials})
 		return
 	}
+
+	userID := int64(u.ID)
+	role := string(u.Role)
 
 	accessToken, err := GenerateAccessToken(userID, request.Username, role)
 	if err != nil {
@@ -104,17 +101,20 @@ func (h *handler) Login(c *gin.Context) {
 	// Best-effort: failure here doesn't block login but is logged so we can
 	// detect refresh-token storage outages.
 	tokenHash := sha256Hex(refreshToken)
-	if _, err := h.DB.Exec(
-		"INSERT INTO refresh_token (user_id, token_hash, device_name, ip_address, expires_at) VALUES (?, ?, ?, ?, ?)",
-		userID, tokenHash,
-		c.GetHeader("User-Agent"), c.ClientIP(),
-		time.Now().Add(model.JWTSettings.RefreshExpiration),
-	); err != nil {
+	deviceName := c.GetHeader("User-Agent")
+	ipAddress := c.ClientIP()
+	if err := h.queries.InsertRefreshToken(c.Request.Context(), db.InsertRefreshTokenParams{
+		UserID:     u.ID,
+		TokenHash:  tokenHash,
+		DeviceName: &deviceName,
+		IpAddress:  &ipAddress,
+		ExpiresAt:  time.Now().Add(model.JWTSettings.RefreshExpiration),
+	}); err != nil {
 		log.Printf("Login: store refresh token: %v", err)
 	}
 
 	// Update last_login (best-effort).
-	if _, err := h.DB.Exec("UPDATE user SET last_login = NOW() WHERE id = ?", userID); err != nil {
+	if err := h.queries.UpdateLastLogin(c.Request.Context(), u.ID); err != nil {
 		log.Printf("Login: update last_login: %v", err)
 	}
 
@@ -278,11 +278,7 @@ func (h *handler) Refresh(c *gin.Context) {
 
 	// Verify the refresh token exists in DB and is not expired
 	tokenHash := sha256Hex(tokenString)
-	var sessionID string
-	err = h.DB.QueryRow(
-		"SELECT id FROM refresh_token WHERE token_hash = ? AND revoked = 0 AND expires_at > NOW() LIMIT 1",
-		tokenHash,
-	).Scan(&sessionID)
+	sessionID, err := h.queries.GetActiveRefreshTokenID(c.Request.Context(), tokenHash)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Printf("Refresh: lookup refresh token: %v", err)
@@ -292,19 +288,15 @@ func (h *handler) Refresh(c *gin.Context) {
 	}
 
 	// Verify the user still exists and is active
-	var role string
-	var isActive bool
-	err = h.DB.QueryRow(
-		"SELECT role, is_active FROM user WHERE id = ? LIMIT 1",
-		userID,
-	).Scan(&role, &isActive)
-	if err != nil || !isActive {
+	authState, err := h.queries.GetUserAuthState(c.Request.Context(), int32(userID))
+	if err != nil || !authState.IsActive {
 		if err != nil && err != sql.ErrNoRows {
 			log.Printf("Refresh: lookup user: %v", err)
 		}
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "user not found or inactive"})
 		return
 	}
+	role := string(authState.Role)
 
 	// Generate new tokens (token rotation)
 	newAccessToken, err := GenerateAccessToken(userID, username, role)
@@ -322,12 +314,11 @@ func (h *handler) Refresh(c *gin.Context) {
 
 	// Rotate: update the session with new tokens
 	newHash := sha256Hex(newRefreshToken)
-	if _, err := h.DB.Exec(
-		"UPDATE refresh_token SET token_hash = ?, expires_at = ? WHERE id = ?",
-		newHash,
-		time.Now().Add(model.JWTSettings.RefreshExpiration),
-		sessionID,
-	); err != nil {
+	if err := h.queries.RotateRefreshToken(c.Request.Context(), db.RotateRefreshTokenParams{
+		TokenHash: newHash,
+		ExpiresAt: time.Now().Add(model.JWTSettings.RefreshExpiration),
+		ID:        sessionID,
+	}); err != nil {
 		log.Printf("Refresh: rotate refresh token: %v", err)
 	}
 
@@ -361,26 +352,29 @@ func (h *handler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": invalidRequestDetail(err)})
 		return
 	}
+	ctx := c.Request.Context()
 
 	// Check username not already taken
-	var exists int
-	if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE username = ?", req.Username).Scan(&exists); err != nil {
+	nameCount, err := h.queries.CountUsersByUsername(ctx, req.Username)
+	if err != nil {
 		log.Printf("Register: username uniqueness check: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDatabase})
 		return
 	}
-	if exists > 0 {
+	if nameCount > 0 {
 		c.JSON(http.StatusConflict, gin.H{"detail": ErrUsernameExists})
 		return
 	}
 
 	// Check email not already taken
-	if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE email = ?", req.Email).Scan(&exists); err != nil {
+	email := req.Email
+	emailCount, err := h.queries.CountUsersByEmail(ctx, &email)
+	if err != nil {
 		log.Printf("Register: email uniqueness check: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDatabase})
 		return
 	}
-	if exists > 0 {
+	if emailCount > 0 {
 		c.JSON(http.StatusConflict, gin.H{"detail": ErrEmailExists})
 		return
 	}
@@ -394,10 +388,15 @@ func (h *handler) Register(c *gin.Context) {
 	}
 
 	// Insert user with default role "employee"
-	result, err := h.DB.Exec(
-		"INSERT INTO user (username, email, password, full_name, phone, role, is_active) VALUES (?, ?, ?, ?, ?, 'employee', 1)",
-		req.Username, req.Email, string(hash), req.FullName, req.Phone,
-	)
+	fullName := req.FullName
+	phone := req.Phone
+	result, err := h.queries.RegisterUser(ctx, db.RegisterUserParams{
+		Username: req.Username,
+		Email:    &email,
+		Password: string(hash),
+		FullName: &fullName,
+		Phone:    &phone,
+	})
 	if err != nil {
 		log.Printf("Register: insert user: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrCreateUser})
@@ -410,10 +409,10 @@ func (h *handler) Register(c *gin.Context) {
 	// Best-effort: failures are logged but don't fail the registration.
 	defaultPerms := []string{"invoices", "products", "clients", "suppliers", "stores", "orders"}
 	for _, resource := range defaultPerms {
-		if _, err := h.DB.Exec(
-			"INSERT INTO user_permission (user_id, resource, can_view, can_add, can_edit, can_delete) VALUES (?, ?, 1, 0, 0, 0)",
-			userID, resource,
-		); err != nil {
+		if err := h.queries.SeedUserPermission(ctx, db.SeedUserPermissionParams{
+			UserID:   int32(userID),
+			Resource: resource,
+		}); err != nil {
 			log.Printf("Register: seed permission %q for user %d: %v", resource, userID, err)
 		}
 	}
@@ -445,8 +444,8 @@ func (h *handler) ForgotPassword(c *gin.Context) {
 	}
 
 	// Look up user — but always return 200 regardless
-	var userID int64
-	err := h.DB.QueryRow("SELECT id FROM user WHERE email = ? AND is_active = 1", req.Email).Scan(&userID)
+	email := req.Email
+	userID, err := h.queries.GetUserIDByEmailActive(c.Request.Context(), &email)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Printf("ForgotPassword: lookup user: %v", err)
@@ -467,10 +466,11 @@ func (h *handler) ForgotPassword(c *gin.Context) {
 
 	// Store hashed token in DB (expires in 1 hour)
 	tokenHash := sha256Hex(resetToken)
-	if _, err := h.DB.Exec(
-		"INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
-		userID, tokenHash, time.Now().Add(1*time.Hour),
-	); err != nil {
+	if err := h.queries.InsertPasswordResetToken(c.Request.Context(), db.InsertPasswordResetTokenParams{
+		UserID:    userID,
+		Token:     tokenHash,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	}); err != nil {
 		log.Printf("ForgotPassword: insert reset token: %v", err)
 	}
 
@@ -498,12 +498,7 @@ func (h *handler) ResetPassword(c *gin.Context) {
 
 	// Look up token (stored as hash)
 	tokenHash := sha256Hex(req.Token)
-	var tokenID int64
-	var userID int64
-	err := h.DB.QueryRow(
-		"SELECT id, user_id FROM password_reset_tokens WHERE token = ? AND expires_at > NOW() AND used_at IS NULL LIMIT 1",
-		tokenHash,
-	).Scan(&tokenID, &userID)
+	row, err := h.queries.GetActiveResetToken(c.Request.Context(), tokenHash)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Printf("ResetPassword: lookup reset token: %v", err)
@@ -511,6 +506,8 @@ func (h *handler) ResetPassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid or expired reset token"})
 		return
 	}
+	tokenID := row.ID
+	userID := row.UserID
 
 	// Hash new password
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
@@ -521,20 +518,22 @@ func (h *handler) ResetPassword(c *gin.Context) {
 	}
 
 	// Update password
-	_, err = h.DB.Exec("UPDATE user SET password = ? WHERE id = ?", string(hash), userID)
-	if err != nil {
+	if _, err := h.queries.UpdateUserPassword(c.Request.Context(), db.UpdateUserPasswordParams{
+		Password: string(hash),
+		ID:       userID,
+	}); err != nil {
 		log.Printf("ResetPassword: update password: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrUpdatePassword})
 		return
 	}
 
 	// Mark token as used (best-effort)
-	if _, err := h.DB.Exec("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = ?", tokenID); err != nil {
+	if err := h.queries.MarkResetTokenUsed(c.Request.Context(), tokenID); err != nil {
 		log.Printf("ResetPassword: mark token used: %v", err)
 	}
 
 	// Invalidate all sessions for this user (force re-login)
-	if _, err := h.DB.Exec("DELETE FROM sessions WHERE user_id = ?", userID); err != nil {
+	if err := h.queries.DeleteSessionsForUser(c.Request.Context(), userID); err != nil {
 		log.Printf("ResetPassword: delete sessions: %v", err)
 	}
 
@@ -554,7 +553,7 @@ func (h *handler) Logout(c *gin.Context) {
 	userID := c.GetInt64("userId") // from JWT middleware
 
 	// Delete all sessions for this user (best-effort).
-	if _, err := h.DB.Exec("DELETE FROM refresh_token WHERE user_id = ?", userID); err != nil {
+	if err := h.queries.DeleteRefreshTokensForUser(c.Request.Context(), int32(userID)); err != nil {
 		log.Printf("Logout: delete refresh tokens for user %d: %v", userID, err)
 	}
 
@@ -575,68 +574,50 @@ func (h *handler) Logout(c *gin.Context) {
 // endpoint doesn't exist.
 func (h *handler) GetMe(c *gin.Context) {
 	userID := c.GetInt64("userId")
+	ctx := c.Request.Context()
 
-	var user struct {
-		ID       int64  `json:"id"`
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		FullName string `json:"full_name"`
-		Phone    string `json:"phone"`
-		Role     string `json:"role"`
-		IsActive bool   `json:"is_active"`
-	}
-	err := h.DB.QueryRow(
-		"SELECT id, username, email, COALESCE(full_name,'') as full_name, COALESCE(phone,'') as phone, role, is_active FROM user WHERE id = ?",
-		userID,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.FullName, &user.Phone, &user.Role, &user.IsActive)
+	u, err := h.queries.GetUserSelf(ctx, int32(userID))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"detail": "user not found"})
+		c.JSON(http.StatusNotFound, gin.H{"detail": ErrUserNotFound})
 		return
 	}
 
-	// Fetch permissions (best-effort — table name varies between deploys).
+	// Fetch permissions (best-effort).
 	type Permission struct {
 		Resource string   `json:"resource"`
 		Actions  []string `json:"actions"`
 	}
 	permissions := []Permission{}
-	rows, err := h.DB.Query(
-		"SELECT resource, can_view, can_add, can_edit, can_delete FROM user_permission WHERE user_id = ?",
-		userID,
-	)
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var resource string
-			var canView, canAdd, canEdit, canDelete bool
-			rows.Scan(&resource, &canView, &canAdd, &canEdit, &canDelete)
+	perms, err := h.queries.ListUserPermissions(ctx, int32(userID))
+	if err != nil {
+		log.Printf("GetMe permissions query failed (non-fatal): %v", err)
+	} else {
+		for _, p := range perms {
 			var actions []string
-			if canView {
+			if p.CanView {
 				actions = append(actions, "view")
 			}
-			if canAdd {
+			if p.CanAdd {
 				actions = append(actions, "add")
 			}
-			if canEdit {
+			if p.CanEdit {
 				actions = append(actions, "edit")
 			}
-			if canDelete {
+			if p.CanDelete {
 				actions = append(actions, "delete")
 			}
-			permissions = append(permissions, Permission{Resource: resource, Actions: actions})
+			permissions = append(permissions, Permission{Resource: p.Resource, Actions: actions})
 		}
-	} else {
-		log.Printf("GetMe permissions query failed (non-fatal): %v", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":          user.ID,
-		"username":    user.Username,
-		"email":       user.Email,
-		"full_name":   user.FullName,
-		"phone":       user.Phone,
-		"role":        user.Role,
-		"is_active":   user.IsActive,
+		"id":          u.ID,
+		"username":    u.Username,
+		"email":       u.Email,
+		"full_name":   u.FullName,
+		"phone":       u.Phone,
+		"role":        u.Role,
+		"is_active":   u.IsActive,
 		"permissions": permissions,
 	})
 }

@@ -15,6 +15,7 @@ package handlers
 
 import (
 	"database/sql"
+	db "ifritah/web-service-gin/pkg/db/gen"
 	"log"
 	"net/http"
 	"strconv"
@@ -43,41 +44,48 @@ type userResponse struct {
 	LastLogin *string `json:"last_login"`
 }
 
+// fromListRow / fromAdminRow convert sqlc-generated row types to userResponse.
+func fromListRow(r db.ListUsersRow) userResponse {
+	return buildUserResponse(int64(r.ID), r.Username, r.FullName, r.Email, r.Phone, string(r.Role), r.IsActive, r.CompanyID, r.LastLogin)
+}
+
+func fromAdminRow(r db.GetUserAdminRow) userResponse {
+	return buildUserResponse(int64(r.ID), r.Username, r.FullName, r.Email, r.Phone, string(r.Role), r.IsActive, r.CompanyID, r.LastLogin)
+}
+
+func buildUserResponse(id int64, username, fullName, email, phone, role string, isActive bool, companyID *int32, lastLogin string) userResponse {
+	u := userResponse{
+		ID:       id,
+		Username: username,
+		FullName: fullName,
+		Email:    email,
+		Phone:    phone,
+		Role:     role,
+		IsActive: isActive,
+	}
+	if companyID != nil {
+		cid := int64(*companyID)
+		u.CompanyID = &cid
+	}
+	if lastLogin != "" {
+		ll := lastLogin
+		u.LastLogin = &ll
+	}
+	return u
+}
+
 // ── ListUsers ──────────────────────────────────────────────────────────────
 
 func (h *handler) ListUsers(c *gin.Context) {
-	rows, err := h.DB.Query(`
-		SELECT id, username, COALESCE(full_name,''), COALESCE(email,''), COALESCE(phone,''),
-		       role, is_active, company_id,
-		       DATE_FORMAT(last_login, '%Y-%m-%dT%H:%i:%sZ')
-		FROM user
-		ORDER BY id ASC
-	`)
+	rows, err := h.queries.ListUsers(c.Request.Context())
 	if err != nil {
 		log.Printf("ListUsers query: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrListUsers})
 		return
 	}
-	defer rows.Close()
-
-	var users []userResponse
-	for rows.Next() {
-		var u userResponse
-		var companyID sql.NullInt64
-		var lastLogin sql.NullString
-		if err := rows.Scan(&u.ID, &u.Username, &u.FullName, &u.Email, &u.Phone,
-			&u.Role, &u.IsActive, &companyID, &lastLogin); err != nil {
-			log.Printf("ListUsers scan: %v", err)
-			continue
-		}
-		if companyID.Valid {
-			u.CompanyID = &companyID.Int64
-		}
-		if lastLogin.Valid {
-			s := lastLogin.String
-			u.LastLogin = &s
-		}
-		users = append(users, u)
+	users := make([]userResponse, 0, len(rows))
+	for _, r := range rows {
+		users = append(users, fromListRow(r))
 	}
 	c.JSON(http.StatusOK, gin.H{"data": users})
 }
@@ -90,17 +98,7 @@ func (h *handler) GetUserByID(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidUserID})
 		return
 	}
-
-	var u userResponse
-	var companyID sql.NullInt64
-	var lastLogin sql.NullString
-	err = h.DB.QueryRow(`
-		SELECT id, username, COALESCE(full_name,''), COALESCE(email,''), COALESCE(phone,''),
-		       role, is_active, company_id,
-		       DATE_FORMAT(last_login, '%Y-%m-%dT%H:%i:%sZ')
-		FROM user WHERE id = ?
-	`, id).Scan(&u.ID, &u.Username, &u.FullName, &u.Email, &u.Phone,
-		&u.Role, &u.IsActive, &companyID, &lastLogin)
+	row, err := h.queries.GetUserAdmin(c.Request.Context(), int32(id))
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"detail": ErrUserNotFound})
 		return
@@ -110,14 +108,7 @@ func (h *handler) GetUserByID(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrFetchUser})
 		return
 	}
-	if companyID.Valid {
-		u.CompanyID = &companyID.Int64
-	}
-	if lastLogin.Valid {
-		s := lastLogin.String
-		u.LastLogin = &s
-	}
-	c.JSON(http.StatusOK, gin.H{"data": u})
+	c.JSON(http.StatusOK, gin.H{"data": fromAdminRow(row)})
 }
 
 // ── CreateUser ─────────────────────────────────────────────────────────────
@@ -143,36 +134,41 @@ func (h *handler) CreateUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidRole + "; expected admin, manager or employee"})
 		return
 	}
+	ctx := c.Request.Context()
 
 	// Default company to the caller's company if not provided.
-	if req.CompanyID == nil {
-		var c64 sql.NullInt64
-		if err := h.DB.QueryRow("SELECT company_id FROM user WHERE id = ?", GetSessionInfo(c).id).Scan(&c64); err != nil && err != sql.ErrNoRows {
+	var companyID *int32
+	if req.CompanyID != nil {
+		cid := int32(*req.CompanyID)
+		companyID = &cid
+	} else {
+		cid, err := h.queries.GetUserCompanyID(ctx, int32(GetSessionInfo(c).id))
+		if err != nil && err != sql.ErrNoRows {
 			log.Printf("CreateUser: lookup caller company_id: %v", err)
 		}
-		if c64.Valid {
-			req.CompanyID = &c64.Int64
-		}
+		companyID = cid
 	}
 
 	// Username uniqueness
-	var exists int
-	if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE username = ?", req.Username).Scan(&exists); err != nil {
+	nameCount, err := h.queries.CountUsersByUsername(ctx, req.Username)
+	if err != nil {
 		log.Printf("CreateUser: username uniqueness check: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDatabase})
 		return
 	}
-	if exists > 0 {
+	if nameCount > 0 {
 		c.JSON(http.StatusConflict, gin.H{"detail": ErrUsernameExists})
 		return
 	}
 	if req.Email != "" {
-		if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE email = ?", req.Email).Scan(&exists); err != nil {
+		email := req.Email
+		emailCount, err := h.queries.CountUsersByEmail(ctx, &email)
+		if err != nil {
 			log.Printf("CreateUser: email uniqueness check: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDatabase})
 			return
 		}
-		if exists > 0 {
+		if emailCount > 0 {
 			c.JSON(http.StatusConflict, gin.H{"detail": ErrEmailExists})
 			return
 		}
@@ -190,10 +186,17 @@ func (h *handler) CreateUser(c *gin.Context) {
 		active = *req.IsActive
 	}
 
-	res, err := h.DB.Exec(`
-		INSERT INTO user (username, full_name, password, email, phone, company_id, is_active, role)
-		VALUES (?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?)
-	`, req.Username, req.FullName, string(hash), req.Email, req.Phone, req.CompanyID, active, req.Role)
+	fullName := req.FullName
+	res, err := h.queries.CreateUserAdmin(ctx, db.CreateUserAdminParams{
+		Username:  req.Username,
+		FullName:  &fullName,
+		Password:  string(hash),
+		Email:     req.Email,
+		Phone:     req.Phone,
+		CompanyID: companyID,
+		IsActive:  active,
+		Role:      db.UserRole(req.Role),
+	})
 	if err != nil {
 		log.Printf("CreateUser insert: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrCreateUser})
@@ -237,16 +240,17 @@ func (h *handler) UpdateUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidRole})
 		return
 	}
+	ctx := c.Request.Context()
 
 	// Prevent the only admin from being demoted or deactivated by mistake.
 	if (req.Role != nil && *req.Role != RoleAdmin) || (req.IsActive != nil && !*req.IsActive) {
-		var currentRole string
-		if err := h.DB.QueryRow("SELECT role FROM user WHERE id = ?", id).Scan(&currentRole); err != nil && err != sql.ErrNoRows {
+		currentRole, err := h.queries.GetUserRole(ctx, int32(id))
+		if err != nil && err != sql.ErrNoRows {
 			log.Printf("UpdateUser: lookup current role: %v", err)
 		}
-		if currentRole == RoleAdmin {
-			var adminCount int
-			if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE role = 'admin' AND is_active = 1").Scan(&adminCount); err != nil {
+		if string(currentRole) == RoleAdmin {
+			adminCount, err := h.queries.CountActiveAdmins(ctx)
+			if err != nil {
 				log.Printf("UpdateUser: count admins: %v", err)
 			}
 			if adminCount <= 1 {
@@ -256,48 +260,38 @@ func (h *handler) UpdateUser(c *gin.Context) {
 		}
 	}
 
-	// Build a static UPDATE: nil pointer ⇒ NULL ⇒ COALESCE keeps the row's
-	// existing value. Avoids dynamic SQL formatting (Sonar S2077).
+	// Build the update params: nil pointer / null wrapper ⇒ COALESCE keeps
+	// the existing column value. Empty-string email/phone is normalised to
+	// NULL to match the previous NULLIF behaviour.
+	params := db.UpdateUserAdminParams{ID: int32(id)}
 	hasUpdate := false
-	var (
-		fullNameArg  any = nil
-		emailArg     any = nil
-		phoneArg     any = nil
-		roleArg      any = nil
-		isActiveArg  any = nil
-		companyIDArg any = nil
-	)
 	if req.FullName != nil {
-		fullNameArg = *req.FullName
+		params.FullName = req.FullName
 		hasUpdate = true
 	}
 	if req.Email != nil {
-		// Empty string normalised to NULL (matches NULLIF behaviour).
-		if *req.Email == "" {
-			emailArg = nil
-		} else {
-			emailArg = *req.Email
+		if *req.Email != "" {
+			params.Email = req.Email
 		}
 		hasUpdate = true
 	}
 	if req.Phone != nil {
-		if *req.Phone == "" {
-			phoneArg = nil
-		} else {
-			phoneArg = *req.Phone
+		if *req.Phone != "" {
+			params.Phone = req.Phone
 		}
 		hasUpdate = true
 	}
 	if req.Role != nil {
-		roleArg = *req.Role
+		params.Role = db.NullUserRole{UserRole: db.UserRole(*req.Role), Valid: true}
 		hasUpdate = true
 	}
 	if req.IsActive != nil {
-		isActiveArg = *req.IsActive
+		params.IsActive = sql.NullBool{Bool: *req.IsActive, Valid: true}
 		hasUpdate = true
 	}
 	if req.CompanyID != nil {
-		companyIDArg = *req.CompanyID
+		cid := int32(*req.CompanyID)
+		params.CompanyID = &cid
 		hasUpdate = true
 	}
 	if !hasUpdate {
@@ -305,17 +299,7 @@ func (h *handler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	const updateSQL = `UPDATE user SET
-            full_name  = COALESCE(?, full_name),
-            email      = COALESCE(?, email),
-            phone      = COALESCE(?, phone),
-            role       = COALESCE(?, role),
-            is_active  = COALESCE(?, is_active),
-            company_id = COALESCE(?, company_id)
-        WHERE id = ?`
-	res, err := h.DB.Exec(updateSQL,
-		fullNameArg, emailArg, phoneArg, roleArg, isActiveArg, companyIDArg, id,
-	)
+	res, err := h.queries.UpdateUserAdmin(ctx, params)
 	if err != nil {
 		log.Printf("UpdateUser: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrUpdateUser})
@@ -343,10 +327,11 @@ func (h *handler) DeleteUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "cannot deactivate your own account"})
 		return
 	}
+	ctx := c.Request.Context()
 
 	// Refuse to deactivate the last active admin.
-	var role string
-	if err := h.DB.QueryRow("SELECT role FROM user WHERE id = ?", id).Scan(&role); err == sql.ErrNoRows {
+	role, err := h.queries.GetUserRole(ctx, int32(id))
+	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"detail": ErrUserNotFound})
 		return
 	} else if err != nil {
@@ -354,9 +339,9 @@ func (h *handler) DeleteUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDeleteUser})
 		return
 	}
-	if role == RoleAdmin {
-		var adminCount int
-		if err := h.DB.QueryRow("SELECT COUNT(*) FROM user WHERE role = 'admin' AND is_active = 1").Scan(&adminCount); err != nil {
+	if string(role) == RoleAdmin {
+		adminCount, err := h.queries.CountActiveAdmins(ctx)
+		if err != nil {
 			log.Printf("DeleteUser: count admins: %v", err)
 		}
 		if adminCount <= 1 {
@@ -365,7 +350,7 @@ func (h *handler) DeleteUser(c *gin.Context) {
 		}
 	}
 
-	if _, err := h.DB.Exec("UPDATE user SET is_active = 0 WHERE id = ?", id); err != nil {
+	if err := h.queries.DeactivateUser(ctx, int32(id)); err != nil {
 		log.Printf("DeleteUser: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrDeleteUser})
 		return
@@ -396,7 +381,11 @@ func (h *handler) AdminResetUserPassword(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrHashPassword})
 		return
 	}
-	res, err := h.DB.Exec("UPDATE user SET password = ? WHERE id = ?", string(hash), id)
+	ctx := c.Request.Context()
+	res, err := h.queries.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
+		Password: string(hash),
+		ID:       int32(id),
+	})
 	if err != nil {
 		log.Printf("AdminResetUserPassword: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrResetPassword})
@@ -409,7 +398,7 @@ func (h *handler) AdminResetUserPassword(c *gin.Context) {
 	}
 
 	// Invalidate all refresh tokens for this user so they have to log in again.
-	if _, err := h.DB.Exec("DELETE FROM refresh_token WHERE user_id = ?", id); err != nil {
+	if err := h.queries.DeleteRefreshTokensForUser(ctx, int32(id)); err != nil {
 		log.Printf("AdminResetUserPassword: revoke refresh tokens: %v", err)
 	}
 

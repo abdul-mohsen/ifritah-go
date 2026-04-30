@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
@@ -33,6 +34,49 @@ func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, u
 	}
 
 	return bills
+}
+
+// purchaseBillSetup is the result of beginPurchaseBillTx — everything both
+// Create and Update flows need before they shape their own DB params.
+type purchaseBillSetup struct {
+	request        model.AddPurchaseBillRequest
+	session        userSession
+	paymentDueDate *time.Time
+	effectiveDate  time.Time
+	tx             *sql.Tx
+	qtx            *db.Queries
+}
+
+// beginPurchaseBillTx binds the JSON payload, validates store access, parses
+// dates, and opens a transaction. On any failure it writes the appropriate
+// 4xx/5xx response and returns ok=false; callers just `return`.
+func (h *handler) beginPurchaseBillTx(c *gin.Context, defaultState int32) (*purchaseBillSetup, bool) {
+	req := model.AddPurchaseBillRequest{
+		State:         defaultState,
+		PaymentMethod: 0,
+		PaidAmount:    decimal.Zero,
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
+		return nil, false
+	}
+	pdd, eff, ok := h.preparePurchaseBillDates(c, &req)
+	if !ok {
+		return nil, false
+	}
+	tx, err := h.DB.Begin()
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return nil, false
+	}
+	return &purchaseBillSetup{
+		request:        req,
+		session:        GetSessionInfo(c),
+		paymentDueDate: pdd,
+		effectiveDate:  eff,
+		tx:             tx,
+		qtx:            h.queries.WithTx(tx),
+	}, true
 }
 
 // preparePurchaseBillDates validates store ownership and parses optional
@@ -68,33 +112,15 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	id := uint64(Id)
 
-	request := model.AddPurchaseBillRequest{
-		State:         3,
-		PaymentMethod: 0,
-		PaidAmount:    decimal.Zero,
-	}
-
-	if err := c.BindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
-		return
-	}
-
-	userSession := GetSessionInfo(c)
-
-	paymentDueDate, effectiveDate, ok := h.preparePurchaseBillDates(c, &request)
+	setup, ok := h.beginPurchaseBillTx(c, 3)
 	if !ok {
 		return
 	}
-
-	tx, err := h.DB.Begin()
-
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
+	request, userSession := setup.request, setup.session
+	paymentDueDate, effectiveDate := setup.paymentDueDate, setup.effectiveDate
+	tx, qtx := setup.tx, setup.qtx
 
 	defer tx.Rollback()
-	qtx := h.queries.WithTx(tx)
 
 	args := db.UpdatePurchaseBillParams{
 		EffectiveDate:          effectiveDate,
@@ -179,32 +205,15 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 func (h *handler) AddPurchaseBill(c *gin.Context) {
 
-	request := model.AddPurchaseBillRequest{
-		State:         1,
-		PaymentMethod: 0,
-		PaidAmount:    decimal.Zero,
-	}
-
-	if err := c.BindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
-		return
-	}
-
-	userSession := GetSessionInfo(c)
-
-	paymentDueDate, effectiveDate, ok := h.preparePurchaseBillDates(c, &request)
+	setup, ok := h.beginPurchaseBillTx(c, 1)
 	if !ok {
 		return
 	}
-	tx, err := h.DB.Begin()
-
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
+	request, userSession := setup.request, setup.session
+	paymentDueDate, effectiveDate := setup.paymentDueDate, setup.effectiveDate
+	tx, qtx := setup.tx, setup.qtx
 
 	defer tx.Rollback()
-	qtx := h.queries.WithTx(tx)
 
 	args := db.AddPurchaseBillParams{
 		EffectiveDate:          effectiveDate,

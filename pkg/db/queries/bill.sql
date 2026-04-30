@@ -5,13 +5,13 @@
 -- name: GetAllBill :many
 SELECT * from(
 			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, discount, sequence_number, bill.user_phone_number, client.id is not null as bill_type, cn.state as credit_state, total, total_vat, total_before_vat
-			FROM bill_totals as bill
+			FROM bill
 			JOIN credit_note  cn on cn.bill_id = bill.id
 			LEFT JOIN client  on client.id = bill.client_id
 			WHERE bill.state >= 0
 			and (sqlc.narg('phonenumber') is null or bill.user_phone_number like sqlc.narg('phonenumber'))
 			UNION
-			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, discount, sequence_number, user_phone_number, client.id is not null as bill_type, 0 as credit_state, total, total_vat, total_before_vat from bill_totals as bill
+			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, discount, sequence_number, user_phone_number, client.id is not null as bill_type, 0 as credit_state, total, total_vat, total_before_vat from bill
 			LEFT JOIN client  on client.id = bill.client_id
 			WHERE bill. state >= 0
 			and (sqlc.narg('phonenumber') is null or bill.user_phone_number like sqlc.narg('phonenumber'))
@@ -52,7 +52,7 @@ COALESCE(
 	FROM bill_product p
 	WHERE p.bill_id = b.id),
   JSON_ARRAY()) AS products
-FROM bill_totals b
+FROM bill b
 JOIN store on store.id = b.store_id
 JOIN company on company.id = store.company_id
 WHERE b.id = ? LIMIT 1 ;
@@ -68,7 +68,7 @@ store.name as store_name,
 cn.state as credit_state,
 cn.note as credit_note,
 cn.id as credit_id
-FROM bill_totals b
+FROM bill b
 JOIN store on store.id = b.store_id
 JOIN company on company.id = store.company_id
 LEFT JOIN credit_note cn on cn.bill_id = b.id

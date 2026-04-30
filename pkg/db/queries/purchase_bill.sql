@@ -1,6 +1,6 @@
 -- name: GetAllPurchaseBill :many
 select b.*
-	from purchase_bill_totals as b
+	from purchase_bill as b
 	join store on store.id = b.store_id
 	join company on company.id = store.company_id
 	join user on user.id= ? and company.id=user.company_id
@@ -9,7 +9,7 @@ select b.*
 
 -- name: GetPurchaseBillDetail :one
 select b.*
-	from purchase_bill_totals as b
+	from purchase_bill as b
 	join store on store.id = b.store_id
 	join company on company.id = store.company_id
 	join user on user.id = ? and company.id=user.company_id

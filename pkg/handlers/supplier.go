@@ -3,6 +3,7 @@ package handlers
 import (
 	"ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -35,6 +36,7 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
+		log.Printf("GetAllSupplier: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}

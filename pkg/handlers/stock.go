@@ -386,6 +386,7 @@ func (h *handler) recordCreditNoteMovements(tx *db.Queries, c *gin.Context, cred
 func (h *handler) StockAdjust(c *gin.Context) {
 	var req model.StockAdjustRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("StockAdjust: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
 		return
 	}
@@ -401,6 +402,7 @@ func (h *handler) StockAdjust(c *gin.Context) {
 	// Get product info
 	_, currentQty, err := h.getProductStock(c, req.ProductID)
 	if err != nil {
+		log.Printf("StockAdjust: %v", err)
 		c.JSON(http.StatusNotFound, gin.H{"detail": "product not found"})
 		return
 	}
@@ -419,6 +421,7 @@ func (h *handler) StockAdjust(c *gin.Context) {
 	// Transaction: update product + insert movement
 	tx, err := h.DB.Begin()
 	if err != nil {
+		log.Printf("StockAdjust: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "transaction error"})
 		return
 	}
@@ -426,6 +429,7 @@ func (h *handler) StockAdjust(c *gin.Context) {
 	qtx := h.queries.WithTx(tx)
 
 	if err := updateProductQuantity(qtx, c, req.ProductID, req.QuantityChange); err != nil {
+		log.Printf("StockAdjust: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update stock"})
 		return
 	}
@@ -442,6 +446,7 @@ func (h *handler) StockAdjust(c *gin.Context) {
 	}
 
 	if err := tx.Commit(); err != nil {
+		log.Printf("StockAdjust: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "commit error"})
 		return
 	}
@@ -459,6 +464,7 @@ func (h *handler) StockAdjust(c *gin.Context) {
 func (h *handler) StockCheck(c *gin.Context) {
 	var req model.StockCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("StockCheck: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
 		return
 	}
@@ -508,6 +514,7 @@ func (h *handler) StockCheck(c *gin.Context) {
 func (h *handler) GetStockMovements(c *gin.Context) {
 	ProductID, err := strconv.ParseInt(c.Param("product_id"), 10, 64)
 	if err != nil {
+		log.Printf("GetStockMovements: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid product_id"})
 		return
 	}
@@ -544,6 +551,7 @@ func (h *handler) GetStockMovements(c *gin.Context) {
 
 	rows, err := h.DB.Query(query, args...)
 	if err != nil {
+		log.Printf("GetStockMovements: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "query failed"})
 		return
 	}

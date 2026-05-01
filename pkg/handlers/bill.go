@@ -77,6 +77,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
+		log.Printf("GetBills: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -120,6 +121,7 @@ func (h *handler) AddBill(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
+		log.Printf("AddBill: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -170,6 +172,7 @@ func (h *handler) AddBill(c *gin.Context) {
 
 	res, err := qtx.CreateBill(c.Request.Context(), args)
 	if err != nil {
+		log.Printf("AddBill: %v", err)
 		if IsDuplicate(err) {
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
 				"message": "Supplier bill number already exists for this supplier",
@@ -181,6 +184,7 @@ func (h *handler) AddBill(c *gin.Context) {
 	id, err := res.LastInsertId()
 
 	if err != nil {
+		log.Printf("AddBill: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -215,6 +219,7 @@ func (h *handler) AddBill(c *gin.Context) {
 			enforcement, int32(userSession.id),
 		)
 		if err != nil {
+			log.Printf("AddBill: %v", err)
 			// enforce mode: block if insufficient stock
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
@@ -261,6 +266,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	log.Print(request)
 
 	if err := c.BindJSON(&request); err != nil {
+		log.Printf("SubmitDraftBill: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -351,6 +357,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 			enforcement, int32(userSession.id),
 		)
 		if err != nil {
+			log.Printf("SubmitDraftBill: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
 				"type":   "stock_insufficient",
@@ -713,6 +720,7 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 
 	// ── Stock tracking: restore stock BEFORE deleting the bill (need bill data intact) ──
 	if err := h.reverseSaleMovements(qtx, c, billID, int32(userSession.id)); err != nil {
+		log.Printf("DeleteBillDetail: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"detail": err.Error(),
 			"type":   "stock_error",

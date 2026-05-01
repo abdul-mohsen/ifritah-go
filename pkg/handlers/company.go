@@ -52,6 +52,7 @@ func (h *handler) GetCompany(c *gin.Context) {
 	cid := h.getUserCompany(c)
 	row, err := h.queries.GetCompanyByID(c.Request.Context(), int32(cid))
 	if err != nil {
+		log.Printf("GetCompany: %v", err)
 		c.JSON(404, gin.H{"detail": "company not found"})
 		return
 	}
@@ -65,6 +66,7 @@ func (h *handler) UpdateCompany(c *gin.Context) {
 		NameAr string `json:"name_ar" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("UpdateCompany: %v", err)
 		c.JSON(400, gin.H{"detail": "name_ar is required"})
 		return
 	}

@@ -57,6 +57,7 @@ func (h *handler) beginPurchaseBillTx(c *gin.Context, defaultState int32) (*purc
 		PaidAmount:    decimal.Zero,
 	}
 	if err := c.BindJSON(&req); err != nil {
+		log.Printf("beginPurchaseBillTx: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
 		return nil, false
 	}
@@ -153,6 +154,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable {
 		if err := h.reversePurchaseMovements(qtx, c, id, int32(userSession.id)); err != nil {
+			log.Printf("UpdatePurchaseBill: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
 				"type":   "stock_error",
@@ -175,6 +177,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 
 	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId)
 	if err != nil {
+		log.Printf("UpdatePurchaseBill: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -231,6 +234,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	res, err := qtx.AddPurchaseBill(c.Request.Context(), args)
 	if err != nil {
+		log.Printf("AddPurchaseBill: %v", err)
 		if IsDuplicate(err) {
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
 				"message": "Supplier bill number already exists for this supplier",
@@ -245,6 +249,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	id := uint64(Id)
 
 	if err != nil {
+		log.Printf("AddPurchaseBill: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -258,6 +263,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId)
 	if err != nil {
+		log.Printf("AddPurchaseBill: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -356,6 +362,7 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
+		log.Printf("GetAllPurchaseBill: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
 		return
 	}
@@ -471,6 +478,7 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 
 	// ── Stock tracking: reverse stock BEFORE deleting (need PB data intact) ──
 	if err := h.reversePurchaseMovements(qtx, c, pbID, int32(userSession.id)); err != nil {
+		log.Printf("DeletePurchaseBillDetail: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"detail": err.Error(),
 			"type":   "stock_error",

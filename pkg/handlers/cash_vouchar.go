@@ -219,6 +219,7 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 func (h *handler) GetCashVoucher(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+		log.Printf("GetCashVoucher: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "معرّف غير صالح"})
 		return
 	}
@@ -263,12 +264,14 @@ func (h *handler) GetCashVoucher(c *gin.Context) {
 func (h *handler) CreateCashVoucher(c *gin.Context) {
 	var req cashVoucherCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("CreateCashVoucher: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "بيانات غير صالحة: " + err.Error()})
 		return
 	}
 
 	// Validate fields
 	if err := validateCashVoucherRequest(&req); err != nil {
+		log.Printf("CreateCashVoucher: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
 		return
 	}
@@ -278,6 +281,7 @@ func (h *handler) CreateCashVoucher(c *gin.Context) {
 	// Parse effective_date
 	effectiveDate, err := parseFlexibleDate(req.EffectiveDate)
 	if err != nil {
+		log.Printf("CreateCashVoucher: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "تاريخ غير صالح"})
 		return
 	}
@@ -369,17 +373,20 @@ func (h *handler) CreateCashVoucher(c *gin.Context) {
 func (h *handler) UpdateCashVoucher(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+		log.Printf("UpdateCashVoucher: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "معرّف غير صالح"})
 		return
 	}
 
 	var req cashVoucherCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("UpdateCashVoucher: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "بيانات غير صالحة: " + err.Error()})
 		return
 	}
 
 	if err := validateCashVoucherRequest(&req); err != nil {
+		log.Printf("UpdateCashVoucher: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
 		return
 	}
@@ -389,6 +396,7 @@ func (h *handler) UpdateCashVoucher(c *gin.Context) {
 	// Parse effective_date
 	effectiveDate, err := parseFlexibleDate(req.EffectiveDate)
 	if err != nil {
+		log.Printf("UpdateCashVoucher: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "تاريخ غير صالح"})
 		return
 	}
@@ -460,6 +468,7 @@ func (h *handler) UpdateCashVoucher(c *gin.Context) {
 func (h *handler) DeleteCashVoucher(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+		log.Printf("DeleteCashVoucher: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "معرّف غير صالح"})
 		return
 	}
@@ -507,6 +516,7 @@ func (h *handler) DeleteCashVoucher(c *gin.Context) {
 func (h *handler) ApproveCashVoucher(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+		log.Printf("ApproveCashVoucher: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "معرّف غير صالح"})
 		return
 	}
@@ -568,6 +578,7 @@ func (h *handler) ApproveCashVoucher(c *gin.Context) {
 func (h *handler) PostCashVoucher(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+		log.Printf("PostCashVoucher: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "معرّف غير صالح"})
 		return
 	}

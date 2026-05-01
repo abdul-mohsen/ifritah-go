@@ -35,6 +35,7 @@ func (h *handler) CreditBill(c *gin.Context) {
 	var request BillCredit
 
 	if err := c.BindJSON(&request); err != nil {
+		log.Printf("CreditBill: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}

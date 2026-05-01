@@ -528,6 +528,7 @@ func (h *handler) DownloadAllVinPartCSV(c *gin.Context) {
 	defer writer.Flush()
 
 	if err := writer.Write([]string{"legacyArticleId", "number", "type"}); err != nil {
+		log.Printf("DownloadAllVinPartCSV: %v", err)
 		c.String(http.StatusInternalServerError, "Error writing CSV header")
 		return
 	}
@@ -535,6 +536,7 @@ func (h *handler) DownloadAllVinPartCSV(c *gin.Context) {
 	for _, item := range parts {
 		row := []string{strconv.Itoa(*item.Id), item.OemNumber, *item.Type}
 		if err := writer.Write(row); err != nil {
+			log.Printf("DownloadAllVinPartCSV: %v", err)
 			c.String(http.StatusInternalServerError, "Error writing CSV data")
 			return
 		}

@@ -72,6 +72,7 @@ func (h *handler) GetStores(c *gin.Context) {
 func (h *handler) GetStore(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+		log.Printf("GetStore: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid store ID"})
 		return
 	}
@@ -116,6 +117,7 @@ func (h *handler) GetStore(c *gin.Context) {
 		&s.Region, &s.PostalCode, &s.AdditionalNum, &s.UnitNumber,
 		&s.Country, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
+		log.Printf("GetStore: %v", err)
 		c.JSON(http.StatusNotFound, gin.H{"detail": "store not found"})
 		return
 	}
@@ -142,6 +144,7 @@ func (h *handler) CreateStore(c *gin.Context) {
 		Country        string `json:"country"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("CreateStore: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "الاسم مطلوب"})
 		return
 	}
@@ -193,6 +196,7 @@ func (h *handler) CreateStore(c *gin.Context) {
 func (h *handler) UpdateStore(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+		log.Printf("UpdateStore: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid store ID"})
 		return
 	}
@@ -212,6 +216,7 @@ func (h *handler) UpdateStore(c *gin.Context) {
 		Country        string `json:"country"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("UpdateStore: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request"})
 		return
 	}
@@ -258,6 +263,7 @@ func (h *handler) UpdateStore(c *gin.Context) {
 func (h *handler) DeleteStore(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+		log.Printf("DeleteStore: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid store ID"})
 		return
 	}

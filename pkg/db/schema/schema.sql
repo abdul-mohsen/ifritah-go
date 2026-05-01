@@ -628,37 +628,6 @@ CREATE TABLE `bill_product` (
 /*!50003 SET collation_connection  = @saved_col_connection */ ;
 
 --
--- Temporary view structure for view `bill_totals`
---
-
-DROP TABLE IF EXISTS `bill_totals`;
-/*!50001 DROP VIEW IF EXISTS `bill_totals`*/;
-SET @saved_cs_client     = @@character_set_client;
-/*!50503 SET character_set_client = utf8mb4 */;
-/*!50001 CREATE VIEW `bill_totals` AS SELECT 
- 1 AS `id`,
- 1 AS `effective_date`,
- 1 AS `payment_due_date`,
- 1 AS `state`,
- 1 AS `discount`,
- 1 AS `store_id`,
- 1 AS `sequence_number`,
- 1 AS `merchant_id`,
- 1 AS `maintenance_cost`,
- 1 AS `note`,
- 1 AS `userName`,
- 1 AS `client_id`,
- 1 AS `user_phone_number`,
- 1 AS `payment_method`,
- 1 AS `branch_id`,
- 1 AS `deliver_date`,
- 1 AS `total_before_vat`,
- 1 AS `total_vat`,
- 1 AS `total`,
- 1 AS `qr_code`*/;
-SET character_set_client = @saved_cs_client;
-
---
 -- Table structure for table `bodymark`
 --
 
@@ -1864,30 +1833,6 @@ CREATE TABLE `purchase_bill_product` (
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 
-DROP TABLE IF EXISTS `purchase_bill_totals`;
-/*!50001 DROP VIEW IF EXISTS `purchase_bill_totals`*/;
-SET @saved_cs_client     = @@character_set_client;
-/*!50503 SET character_set_client = utf8mb4 */;
-/*!50001 CREATE VIEW `purchase_bill_totals` AS SELECT 
- 1 AS `id`,
- 1 AS `effective_date`,
- 1 AS `payment_due_date`,
- 1 AS `state`,
- 1 AS `discount`,
- 1 AS `supplier_id`,
- 1 AS `sequence_number`,
- 1 AS `supplier_sequence_number`,
- 1 AS `vat_sequence_number`,
- 1 AS `store_id`,
- 1 AS `merchant_id`,
- 1 AS `pdf_link`,
- 1 AS `payment_method`,
- 1 AS `deliver_date`,
- 1 AS `total_before_vat`,
- 1 AS `total_vat`,
- 1 AS `total`*/;
-SET character_set_client = @saved_cs_client;
-
 --
 -- Table structure for table `refresh_token`
 --
@@ -2378,24 +2323,6 @@ CREATE TABLE `zatca_submission` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Final view structure for view `bill_totals`
---
-
-/*!50001 DROP VIEW IF EXISTS `bill_totals`*/;
-/*!50001 SET @saved_cs_client          = @@character_set_client */;
-/*!50001 SET @saved_cs_results         = @@character_set_results */;
-/*!50001 SET @saved_col_connection     = @@collation_connection */;
-/*!50001 SET character_set_client      = utf8mb4 */;
-/*!50001 SET character_set_results     = utf8mb4 */;
-/*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
-/*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
-/*!50001 VIEW `bill_totals` AS select `b`.`id` AS `id`,`b`.`effective_date` AS `effective_date`,`b`.`payment_due_date` AS `payment_due_date`,`b`.`state` AS `state`,`b`.`discount` AS `discount`,`b`.`store_id` AS `store_id`,`b`.`sequence_number` AS `sequence_number`,`b`.`merchant_id` AS `merchant_id`,`b`.`maintenance_cost` AS `maintenance_cost`,`b`.`note` AS `note`,`b`.`userName` AS `userName`,`b`.`client_id` AS `client_id`,`b`.`user_phone_number` AS `user_phone_number`,`b`.`payment_method` AS `payment_method`,`b`.`branch_id` AS `branch_id`,`b`.`deliver_date` AS `deliver_date`,round(coalesce(sum(`bp`.`total_before_vat`),0),2) AS `total_before_vat`,round(coalesce(sum(`bp`.`vat_total`),0),2) AS `total_vat`,round(coalesce(sum(`bp`.`total_including_vat`),0),2) AS `total`,`b`.`qr_code` AS `qr_code` from (`bill` `b` left join `bill_product` `bp` on((`b`.`id` = `bp`.`bill_id`))) group by `b`.`id` */;
-/*!50001 SET character_set_client      = @saved_cs_client */;
-/*!50001 SET character_set_results     = @saved_cs_results */;
-/*!50001 SET collation_connection      = @saved_col_connection */;
-
---
 -- Final view structure for view `cash_voucher_summary`
 --
 
@@ -2413,23 +2340,6 @@ CREATE TABLE `zatca_submission` (
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
 
---
--- Final view structure for view `purchase_bill_totals`
---
-
-/*!50001 DROP VIEW IF EXISTS `purchase_bill_totals`*/;
-/*!50001 SET @saved_cs_client          = @@character_set_client */;
-/*!50001 SET @saved_cs_results         = @@character_set_results */;
-/*!50001 SET @saved_col_connection     = @@collation_connection */;
-/*!50001 SET character_set_client      = utf8mb4 */;
-/*!50001 SET character_set_results     = utf8mb4 */;
-/*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
-/*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
-/*!50001 VIEW `purchase_bill_totals` AS select `b`.`id` AS `id`,`b`.`effective_date` AS `effective_date`,`b`.`payment_due_date` AS `payment_due_date`,`b`.`state` AS `state`,`b`.`discount` AS `discount`,`b`.`supplier_id` AS `supplier_id`,`b`.`sequence_number` AS `sequence_number`,`b`.`supplier_sequence_number` AS `supplier_sequence_number`,`b`.`vat_sequence_number` AS `vat_sequence_number`,`b`.`store_id` AS `store_id`,`b`.`merchant_id` AS `merchant_id`,`b`.`pdf_link` AS `pdf_link`,`b`.`payment_method` AS `payment_method`,`b`.`deliver_date` AS `deliver_date`,round(coalesce(sum(`bp`.`total_before_vat`),0),2) AS `total_before_vat`,round(coalesce(sum(`bp`.`vat_total`),0),2) AS `total_vat`,round(coalesce(sum(`bp`.`total_including_vat`),0),2) AS `total` from (`purchase_bill` `b` left join `purchase_bill_product` `bp` on((`b`.`id` = `bp`.`bill_id`))) group by `b`.`id` */;
-/*!50001 SET character_set_client      = @saved_cs_client */;
-/*!50001 SET character_set_results     = @saved_cs_results */;
-/*!50001 SET collation_connection      = @saved_col_connection */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

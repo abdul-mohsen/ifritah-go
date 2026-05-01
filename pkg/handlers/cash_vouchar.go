@@ -48,7 +48,7 @@ type cashVoucherListRequest struct {
 
 type cashVoucherCreateRequest struct {
 	VoucherType          string          `json:"voucher_type" binding:"required"`
-	EffectiveDate        string          `json:"effective_date" binding:"required"`
+	EffectiveDate        time.Time       `json:"effective_date" binding:"required"`
 	Amount               decimal.Decimal `json:"amount" binding:"required"`
 	PaymentMethod        string          `json:"payment_method"`
 	RecipientType        string          `json:"recipient_type" binding:"required"`
@@ -278,13 +278,7 @@ func (h *handler) CreateCashVoucher(c *gin.Context) {
 
 	merchantID := int32(getMerchantID(c))
 
-	// Parse effective_date
-	effectiveDate, err := parseFlexibleDate(req.EffectiveDate)
-	if err != nil {
-		log.Printf("CreateCashVoucher: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "تاريخ غير صالح"})
-		return
-	}
+	effectiveDate := req.EffectiveDate
 
 	// Verify store exists
 	var storeExists int
@@ -393,13 +387,7 @@ func (h *handler) UpdateCashVoucher(c *gin.Context) {
 
 	merchantID := getMerchantID(c)
 
-	// Parse effective_date
-	effectiveDate, err := parseFlexibleDate(req.EffectiveDate)
-	if err != nil {
-		log.Printf("UpdateCashVoucher: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "تاريخ غير صالح"})
-		return
-	}
+	effectiveDate := req.EffectiveDate
 
 	// Verify the voucher exists and is in draft state
 	var currentState int

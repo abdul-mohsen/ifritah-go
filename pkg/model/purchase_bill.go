@@ -28,9 +28,9 @@ type PurchaseBill struct {
 type AddPurchaseBillRequest struct {
 	StoreId                int32                 `json:"store_id" binding:"required"`
 	State                  int32                 `json:"state"`
-	EffectiveDate          *string               `json:"effective_date" `
-	PaymentDueDate         *string               `json:"payment_due_date" `
-	PaymentDate            *string               `json:"payment_date" `
+	EffectiveDate          *time.Time            `json:"effective_date"`
+	PaymentDueDate         *time.Time            `json:"payment_due_date"`
+	PaymentDate            *time.Time            `json:"payment_date"`
 	Discount               decimal.Decimal       `json:"discount"`
 	PaidAmount             decimal.Decimal       `json:"paid_amount" `
 	Products               []PurchaseBillProduct `json:"products" binding:"required,dive"`

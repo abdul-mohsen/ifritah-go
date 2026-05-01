@@ -44,21 +44,12 @@ func (h *handler) checkBillStoreAccess(c *gin.Context, storeID int32) bool {
 	return true
 }
 
-// parseBillDates parses the optional payment_due_date and effective_date
-// fields of a bill request. On error it writes a 4xx response and returns
-// ok=false. effectiveDate falls back to time.Now() when not supplied.
-func parseBillDates(c *gin.Context, rawDue, rawEff *string) (paymentDueDate *time.Time, effectiveDate time.Time, ok bool) {
-	pdd, parsedOk := parseOptionalRequestDate(c, rawDue, "payment_due_date")
-	if !parsedOk {
-		return nil, time.Time{}, false
+// effectiveDateOr returns ed when supplied, otherwise time.Now().
+func effectiveDateOr(ed *time.Time) time.Time {
+	if ed != nil {
+		return *ed
 	}
-	eff := time.Now()
-	if ed, parsedOk2 := parseOptionalRequestDate(c, rawEff, "effective_date"); !parsedOk2 {
-		return nil, time.Time{}, false
-	} else if ed != nil {
-		eff = *ed
-	}
-	return pdd, eff, true
+	return time.Now()
 }
 
 func (h *handler) GetBills(c *gin.Context) {
@@ -132,10 +123,8 @@ func (h *handler) AddBill(c *gin.Context) {
 		return
 	}
 
-	paymentDueDate, effectiveDate, ok := parseBillDates(c, request.PaymentDueDate, request.EffectiveDate)
-	if !ok {
-		return
-	}
+	paymentDueDate := request.PaymentDueDate
+	effectiveDate := effectiveDateOr(request.EffectiveDate)
 	tx, err := h.DB.Begin()
 
 	if err != nil {
@@ -277,10 +266,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		return
 	}
 
-	paymentDueDate, ok := parseOptionalRequestDate(c, request.PaymentDueDate, "payment_due_date")
-	if !ok {
-		return
-	}
+	paymentDueDate := request.PaymentDueDate
 
 	tx, err := h.DB.Begin()
 
@@ -298,7 +284,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	}
 
 	args := db.UpdateBillByIDParams{
-		EffectiveDate:   time.Now(),
+		EffectiveDate:   effectiveDateOr(request.EffectiveDate),
 		PaymentDueDate:  paymentDueDate,
 		State:           request.State,
 		Discount:        request.Discount,

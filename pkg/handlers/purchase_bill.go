@@ -61,9 +61,13 @@ func (h *handler) beginPurchaseBillTx(c *gin.Context, defaultState int32) (*purc
 		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
 		return nil, false
 	}
-	pdd, eff, ok := h.preparePurchaseBillDates(c, &req)
-	if !ok {
+	if !slices.Contains(h.getStoreIds(c), req.StoreId) {
+		c.Status(http.StatusBadRequest)
 		return nil, false
+	}
+	eff := time.Now()
+	if req.EffectiveDate != nil {
+		eff = *req.EffectiveDate
 	}
 	tx, err := h.DB.Begin() //NOSONAR — caller defers tx.Rollback after consuming setup
 	if err != nil {
@@ -73,33 +77,11 @@ func (h *handler) beginPurchaseBillTx(c *gin.Context, defaultState int32) (*purc
 	return &purchaseBillSetup{
 		request:        req,
 		session:        GetSessionInfo(c),
-		paymentDueDate: pdd,
+		paymentDueDate: req.PaymentDueDate,
 		effectiveDate:  eff,
 		tx:             tx,
 		qtx:            h.queries.WithTx(tx),
 	}, true
-}
-
-// preparePurchaseBillDates validates store ownership and parses optional
-// payment_due_date / effective_date fields. Writes its own 4xx response on
-// failure and returns ok=false so callers just `return`.
-func (h *handler) preparePurchaseBillDates(c *gin.Context, request *model.AddPurchaseBillRequest) (paymentDueDate *time.Time, effectiveDate time.Time, ok bool) {
-	storeIds := h.getStoreIds(c)
-	if !slices.Contains(storeIds, request.StoreId) {
-		c.Status(http.StatusBadRequest)
-		return nil, time.Time{}, false
-	}
-	pdd, parsedOk := parseOptionalRequestDate(c, request.PaymentDueDate, "payment_due_date")
-	if !parsedOk {
-		return nil, time.Time{}, false
-	}
-	eff := time.Now()
-	if ed, parsedOk2 := parseOptionalRequestDate(c, request.EffectiveDate, "effective_date"); !parsedOk2 {
-		return nil, time.Time{}, false
-	} else if ed != nil {
-		eff = *ed
-	}
-	return pdd, eff, true
 }
 
 func (h *handler) UpdatePurchaseBill(c *gin.Context) {

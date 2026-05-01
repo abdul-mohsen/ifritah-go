@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -13,14 +12,16 @@ func (h *handler) GetPartType(c *gin.Context) {
 	rows, err := h.DB.Query(query)
 
 	if err != nil {
-		log.Panic(err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
 	}
 
 	var response []string
 	for rows.Next() {
 		var text string
 		if err := rows.Scan(&text); err != nil {
-			log.Panic(err)
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 
 		response = append(response, text)
@@ -44,7 +45,8 @@ func (h *handler) GetPart(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
 	}
 	query := `
 	select distinct articles.legacyArticleId, o.number, articles.genericArticleDescription 
@@ -58,7 +60,8 @@ func (h *handler) GetPart(c *gin.Context) {
 
 	rows, err := h.DB.Query(query, request.Query+"%", request.PageSize, request.Page)
 	if err != nil {
-		log.Panic(err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
 	}
 
 	var parts []Part
@@ -67,7 +70,8 @@ func (h *handler) GetPart(c *gin.Context) {
 		var part Part
 		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type)
 		if err != nil {
-			log.Panic(err)
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 
 		parts = append(parts, part)

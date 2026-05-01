@@ -95,6 +95,7 @@ func (h *handler) UpdateNotificationConfig(c *gin.Context) {
 		EmailEnabled      *bool   `json:"email_enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("UpdateNotificationConfig: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request"})
 		return
 	}
@@ -112,8 +113,9 @@ func (h *handler) UpdateNotificationConfig(c *gin.Context) {
 	}
 	err := h.queries.UpsertNotificationSettings(c.Request.Context(), args)
 	if err != nil {
+		log.Printf("UpdateNotificationConfig: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to save notification config"})
-		log.Panic(err)
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"detail": "success"})
@@ -151,6 +153,7 @@ func (h *handler) GetNotifications(c *gin.Context) {
 		userID, limit,
 	)
 	if err != nil {
+		log.Printf("GetNotifications: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to fetch notifications"})
 		return
 	}
@@ -193,6 +196,7 @@ func (h *handler) MarkNotificationRead(c *gin.Context) {
 		notifID, userID,
 	)
 	if err != nil {
+		log.Printf("MarkNotificationRead: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update"})
 		return
 	}

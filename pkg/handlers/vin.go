@@ -63,14 +63,16 @@ func (h *handler) GetCarsByVin(c *gin.Context) {
 	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00")
 
 	if err != nil {
-		log.Panic(err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
 	}
 
 	var response []CarModel
 	for rows.Next() {
 		var model CarModel
 		if err := rows.Scan(&model.Id, &model.Name, &model.Manufacturer, &model.Type); err != nil {
-			log.Panic(err)
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 
 		response = append(response, model)
@@ -101,7 +103,8 @@ func (h *handler) searchByVinRawSkipCache(c *gin.Context) []byte {
 
 	body, err := getBody(baseurl + global + vin)
 	if err != nil {
-		log.Panic(err)
+		log.Printf("searchByVinRawSkipCache global: %v", err)
+		return nil
 	}
 	if body != nil {
 		h.saveRequest(vin, body)
@@ -110,7 +113,8 @@ func (h *handler) searchByVinRawSkipCache(c *gin.Context) []byte {
 
 	body, err = getBody(baseurl + europe + vin)
 	if err != nil {
-		log.Panic(err)
+		log.Printf("searchByVinRawSkipCache europe: %v", err)
+		return nil
 	}
 	if body != nil {
 		h.saveRequest(vin, body)
@@ -136,7 +140,8 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 	var response VehicleResponse
 
 	if err := json.Unmarshal(body, &response); err != nil {
-		log.Panic(err)
+		log.Printf("searchByVin unmarshal VehicleResponse: %v", err)
+		return BaseModel{}
 	}
 
 	if response.Data.Intro.VIN != nil {
@@ -153,7 +158,8 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 	var europeVehicle EuropeVehicle
 
 	if err := json.Unmarshal(body, &europeVehicle); err != nil {
-		log.Panic(err)
+		log.Printf("searchByVin unmarshal EuropeVehicle: %v", err)
+		return BaseModel{}
 	}
 
 	model := BaseModel{
@@ -277,14 +283,16 @@ func (h *handler) GetAllCachedVin(c *gin.Context) {
 	var vins []string
 	rows, err := h.DB.Query(query)
 	if err != nil {
-		log.Panic(err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
 	}
 	for rows.Next() {
 
 		var vin string
 		err = rows.Scan(&vin)
 		if err != nil {
-			log.Panic(err)
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 
 		vins = append(vins, vin)
@@ -311,7 +319,8 @@ func (h *handler) GetPartByVinDetails(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
 	}
 	model := h.searchByVin(c)
 	parts := h.getPartDetailsByVinQuery(model, request.Query, request.PageSize, request.Page)
@@ -334,7 +343,8 @@ func (h *handler) getPartDetailsByVinQuery(model BaseModel, q string, page, page
 	q = strings.ReplaceAll(strings.ReplaceAll(q, "-", ""), " ", "")
 	rows, err := h.DB.Query(query, model.Model, model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, q, q+"%", pageSize, page)
 	if err != nil {
-		log.Panic(err)
+		log.Printf("getPartDetailsByVinQuery: %v", err)
+		return nil
 	}
 
 	var parts []Part = make([]Part, 0)
@@ -343,7 +353,8 @@ func (h *handler) getPartDetailsByVinQuery(model BaseModel, q string, page, page
 		var part Part
 		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type, &part.Link, &part.Url)
 		if err != nil {
-			log.Panic(err)
+			log.Printf("getPartDetailsByVinQuery scan: %v", err)
+			return nil
 		}
 
 		parts = append(parts, part)
@@ -361,7 +372,8 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
 	}
 	model := h.searchByVin(c)
 	parts := h.getPartByVinQuery(model, request.Query, request.PageSize, request.Page)
@@ -385,7 +397,8 @@ func (h *handler) getPartByVinQuery(model BaseModel, q string, pageSize, page in
 	q = strings.ReplaceAll(strings.ReplaceAll(q, "-", ""), " ", "")
 	rows, err := h.DB.Query(query, "+"+model.Model, year, year, year, year, q+"*", "*"+model.Make+"*", pageSize, page)
 	if err != nil {
-		log.Panic(err)
+		log.Printf("getPartByVinQuery: %v", err)
+		return nil
 	}
 
 	var parts []Part
@@ -394,7 +407,8 @@ func (h *handler) getPartByVinQuery(model BaseModel, q string, pageSize, page in
 		var part Part
 		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type)
 		if err != nil {
-			log.Panic(err)
+			log.Printf("getPartByVinQuery scan: %v", err)
+			return nil
 		}
 
 		parts = append(parts, part)
@@ -514,6 +528,7 @@ func (h *handler) DownloadAllVinPartCSV(c *gin.Context) {
 	defer writer.Flush()
 
 	if err := writer.Write([]string{"legacyArticleId", "number", "type"}); err != nil {
+		log.Printf("DownloadAllVinPartCSV: %v", err)
 		c.String(http.StatusInternalServerError, "Error writing CSV header")
 		return
 	}
@@ -521,6 +536,7 @@ func (h *handler) DownloadAllVinPartCSV(c *gin.Context) {
 	for _, item := range parts {
 		row := []string{strconv.Itoa(*item.Id), item.OemNumber, *item.Type}
 		if err := writer.Write(row); err != nil {
+			log.Printf("DownloadAllVinPartCSV: %v", err)
 			c.String(http.StatusInternalServerError, "Error writing CSV data")
 			return
 		}
@@ -543,7 +559,8 @@ func (h *handler) getAllPartByVinQuery(model BaseModel) []Part {
 	`
 	rows, err := h.DB.Query(query, "+"+model.Model, year, year, year, year, model.Make)
 	if err != nil {
-		log.Panic(err)
+		log.Printf("getAllPartByVinQuery: %v", err)
+		return nil
 	}
 
 	var parts []Part
@@ -552,7 +569,8 @@ func (h *handler) getAllPartByVinQuery(model BaseModel) []Part {
 		var part Part
 		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type)
 		if err != nil {
-			log.Panic(err)
+			log.Printf("getAllPartByVinQuery scan: %v", err)
+			return nil
 		}
 
 		parts = append(parts, part)

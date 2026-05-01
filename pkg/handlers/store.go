@@ -19,7 +19,8 @@ func (h *handler) getStores(user userSession) []Store {
 	rows, err := h.DB.Query(`select store.id, addressId, store.name from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, user.id)
 
 	if err != nil {
-		log.Panic(err)
+		log.Printf("getStores query: %v", err)
+		return nil
 	}
 
 	var stores []Store
@@ -27,7 +28,8 @@ func (h *handler) getStores(user userSession) []Store {
 	for rows.Next() {
 		var store Store
 		if err := rows.Scan(&store.Id, &store.AddressId, &store.Name); err != nil {
-			log.Panic(err)
+			log.Printf("getStores scan: %v", err)
+			return nil
 		}
 		stores = append(stores, store)
 	}
@@ -42,7 +44,8 @@ func (h *handler) getStoreIds(c *gin.Context) []int32 {
 	rows, err := h.DB.Query(`select store.id from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, userSession.id)
 
 	if err != nil {
-		log.Panic(err)
+		log.Printf("getStoreIds query: %v", err)
+		return nil
 	}
 
 	var ids []int32
@@ -50,7 +53,8 @@ func (h *handler) getStoreIds(c *gin.Context) []int32 {
 	for rows.Next() {
 		var id int32
 		if err := rows.Scan(&id); err != nil {
-			log.Panic(err)
+			log.Printf("getStoreIds scan: %v", err)
+			return nil
 		}
 		ids = append(ids, id)
 	}
@@ -68,6 +72,7 @@ func (h *handler) GetStores(c *gin.Context) {
 func (h *handler) GetStore(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+		log.Printf("GetStore: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid store ID"})
 		return
 	}
@@ -112,6 +117,7 @@ func (h *handler) GetStore(c *gin.Context) {
 		&s.Region, &s.PostalCode, &s.AdditionalNum, &s.UnitNumber,
 		&s.Country, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
+		log.Printf("GetStore: %v", err)
 		c.JSON(http.StatusNotFound, gin.H{"detail": "store not found"})
 		return
 	}
@@ -138,6 +144,7 @@ func (h *handler) CreateStore(c *gin.Context) {
 		Country        string `json:"country"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("CreateStore: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "الاسم مطلوب"})
 		return
 	}
@@ -189,6 +196,7 @@ func (h *handler) CreateStore(c *gin.Context) {
 func (h *handler) UpdateStore(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+		log.Printf("UpdateStore: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid store ID"})
 		return
 	}
@@ -208,6 +216,7 @@ func (h *handler) UpdateStore(c *gin.Context) {
 		Country        string `json:"country"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("UpdateStore: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request"})
 		return
 	}
@@ -254,6 +263,7 @@ func (h *handler) UpdateStore(c *gin.Context) {
 func (h *handler) DeleteStore(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
+		log.Printf("DeleteStore: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid store ID"})
 		return
 	}

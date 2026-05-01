@@ -33,6 +33,25 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// checkBillStoreAccess returns true when the caller has access to the given
+// store; otherwise it writes a 400 response and returns false.
+func (h *handler) checkBillStoreAccess(c *gin.Context, storeID int32) bool {
+	storeIds := h.getStoreIds(c)
+	if !slices.Contains(storeIds, storeID) {
+		c.Status(http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+// effectiveDateOr returns ed when supplied, otherwise time.Now().
+func effectiveDateOr(ed *time.Time) time.Time {
+	if ed != nil {
+		return *ed
+	}
+	return time.Now()
+}
+
 func (h *handler) GetBills(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
@@ -49,8 +68,9 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+		log.Printf("GetBills: %v", err)
 		c.Status(http.StatusBadRequest)
+		return
 	}
 
 	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds == nil || len(request.StoreIds) == 0 {
@@ -78,7 +98,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	bills, err := h.queries.GetAllBill(c.Request.Context(), args)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 	c.JSON(http.StatusOK, bills)
 }
@@ -92,42 +112,24 @@ func (h *handler) AddBill(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
+		log.Printf("AddBill: %v", err)
 		c.Status(http.StatusBadRequest)
-		log.Panic(err)
+		return
 	}
 
 	userSession := GetSessionInfo(c)
 
-	storeIds := h.getStoreIds(c)
-
-	if !slices.Contains(storeIds, request.StoreId) {
-		c.Status(http.StatusBadRequest)
-		log.Panic("invalid store id")
+	if !h.checkBillStoreAccess(c, request.StoreId) {
+		return
 	}
 
-	var paymentDueDate *time.Time
-	if request.PaymentDueDate != nil {
-
-		parsedTime, err := time.Parse(time.RFC3339, *request.PaymentDueDate)
-		paymentDueDate = &parsedTime
-		if err != nil {
-			log.Panic("Error parsing date:", err)
-		}
-	}
-
-	effectiveDate := time.Now()
-	if request.EffectiveDate != nil {
-		parsedTime, err := time.Parse(time.RFC3339, *request.EffectiveDate)
-		effectiveDate = parsedTime
-		if err != nil {
-			log.Panic("Error parsing date:", err)
-		}
-	}
+	paymentDueDate := request.PaymentDueDate
+	effectiveDate := effectiveDateOr(request.EffectiveDate)
 	tx, err := h.DB.Begin()
 
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	defer tx.Rollback()
@@ -159,19 +161,21 @@ func (h *handler) AddBill(c *gin.Context) {
 
 	res, err := qtx.CreateBill(c.Request.Context(), args)
 	if err != nil {
+		log.Printf("AddBill: %v", err)
 		if IsDuplicate(err) {
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
 				"message": "Supplier bill number already exists for this supplier",
 			})
 		}
-		log.Panic(err)
+		return
 	}
 
 	id, err := res.LastInsertId()
 
 	if err != nil {
+		log.Printf("AddBill: %v", err)
 		c.Status(http.StatusBadRequest)
-		log.Panic(err)
+		return
 	}
 
 	// TODO @ssda work around when the frontend send id when he should not
@@ -192,7 +196,7 @@ func (h *handler) AddBill(c *gin.Context) {
 
 	if err := addProductToBill(qtx, c, products, uint64(id)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	// ── Stock tracking: deduct stock for catalog products ──
@@ -204,6 +208,7 @@ func (h *handler) AddBill(c *gin.Context) {
 			enforcement, int32(userSession.id),
 		)
 		if err != nil {
+			log.Printf("AddBill: %v", err)
 			// enforce mode: block if insufficient stock
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
@@ -225,7 +230,7 @@ func (h *handler) AddBill(c *gin.Context) {
 
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 	c.JSON(http.StatusCreated, id)
 
@@ -236,7 +241,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	billID := uint64(BillID)
@@ -250,33 +255,24 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	log.Print(request)
 
 	if err := c.BindJSON(&request); err != nil {
+		log.Printf("SubmitDraftBill: %v", err)
 		c.Status(http.StatusBadRequest)
-		log.Panic(err)
+		return
 	}
 
 	userSession := GetSessionInfo(c)
 
-	storeIds := h.getStoreIds(c)
-
-	if !slices.Contains(storeIds, request.StoreId) {
-		c.Status(http.StatusBadRequest)
-		log.Panic("invalid store id")
+	if !h.checkBillStoreAccess(c, request.StoreId) {
+		return
 	}
 
-	var paymentDueDate *time.Time
-	if request.PaymentDueDate != nil {
-		parsedTime, err := time.Parse(time.RFC3339, *request.PaymentDueDate)
-		paymentDueDate = &parsedTime
-		if err != nil {
-			log.Panic("Error parsing date:", err)
-		}
-	}
+	paymentDueDate := request.PaymentDueDate
 
 	tx, err := h.DB.Begin()
 
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	defer tx.Rollback()
@@ -288,7 +284,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	}
 
 	args := db.UpdateBillByIDParams{
-		EffectiveDate:   time.Now(),
+		EffectiveDate:   effectiveDateOr(request.EffectiveDate),
 		PaymentDueDate:  paymentDueDate,
 		State:           request.State,
 		Discount:        request.Discount,
@@ -310,12 +306,12 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	if err = qtx.DeleteProductToBill(c.Request.Context(), billID); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	// TODO @ssda work around when the frontend send id when he should not
@@ -335,7 +331,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 
 	if err := addProductToBill(qtx, c, products, billID); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	// ── Stock tracking: deduct stock for catalog products ──
@@ -347,6 +343,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 			enforcement, int32(userSession.id),
 		)
 		if err != nil {
+			log.Printf("SubmitDraftBill: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
 				"type":   "stock_insufficient",
@@ -366,7 +363,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	c.Status(http.StatusCreated)
@@ -409,7 +406,8 @@ func getNextSquenceNumber(qtx *db.Queries, c *gin.Context) uint64 {
 	var maxSequenceNumber int64
 	maxSequenceNumber, err := qtx.GetMaxSequenceNumber(c.Request.Context())
 	if err != nil {
-		log.Panic(err)
+		log.Printf("getNextSquenceNumber: %v", err)
+		return 0
 	}
 
 	return uint64(maxSequenceNumber) + 1
@@ -421,7 +419,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return model.Bill{}, nil
 	}
 
 	id := uint64(Id)
@@ -436,7 +434,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		} else if product.ProductID != nil {
 			name = fmt.Sprint(product.ProductID)
 		} else {
-			log.Panic("ERR")
+			return model.Bill{}, nil
 		}
 
 		u := ""
@@ -565,7 +563,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 		fontDir := "fonts"
 		pdfBytes, err := pdf.GenerateInvoiceBytes(invoice, fontDir)
 		if err != nil {
-			log.Panic(err)
+			return
 		}
 
 		if err := os.WriteFile(filename, pdfBytes, 0644); err != nil {
@@ -585,7 +583,7 @@ func (h *handler) GetBillCreditDetail(c *gin.Context) {
 	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	id := uint64(Id)
@@ -594,7 +592,7 @@ func (h *handler) GetBillCreditDetail(c *gin.Context) {
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	c.JSON(http.StatusOK, bill)
@@ -668,14 +666,16 @@ func (h *handler) getProducts(billId uint64) []model.ProductDetails {
 	`
 	rows, err := h.DB.Query(query, billId)
 	if err != nil {
-		log.Panic(err)
+		log.Printf("getBillProducts query: %v", err)
+		return nil
 	}
 	var products []model.ProductDetails
 	for rows.Next() {
 		var product model.ProductDetails
 
 		if err := rows.Scan(&product.Id, &product.Price, &product.Quantity, &product.ArticleId, &product.ArticleNumber, &product.Description); err != nil {
-			log.Panic(err)
+			log.Printf("getBillProducts scan: %v", err)
+			return nil
 		}
 
 		products = append(products, product)
@@ -699,13 +699,14 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	tx, err := h.DB.Begin()
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
 
 	// ── Stock tracking: restore stock BEFORE deleting the bill (need bill data intact) ──
 	if err := h.reverseSaleMovements(qtx, c, billID, int32(userSession.id)); err != nil {
+		log.Printf("DeleteBillDetail: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"detail": err.Error(),
 			"type":   "stock_error",
@@ -717,13 +718,13 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	res, err := tx.Exec("UPDATE bill SET state = -1 WHERE id = ?", billID)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	affectedRows, err := res.RowsAffected()
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	if affectedRows == 0 {
@@ -733,7 +734,7 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	c.Status(http.StatusOK)

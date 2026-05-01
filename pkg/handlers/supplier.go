@@ -36,8 +36,9 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
+		log.Printf("GetAllSupplier: %v", err)
 		c.Status(http.StatusBadRequest)
-		log.Panic(err)
+		return
 	}
 	args := db.GetAllSupplierParams{
 		Limit:  request.PageSize,
@@ -47,7 +48,7 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 	suppliers, err := h.queries.GetAllSupplier(c.Request.Context(), args)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	c.IndentedJSON(http.StatusOK, suppliers)
@@ -58,7 +59,7 @@ func (h *handler) GetSupplier(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	userSession := GetSessionInfo(c)
@@ -67,17 +68,17 @@ func (h *handler) GetSupplier(c *gin.Context) {
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	} else if companyID == nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	supplier, err := h.queries.GetSupplier(c.Request.Context(), id)
 
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 	c.IndentedJSON(http.StatusOK, supplier)
 }
@@ -89,12 +90,12 @@ func (h *handler) AddSupplier(c *gin.Context) {
 
 	var id int
 	if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&id); err != nil {
-		log.Panic(err)
+		return
 	}
 
 	var request SupplierRequest
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+		return
 	}
 
 	if request.CreditLimit == nil {
@@ -122,14 +123,14 @@ func (h *handler) AddSupplier(c *gin.Context) {
 	res, err := h.queries.AddSupplier(c.Request.Context(), args)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	supplierID, err := res.LastInsertId()
 
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"id": supplierID})
@@ -142,18 +143,18 @@ func (h *handler) EditSupplier(c *gin.Context) {
 
 	var companyId int
 	if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&companyId); err != nil {
-		log.Panic(err)
+		return
 	}
 
 	var request SupplierRequest
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+		return
 	}
 
 	res, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	if request.CreditLimit != nil {
@@ -179,7 +180,7 @@ func (h *handler) EditSupplier(c *gin.Context) {
 
 	if err := h.queries.UpdateSupplier(c.Request.Context(), row); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	c.Status(http.StatusOK)
@@ -191,14 +192,14 @@ func (h *handler) DeleteSupplier(c *gin.Context) {
 
 	var companyId int
 	if err := h.DB.QueryRow("SELECT company_id FROM user where id = ?;", userSession.id).Scan(&companyId); err != nil {
-		log.Panic(err)
+		return
 	}
 
 	id := c.Param("id")
 
 	if _, err := h.DB.Exec(
 		"UPDATE supplier SET is_deleted=TRUE where company_id=? and id=?;", companyId, id); err != nil {
-		log.Panic(err)
+		return
 	}
 
 	c.Status(http.StatusNoContent)

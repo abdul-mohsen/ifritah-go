@@ -5,7 +5,6 @@ import (
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -19,7 +18,7 @@ func (h *handler) GetClient(c *gin.Context) {
 	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	id := uint64(Id)
@@ -27,7 +26,7 @@ func (h *handler) GetClient(c *gin.Context) {
 	res, err := h.queries.GetClientByID(c.Request.Context(), uint32(id))
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	c.JSON(http.StatusOK, res)
@@ -41,12 +40,12 @@ func (h *handler) GetAllClient(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+		return
 	}
 	res, err := h.queries.GetClients(c.Request.Context(), db.GetClientsParams{Limit: request.PageSize, Offset: request.Page * request.PageSize})
 	if err != nil {
 		c.AbortWithStatus(http.StatusInternalServerError)
-		log.Panic("Error in query", err)
+		return
 	}
 
 	c.JSON(http.StatusOK, res)
@@ -73,7 +72,7 @@ func (h *handler) CreateClient(c *gin.Context) {
 
 	var request CreateClientRequest
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+		return
 	}
 
 	if request.CreditLimit == nil {
@@ -102,7 +101,7 @@ func (h *handler) CreateClient(c *gin.Context) {
 		} else {
 			c.AbortWithError(http.StatusInternalServerError, err)
 		}
-		log.Panic("Error in query", err)
+		return
 	}
 
 	c.Status(http.StatusCreated)
@@ -113,14 +112,14 @@ func (h *handler) UpdateClient(c *gin.Context) {
 	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	id := uint64(Id)
 
 	var request CreateClientRequest
 	if err := c.BindJSON(&request); err != nil {
-		log.Panic(err)
+		return
 	}
 
 	if request.CreditLimit == nil {
@@ -146,7 +145,7 @@ func (h *handler) UpdateClient(c *gin.Context) {
 	err = h.queries.UpdateClient(c.Request.Context(), query)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic("Error in query", err)
+		return
 	}
 
 	c.Status(http.StatusCreated)
@@ -157,7 +156,7 @@ func (h *handler) DeleteClient(c *gin.Context) {
 	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
-		log.Panic(err)
+		return
 	}
 
 	id := uint64(Id)
@@ -165,7 +164,7 @@ func (h *handler) DeleteClient(c *gin.Context) {
 	err = h.queries.DeleteClient(c.Request.Context(), uint32(id))
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
-		log.Panic(err)
+		return
 	}
 
 	c.Status(http.StatusOK)

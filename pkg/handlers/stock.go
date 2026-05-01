@@ -386,14 +386,15 @@ func (h *handler) recordCreditNoteMovements(tx *db.Queries, c *gin.Context, cred
 func (h *handler) StockAdjust(c *gin.Context) {
 	var req model.StockAdjustRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("StockAdjust: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
-		log.Panic(err)
+		return
 	}
 
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement == model.StockEnforcementDisable {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "stock tracking is disabled"})
-		log.Panic("stock tracking is disabled")
+		return
 	}
 
 	userID := GetSessionInfo(c).id
@@ -401,8 +402,9 @@ func (h *handler) StockAdjust(c *gin.Context) {
 	// Get product info
 	_, currentQty, err := h.getProductStock(c, req.ProductID)
 	if err != nil {
+		log.Printf("StockAdjust: %v", err)
 		c.JSON(http.StatusNotFound, gin.H{"detail": "product not found"})
-		log.Panic(err)
+		return
 	}
 
 	// Check if adjustment would make stock negative (enforce mode)
@@ -413,21 +415,23 @@ func (h *handler) StockAdjust(c *gin.Context) {
 			"available": currentQty.String(),
 			"requested": req.QuantityChange.Abs().String(),
 		})
-		log.Panic(err)
+		return
 	}
 
 	// Transaction: update product + insert movement
 	tx, err := h.DB.Begin()
 	if err != nil {
+		log.Printf("StockAdjust: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "transaction error"})
-		log.Panic(err)
+		return
 	}
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
 
 	if err := updateProductQuantity(qtx, c, req.ProductID, req.QuantityChange); err != nil {
+		log.Printf("StockAdjust: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update stock"})
-		log.Panic(err)
+		return
 	}
 
 	refType := model.ReferenceTypeManual
@@ -438,12 +442,13 @@ func (h *handler) StockAdjust(c *gin.Context) {
 		req.QuantityChange, model.MovementTypeAdjustment, refType,
 		nil, nil, &reason, &note, &uid, time.Now()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to record movement"})
-		log.Panic(err)
+		return
 	}
 
 	if err := tx.Commit(); err != nil {
+		log.Printf("StockAdjust: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "commit error"})
-		log.Panic(err)
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -459,6 +464,7 @@ func (h *handler) StockAdjust(c *gin.Context) {
 func (h *handler) StockCheck(c *gin.Context) {
 	var req model.StockCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("StockCheck: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request: " + err.Error()})
 		return
 	}
@@ -508,6 +514,7 @@ func (h *handler) StockCheck(c *gin.Context) {
 func (h *handler) GetStockMovements(c *gin.Context) {
 	ProductID, err := strconv.ParseInt(c.Param("product_id"), 10, 64)
 	if err != nil {
+		log.Printf("GetStockMovements: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid product_id"})
 		return
 	}
@@ -544,8 +551,9 @@ func (h *handler) GetStockMovements(c *gin.Context) {
 
 	rows, err := h.DB.Query(query, args...)
 	if err != nil {
+		log.Printf("GetStockMovements: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "query failed"})
-		log.Panic(err)
+		return
 	}
 	defer rows.Close()
 

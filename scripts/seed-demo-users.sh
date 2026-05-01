@@ -46,9 +46,9 @@ bcrypt_hash() {
   htpasswd -bnBC 10 "" "$1" | tr -d ':\n' | sed 's/^\$2y/\$2a/'
 }
 
-ADMIN_HASH="$(bcrypt_hash admin)"
-MANAGER_HASH="$(bcrypt_hash manager)"
-EMPLOYEE_HASH="$(bcrypt_hash employee)"
+ADMIN_HASH="$(bcrypt_hash admin123)"
+MANAGER_HASH="$(bcrypt_hash manager123)"
+EMPLOYEE_HASH="$(bcrypt_hash employee123)"
 
 mysql_run() {
   MYSQL_PWD="$PASSWORD" mysql \

@@ -18,9 +18,9 @@ import (
 func main() {
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("unable to load .env file: %e", err)
+	// .env is optional — production reads env from the container/runtime.
+	if err := godotenv.Load(); err != nil {
+		log.Printf("no .env file loaded (this is fine in production): %v", err)
 	}
 	DB := db.Connect()
 	queries := db.New(DB)
@@ -39,6 +39,11 @@ func main() {
 	store := persistence.NewInMemoryStore(time.Second)
 	// Recovery middleware recovers from any panics and writes a 500 if there was one.
 	router.Use(gin.Recovery())
+
+	// Liveness probe used by Docker HEALTHCHECK and ops tooling.
+	router.GET("/healthz", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
 
 	authorized := router.Group(baseUrl)
 	authorized.Use(handlers.JWTVerifyMiddleware)
@@ -203,6 +208,11 @@ func main() {
 		nonAuthGroup.POST("reset-password", h.ResetPassword)
 	}
 
-	router.Run("localhost:" + os.Getenv("SERVER_PORT"))
+	port := os.Getenv("SERVER_PORT")
+	if port == "" {
+		log.Fatal("SERVER_PORT env var is required")
+	}
+	// Bind on all interfaces so the container's mapped port works.
+	router.Run(":" + port)
 	DB.Close()
 }

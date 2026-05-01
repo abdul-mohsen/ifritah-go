@@ -185,6 +185,11 @@ func main() {
 		authorized.PUT("user/:id", admin, h.UpdateUser)
 		authorized.DELETE("user/:id", admin, h.DeleteUser)
 		authorized.POST("user/:id/password", admin, h.AdminResetUserPassword)
+
+		// ── ZATCA submission monitor (admin only) ──────────────────────
+		authorized.GET("zatca/monitor/stats", admin, h.ZatcaMonitorStats)
+		authorized.GET("zatca/monitor/branches", admin, h.ZatcaMonitorBranches)
+		authorized.GET("zatca/monitor/submissions", admin, h.ZatcaMonitorSubmissions)
 	}
 
 	nonAuthGroup := router.Group(baseUrl)

@@ -163,24 +163,54 @@ SET @supplier_id = (
    LIMIT 1
 );
 
--- 1 company-mode draft invoice (state=0, client_id set).
+-- 1 company-mode draft invoice (state=0, client_id set, userName NULL).
+-- bill_type in the API is derived as `client_id IS NOT NULL`, so leaving
+-- userName NULL keeps the row unambiguously company-mode for qa-28.
 -- Keyed by note='DEMO_SEED_INVOICE' so re-runs don't duplicate.
 INSERT INTO bill (state, client_id, store_id, merchant_id, discount,
-                  maintenance_cost, note, payment_method, userName)
+                  maintenance_cost, note, payment_method)
 SELECT 0, @client_id, @store_id, @admin_id, 0, 0,
-       'DEMO_SEED_INVOICE', 10, 'Demo Admin'
+       'DEMO_SEED_INVOICE', 10
 WHERE NOT EXISTS (
   SELECT 1 FROM bill WHERE note = 'DEMO_SEED_INVOICE'
 );
+-- Migrate older seed rows (PR #25) that wrote userName=Demo Admin.
+UPDATE bill SET userName = NULL
+ WHERE note = 'DEMO_SEED_INVOICE' AND userName IS NOT NULL;
 SET @bill_id = (SELECT id FROM bill WHERE note = 'DEMO_SEED_INVOICE' LIMIT 1);
 
--- 1 line item on the demo invoice (only when the line doesn't exist yet).
+-- 1 line item on the demo draft invoice.
 INSERT INTO bill_product (product_id, bill_id, vat, price, quantity, name)
 SELECT p.id, @bill_id, 15.00, 45.00, 1.000, 'OEM Filter A'
 FROM product p
 WHERE p.article_id = 9001 AND p.store_id = @store_id
   AND NOT EXISTS (
     SELECT 1 FROM bill_product WHERE bill_id = @bill_id
+  );
+
+-- 1 issued (state=1) company-mode invoice — qa-17 credit-note round-trip
+-- needs an issued bill with no credit_note row yet (credit_state IS NULL,
+-- which is the default for any freshly-issued bill). Keyed by
+-- note='DEMO_SEED_ISSUED_INVOICE'.
+INSERT INTO bill (state, client_id, store_id, merchant_id, discount,
+                  maintenance_cost, note, payment_method,
+                  total_before_vat, total_vat, total)
+SELECT 1, @client_id, @store_id, @admin_id, 0, 0,
+       'DEMO_SEED_ISSUED_INVOICE', 10,
+       45.00, 6.75, 51.75
+WHERE NOT EXISTS (
+  SELECT 1 FROM bill WHERE note = 'DEMO_SEED_ISSUED_INVOICE'
+);
+SET @issued_bill_id = (
+  SELECT id FROM bill WHERE note = 'DEMO_SEED_ISSUED_INVOICE' LIMIT 1
+);
+
+INSERT INTO bill_product (product_id, bill_id, vat, price, quantity, name)
+SELECT p.id, @issued_bill_id, 15.00, 45.00, 1.000, 'OEM Filter A'
+FROM product p
+WHERE p.article_id = 9001 AND p.store_id = @store_id
+  AND NOT EXISTS (
+    SELECT 1 FROM bill_product WHERE bill_id = @issued_bill_id
   );
 
 -- 1 draft purchase bill so /dashboard/purchase-bills/edit/{id} is reachable.
@@ -211,6 +241,16 @@ WHERE @pb_id IS NOT NULL
 -- 1 cash voucher with a stable, searchable recipient_name.
 -- voucher_number is per-merchant; 9001 is far above the auto-allocated
 -- range, so it will not collide with normal app activity.
+-- 1 demo order so qa-28 order round-trip has a row to edit.
+-- sequence_number is UNIQUE, so it doubles as the natural key.
+INSERT INTO orders (sequence_number, client_id, customer_name, store_id,
+                    status, total, note, created_by)
+SELECT 'DEMO-ORD-001', @client_id, 'ACME Trading Co', @store_id,
+       'pending', 100.00, 'DEMO_SEED_ORDER', @admin_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM orders WHERE sequence_number = 'DEMO-ORD-001'
+);
+
 INSERT INTO cash_voucher (voucher_number, voucher_type, amount, payment_method,
                           state, recipient_type, recipient_name, description,
                           store_id, merchant_id, created_by)
@@ -224,4 +264,4 @@ WHERE NOT EXISTS (
 SQL
 
 echo "[seed] demo users ensured: admin / manager / employee"
-echo "[seed] demo dataset ensured: 3 products, 1 client, 1 supplier, 1 invoice, 1 purchase bill, 1 cash voucher"
+echo "[seed] demo dataset ensured: 3 products, 1 client, 1 supplier, 1 draft + 1 issued invoice, 1 purchase bill, 1 order, 1 cash voucher"

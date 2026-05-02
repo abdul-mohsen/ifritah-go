@@ -73,6 +73,31 @@ ON DUPLICATE KEY UPDATE
   role      = VALUES(role),
   is_active = 1;
 
+-- ---- demo company + stores (idempotent) ---------------------------------
+-- A user with no company_id has no accessible stores, which makes every
+-- list endpoint that scopes by store return 400. Attach the three demo
+-- accounts to a single "Demo Co" with two stores so the e2e suite can
+-- exercise multi-branch flows.
+SET @company_id = (SELECT id FROM company WHERE name = 'Demo Co' LIMIT 1);
+INSERT INTO company (name, vat_number)
+SELECT 'Demo Co', '300000000000003'
+WHERE @company_id IS NULL;
+SET @company_id = (SELECT id FROM company WHERE name = 'Demo Co' LIMIT 1);
+
+UPDATE user SET company_id = @company_id
+ WHERE username IN ('admin','manager','employee');
+
+INSERT INTO store (company_id, name)
+SELECT @company_id, 'Demo Store 1'
+WHERE NOT EXISTS (
+  SELECT 1 FROM store WHERE company_id = @company_id AND name = 'Demo Store 1'
+);
+INSERT INTO store (company_id, name)
+SELECT @company_id, 'Demo Store 2'
+WHERE NOT EXISTS (
+  SELECT 1 FROM store WHERE company_id = @company_id AND name = 'Demo Store 2'
+);
+
 -- ---- view-only permissions for the employee account ---------------------
 -- Admin/manager bypass row grants by role.
 INSERT INTO user_permission (user_id, resource, can_view, can_add, can_edit, can_delete)

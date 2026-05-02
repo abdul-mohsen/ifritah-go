@@ -533,6 +533,12 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		CommercialRegistrationNumber: CommercialRegistrationNumber,
 		CreditID:                     bill.CreditID,
 		Client:                       client,
+		ClientID:                     bill.ClientID,
+		// `type` was historically the "is the bill issued to a registered
+		// client" flag (B2B) vs an anonymous walk-in (B2C). It is fully
+		// derivable from the presence of client_id, so do that here instead
+		// of leaving the field as the zero value.
+		Type:                         bill.ClientID != nil,
 		PaymentMethod:                bill.PaymentMethod,
 		DeliverDate:                  bill.DeliverDate,
 		BranchID:                     bill.BranchID,

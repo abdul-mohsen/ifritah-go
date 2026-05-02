@@ -124,6 +124,7 @@ type Bill struct {
 	TotalVAT                     string                `json:"total_vat"`
 	Total                        string                `json:"total"`
 	Client                       *db.Client            `json:"client"`
+	ClientID                     *int32                `json:"client_id"`
 	PaymentMethod                int32                 `json:"payment_method"`
 	BranchID                     *uint32               `json:"branch_id"`
 	DeliverDate                  *time.Time            `json:"deliver_date"`

@@ -11,6 +11,10 @@
 docker-compose*.yml
 saas_multi_tenant
 pkg/db/gen
+# config.go is hand-written (db connection helper) and lives alongside the
+# sqlc-generated output. Keep it in the build context so the Go build can
+# resolve `db.Connect`.
+!pkg/db/gen/config.go
 **/*.pdf
 ifritah
 ifritah.exe

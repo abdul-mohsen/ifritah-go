@@ -62,7 +62,6 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 
 	request := model.BillRequestFilter{
-		StoreIds: storeIds,
 		Page:     0,
 		PageSize: 10,
 	}
@@ -73,8 +72,19 @@ func (h *handler) GetBills(c *gin.Context) {
 		return
 	}
 
-	if request.Page < 0 || request.PageSize <= 0 || request.StoreIds == nil || len(request.StoreIds) == 0 {
+	if request.Page < 0 || request.PageSize <= 0 {
 		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	// store_ids is a filter, not a primary key. When omitted, default to
+	// every store the caller can access. Truly no accessible stores means
+	// "empty result", not "bad request".
+	if len(request.StoreIds) == 0 {
+		request.StoreIds = storeIds
+	}
+	if len(request.StoreIds) == 0 {
+		c.JSON(http.StatusOK, []any{})
 		return
 	}
 

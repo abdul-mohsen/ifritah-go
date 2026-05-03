@@ -114,13 +114,18 @@ func (h *handler) GetBills(c *gin.Context) {
 		phoneFilter = &s
 	}
 
-	// Decode cursor into the (cursor_date, cursor_id) pair the SQL
-	// expects. Both nil on the first page; both set on subsequent
-	// pages. We keep them paired — a half-decoded cursor is a 400.
+	// Decode cursor into the (cursor_date, cursor_id, cursor_is_credit)
+	// triple the SQL expects. All nil on the first page; all set on
+	// subsequent pages. We keep them paired — a half-decoded cursor is
+	// a 400. The third key (`is_credit`) is needed because a bill with
+	// a credit_note appears as two distinct rows sharing the same
+	// (effective_date, id); without it the seek would skip or duplicate
+	// the second row.
 	cur, _ := listReq.DecodedCursor()
 	var cursorDate *time.Time
 	var cursorID *uint64
-	if len(cur.K) >= 2 {
+	var cursorIsCredit any
+	if len(cur.K) >= 3 {
 		if dStr, ok := cur.K[0].(string); ok {
 			if t, err := time.Parse(time.RFC3339Nano, dStr); err == nil {
 				cursorDate = &t
@@ -128,12 +133,44 @@ func (h *handler) GetBills(c *gin.Context) {
 				cursorDate = &t
 			}
 		}
-		if id, ok := cur.LastID(); ok && id > 0 {
-			u := uint64(id)
-			cursorID = &u
+		if idAny := cur.K[1]; idAny != nil {
+			switch v := idAny.(type) {
+			case float64:
+				if v > 0 {
+					u := uint64(v)
+					cursorID = &u
+				}
+			case int64:
+				if v > 0 {
+					u := uint64(v)
+					cursorID = &u
+				}
+			default:
+				// json.Number path
+				if n, ok := idAny.(interface{ Int64() (int64, error) }); ok {
+					if i, err := n.Int64(); err == nil && i > 0 {
+						u := uint64(i)
+						cursorID = &u
+					}
+				}
+			}
 		}
-		if cursorDate == nil || cursorID == nil {
-			log.Printf("GetBills: cursor missing date or id")
+		if icAny := cur.K[2]; icAny != nil {
+			switch v := icAny.(type) {
+			case float64:
+				cursorIsCredit = int32(v)
+			case int64:
+				cursorIsCredit = int32(v)
+			default:
+				if n, ok := icAny.(interface{ Int64() (int64, error) }); ok {
+					if i, err := n.Int64(); err == nil {
+						cursorIsCredit = int32(i)
+					}
+				}
+			}
+		}
+		if cursorDate == nil || cursorID == nil || cursorIsCredit == nil {
+			log.Printf("GetBills: cursor missing date, id or is_credit")
 			c.Status(http.StatusBadRequest)
 			return
 		}
@@ -142,9 +179,10 @@ func (h *handler) GetBills(c *gin.Context) {
 	limit := listReq.EffectiveLimit()
 
 	args := db.GetAllBillParams{
-		Phonenumber: phoneFilter,
-		CursorDate:  cursorDate,
-		CursorID:    cursorID,
+		Phonenumber:    phoneFilter,
+		CursorDate:     cursorDate,
+		CursorID:       cursorID,
+		CursorIsCredit: cursorIsCredit,
 		// +1 row signals has_more without a COUNT(*).
 		Limit: int32(limit + 1),
 	}
@@ -159,12 +197,17 @@ func (h *handler) GetBills(c *gin.Context) {
 		bills,
 		limit,
 		billListSort,
-		// Keyset for the next page is (effective_date, id) of the last
-		// kept row. Date is serialized as RFC3339 so the FE round-trips
-		// it as a string and hands it back verbatim — keeps the cursor
-		// timezone-stable across BE/FE.
+		// Keyset for the next page is (effective_date, id, is_credit)
+		// of the last kept row. The is_credit tiebreaker is required
+		// because credit-note variants share the bill's id and date.
+		// Date is RFC3339Nano so the FE round-trips it as a string and
+		// hands it back verbatim — keeps the cursor timezone-stable.
 		func(r db.GetAllBillRow) []any {
-			return []any{r.EffectiveDate.UTC().Format(time.RFC3339Nano), r.ID}
+			return []any{
+				r.EffectiveDate.UTC().Format(time.RFC3339Nano),
+				r.ID,
+				r.IsCredit,
+			}
 		},
 	)
 	c.JSON(http.StatusOK, envelope)

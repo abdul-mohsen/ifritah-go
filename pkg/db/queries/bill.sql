@@ -3,21 +3,23 @@
   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetAllBill :many
--- Keyset / cursor pagination. Sort key: (effective_date DESC, id DESC).
--- The (cursor_date, cursor_id) sentinels are NULL on the first page and
--- non-NULL on subsequent pages; the OR-tree is the canonical "seek
--- predicate" form (Markus Winand, use-the-index-luke.com/no-offset).
--- Backed by `idx_bill_keyset(effective_date DESC, id DESC)` from
--- migration 0003 so the optimizer serves this as a single range scan.
+-- Keyset / cursor pagination. Sort key: (effective_date DESC, id DESC, is_credit DESC).
 --
--- The earlier UNION is gone — it was duplicating every bill that had a
--- credit_note row and silently emitting two ids per row. A LEFT JOIN
--- gives the same result (cn.state when present, NULL otherwise) without
--- the duplicate.
+-- Why three keys, not two: a bill that has a credit_note is shown as
+-- TWO list items — the original invoice and its credit note are
+-- different documents in the user's view. The UNION ALL below emits
+-- both with identical (effective_date, id) but different `is_credit`,
+-- so we need that third column as a deterministic tiebreaker for the
+-- seek predicate.
+--
+-- The (cursor_date, cursor_id, cursor_is_credit) sentinels are all
+-- NULL on the first page and all non-NULL on subsequent pages. The
+-- OR-tree is the canonical lex-compare seek predicate
+-- (Markus Winand, use-the-index-luke.com/no-offset).
 --
 -- Caller fetches `limit + 1` to detect has_more without a COUNT(*).
 SELECT bill.id AS id,
-       effective_date,
+       bill.effective_date AS effective_date,
        payment_due_date,
        bill.state AS state,
        discount,
@@ -27,18 +29,44 @@ SELECT bill.id AS id,
        cn.state AS credit_state,
        total,
        total_vat,
-       total_before_vat
+       total_before_vat,
+       1 AS is_credit
 FROM bill
-LEFT JOIN client ON client.id = bill.client_id
-LEFT JOIN credit_note cn ON cn.bill_id = bill.id
+JOIN credit_note cn ON cn.bill_id = bill.id
+LEFT JOIN client  ON client.id = bill.client_id
 WHERE bill.state >= 0
   AND (sqlc.narg('phonenumber') IS NULL OR bill.user_phone_number LIKE sqlc.narg('phonenumber'))
   AND (
         sqlc.narg('cursor_date') IS NULL
      OR bill.effective_date < sqlc.narg('cursor_date')
      OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id < sqlc.narg('cursor_id'))
+     OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id = sqlc.narg('cursor_id') AND 1 < sqlc.narg('cursor_is_credit'))
   )
-ORDER BY bill.effective_date DESC, bill.id DESC
+UNION ALL
+SELECT bill.id AS id,
+       bill.effective_date AS effective_date,
+       payment_due_date,
+       bill.state AS state,
+       discount,
+       sequence_number,
+       bill.user_phone_number,
+       client.id IS NOT NULL AS bill_type,
+       0 AS credit_state,
+       total,
+       total_vat,
+       total_before_vat,
+       0 AS is_credit
+FROM bill
+LEFT JOIN client ON client.id = bill.client_id
+WHERE bill.state >= 0
+  AND (sqlc.narg('phonenumber') IS NULL OR bill.user_phone_number LIKE sqlc.narg('phonenumber'))
+  AND (
+        sqlc.narg('cursor_date') IS NULL
+     OR bill.effective_date < sqlc.narg('cursor_date')
+     OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id < sqlc.narg('cursor_id'))
+     OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id = sqlc.narg('cursor_id') AND 0 < sqlc.narg('cursor_is_credit'))
+  )
+ORDER BY effective_date DESC, id DESC, is_credit DESC
 LIMIT ?;
 
 

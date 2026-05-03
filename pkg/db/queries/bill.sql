@@ -3,19 +3,43 @@
   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetAllBill :many
-SELECT * from(
-			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, discount, sequence_number, bill.user_phone_number, client.id is not null as bill_type, cn.state as credit_state, total, total_vat, total_before_vat
-			FROM bill
-			JOIN credit_note  cn on cn.bill_id = bill.id
-			LEFT JOIN client  on client.id = bill.client_id
-			WHERE bill.state >= 0
-			and (sqlc.narg('phonenumber') is null or bill.user_phone_number like sqlc.narg('phonenumber'))
-			UNION
-			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, discount, sequence_number, user_phone_number, client.id is not null as bill_type, 0 as credit_state, total, total_vat, total_before_vat from bill
-			LEFT JOIN client  on client.id = bill.client_id
-			WHERE bill. state >= 0
-			and (sqlc.narg('phonenumber') is null or bill.user_phone_number like sqlc.narg('phonenumber'))
-		) AS T ORDER BY id DESC LIMIT ? OFFSET ?;
+-- Keyset / cursor pagination. Sort key: (effective_date DESC, id DESC).
+-- The (cursor_date, cursor_id) sentinels are NULL on the first page and
+-- non-NULL on subsequent pages; the OR-tree is the canonical "seek
+-- predicate" form (Markus Winand, use-the-index-luke.com/no-offset).
+-- Backed by `idx_bill_keyset(effective_date DESC, id DESC)` from
+-- migration 0003 so the optimizer serves this as a single range scan.
+--
+-- The earlier UNION is gone — it was duplicating every bill that had a
+-- credit_note row and silently emitting two ids per row. A LEFT JOIN
+-- gives the same result (cn.state when present, NULL otherwise) without
+-- the duplicate.
+--
+-- Caller fetches `limit + 1` to detect has_more without a COUNT(*).
+SELECT bill.id AS id,
+       effective_date,
+       payment_due_date,
+       bill.state AS state,
+       discount,
+       sequence_number,
+       bill.user_phone_number,
+       client.id IS NOT NULL AS bill_type,
+       cn.state AS credit_state,
+       total,
+       total_vat,
+       total_before_vat
+FROM bill
+LEFT JOIN client ON client.id = bill.client_id
+LEFT JOIN credit_note cn ON cn.bill_id = bill.id
+WHERE bill.state >= 0
+  AND (sqlc.narg('phonenumber') IS NULL OR bill.user_phone_number LIKE sqlc.narg('phonenumber'))
+  AND (
+        sqlc.narg('cursor_date') IS NULL
+     OR bill.effective_date < sqlc.narg('cursor_date')
+     OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id < sqlc.narg('cursor_id'))
+  )
+ORDER BY bill.effective_date DESC, bill.id DESC
+LIMIT ?;
 
 
 -- name: GetBillByID :one

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
+	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"math/big"
 	"net/http"
@@ -52,6 +53,10 @@ func effectiveDateOr(ed *time.Time) time.Time {
 	return time.Now()
 }
 
+// billListSort is the canonical sort spec for the bill list. Cursor
+// validation rejects any client-supplied sort that doesn't match this.
+const billListSort = "-effective_date"
+
 func (h *handler) GetBills(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
@@ -61,10 +66,7 @@ func (h *handler) GetBills(c *gin.Context) {
 		storeIds = append(storeIds, value.Id)
 	}
 
-	request := model.BillRequestFilter{
-		Page:     0,
-		PageSize: 10,
-	}
+	request := model.BillRequestFilter{}
 
 	if err := c.BindJSON(&request); err != nil {
 		log.Printf("GetBills: %v", err)
@@ -72,7 +74,18 @@ func (h *handler) GetBills(c *gin.Context) {
 		return
 	}
 
-	if request.Page < 0 || request.PageSize <= 0 {
+	// Build a ListRequest view to hand to the shared validator. It
+	// shares the same wire keys (limit/cursor/sort/page_size/...).
+	listReq := pagination.ListRequest{
+		Limit:      request.Limit,
+		Cursor:     request.Cursor,
+		Sort:       request.Sort,
+		Query:      request.Query,
+		PageNumber: request.Page,
+		PageSize:   request.PageSize,
+	}
+	if err := listReq.Validate(billListSort); err != nil {
+		log.Printf("GetBills: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -84,7 +97,7 @@ func (h *handler) GetBills(c *gin.Context) {
 		request.StoreIds = storeIds
 	}
 	if len(request.StoreIds) == 0 {
-		c.JSON(http.StatusOK, []any{})
+		c.JSON(http.StatusOK, pagination.Envelope[db.GetAllBillRow]{Items: []db.GetAllBillRow{}})
 		return
 	}
 
@@ -95,22 +108,66 @@ func (h *handler) GetBills(c *gin.Context) {
 		}
 	}
 
+	var phoneFilter *string
 	if request.Query != nil {
-		data := "%" + *request.Query + "%"
-		request.Query = &data
+		s := "%" + *request.Query + "%"
+		phoneFilter = &s
 	}
 
+	// Decode cursor into the (cursor_date, cursor_id) pair the SQL
+	// expects. Both nil on the first page; both set on subsequent
+	// pages. We keep them paired — a half-decoded cursor is a 400.
+	cur, _ := listReq.DecodedCursor()
+	var cursorDate *time.Time
+	var cursorID *uint64
+	if len(cur.K) >= 2 {
+		if dStr, ok := cur.K[0].(string); ok {
+			if t, err := time.Parse(time.RFC3339Nano, dStr); err == nil {
+				cursorDate = &t
+			} else if t, err := time.Parse(time.RFC3339, dStr); err == nil {
+				cursorDate = &t
+			}
+		}
+		if id, ok := cur.LastID(); ok && id > 0 {
+			u := uint64(id)
+			cursorID = &u
+		}
+		if cursorDate == nil || cursorID == nil {
+			log.Printf("GetBills: cursor missing date or id")
+			c.Status(http.StatusBadRequest)
+			return
+		}
+	}
+
+	limit := listReq.EffectiveLimit()
+
 	args := db.GetAllBillParams{
-		Phonenumber: request.Query,
-		Limit:       int32(request.PageSize),
-		Offset:      int32(request.Page) * int32(request.PageSize),
+		Phonenumber: phoneFilter,
+		CursorDate:  cursorDate,
+		CursorID:    cursorID,
+		// +1 row signals has_more without a COUNT(*).
+		Limit: int32(limit + 1),
 	}
 	bills, err := h.queries.GetAllBill(c.Request.Context(), args)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
+		log.Printf("GetBills: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	c.JSON(http.StatusOK, bills)
+
+	envelope := pagination.BuildEnvelope(
+		bills,
+		limit,
+		billListSort,
+		// Keyset for the next page is (effective_date, id) of the last
+		// kept row. Date is serialized as RFC3339 so the FE round-trips
+		// it as a string and hands it back verbatim — keeps the cursor
+		// timezone-stable across BE/FE.
+		func(r db.GetAllBillRow) []any {
+			return []any{r.EffectiveDate.UTC().Format(time.RFC3339Nano), r.ID}
+		},
+	)
+	c.JSON(http.StatusOK, envelope)
 }
 
 func (h *handler) AddBill(c *gin.Context) {

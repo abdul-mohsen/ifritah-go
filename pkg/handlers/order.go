@@ -40,39 +40,63 @@ package handlers
 import (
 	"database/sql"
 	"fmt"
+	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
+const orderListSort = "-created_at"
+
 // ── POST /api/v2/order/all ──────────────────────────────────────────────────
-// Lists orders with optional pagination and search.
-// Request body (JSON):
-//   { "page_number": 1, "page_size": 20, "query": "ORD" }
-// All fields optional. Defaults: page 1, size 20, no filter.
+// Cursor-paginated list of orders for the calling user's company. The
+// seek key is (created_at DESC, id DESC), backed by idx_orders_keyset
+// (migration 0003) so the optimizer serves it as a single range scan.
 
 func (h *handler) GetOrders(c *gin.Context) {
 	companyID := h.getUserCompany(c)
 
 	var req struct {
-		PageNumber int    `json:"page_number"`
-		PageSize   int    `json:"page_size"`
-		Query      string `json:"query"`
+		// New cursor-pagination keys.
+		Limit  int    `json:"limit"`
+		Cursor string `json:"cursor"`
+		Sort   string `json:"sort"`
+		Query  string `json:"query"`
+		// Legacy offset keys — accepted but ignored once Cursor != "".
+		PageNumber int `json:"page_number"`
+		PageSize   int `json:"page_size"`
 	}
 	c.ShouldBindJSON(&req)
-	if req.PageNumber < 1 {
-		req.PageNumber = 1
+
+	listReq := pagination.ListRequest{
+		Limit:      req.Limit,
+		Cursor:     req.Cursor,
+		Sort:       req.Sort,
+		PageNumber: req.PageNumber,
+		PageSize:   req.PageSize,
 	}
-	if req.PageSize < 1 || req.PageSize > 10000 {
-		req.PageSize = 20
+	if err := listReq.Validate(orderListSort); err != nil {
+		log.Printf("GetOrders: %v", err)
+		c.Status(http.StatusBadRequest)
+		return
 	}
 
-	// Build WHERE clause
+	cur, _ := listReq.DecodedCursor()
+	cursorCreatedAt, cursorID, ok := cursorDateAndID(cur)
+	if !ok {
+		log.Printf("GetOrders: malformed cursor")
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	limit := listReq.EffectiveLimit()
+
 	where := "WHERE o.store_id IN (SELECT id FROM store WHERE company_id = ?)"
-	args := []interface{}{companyID}
+	args := []any{companyID}
 
 	if req.Query != "" {
 		where += " AND (o.sequence_number LIKE ? OR o.customer_name LIKE ?)"
@@ -80,25 +104,26 @@ func (h *handler) GetOrders(c *gin.Context) {
 		args = append(args, like, like)
 	}
 
-	// Count total
-	var total int
-	h.DB.QueryRow("SELECT COUNT(*) FROM orders o "+where, args...).Scan(&total)
+	// Seek predicate (canonical OR-tree form). Skip when no cursor —
+	// that's the first page.
+	if cursorCreatedAt != nil && cursorID != nil {
+		where += " AND (o.created_at < ? OR (o.created_at = ? AND o.id < ?))"
+		args = append(args, *cursorCreatedAt, *cursorCreatedAt, *cursorID)
+	}
 
-	// Paginate
-	offset := (req.PageNumber - 1) * req.PageSize
-	args = append(args, req.PageSize, offset)
+	// +1 row trick.
+	args = append(args, limit+1)
 
 	rows, err := h.DB.Query(`
 		SELECT o.id, o.sequence_number, o.client_id, COALESCE(o.customer_name,''),
 		       o.store_id, o.status, o.total, COALESCE(o.note,''),
-		       o.created_by, DATE_FORMAT(o.created_at, '%Y-%m-%dT%H:%i:%s') AS created_at,
-		       DATE_FORMAT(o.updated_at, '%Y-%m-%dT%H:%i:%s') AS updated_at,
+		       o.created_by, o.created_at, o.updated_at,
 		       COALESCE(c.name, o.customer_name, '') AS client_name
 		FROM orders o
 		LEFT JOIN client c ON c.id = o.client_id
 		`+where+`
 		ORDER BY o.created_at DESC, o.id DESC
-		LIMIT ? OFFSET ?
+		LIMIT ?
 	`, args...)
 	if err != nil {
 		log.Printf("ERROR GetOrders: %v", err)
@@ -108,18 +133,18 @@ func (h *handler) GetOrders(c *gin.Context) {
 	defer rows.Close()
 
 	type orderRow struct {
-		ID             int     `json:"id"`
-		SequenceNumber string  `json:"sequence_number"`
-		ClientID       *int    `json:"client_id"`
-		CustomerName   string  `json:"customer_name"`
-		StoreID        *int    `json:"store_id"`
-		Status         string  `json:"status"`
-		Total          float64 `json:"total"`
-		Note           string  `json:"note"`
-		CreatedBy      int     `json:"created_by"`
-		CreatedAt      string  `json:"created_at"`
-		UpdatedAt      string  `json:"updated_at"`
-		ClientName     string  `json:"client_name"`
+		ID             int       `json:"id"`
+		SequenceNumber string    `json:"sequence_number"`
+		ClientID       *int      `json:"client_id"`
+		CustomerName   string    `json:"customer_name"`
+		StoreID        *int      `json:"store_id"`
+		Status         string    `json:"status"`
+		Total          float64   `json:"total"`
+		Note           string    `json:"note"`
+		CreatedBy      int       `json:"created_by"`
+		CreatedAt      time.Time `json:"created_at"`
+		UpdatedAt      time.Time `json:"updated_at"`
+		ClientName     string    `json:"client_name"`
 	}
 
 	var orders []orderRow
@@ -137,18 +162,15 @@ func (h *handler) GetOrders(c *gin.Context) {
 		orders = []orderRow{}
 	}
 
-	totalPages := total / req.PageSize
-	if total%req.PageSize > 0 {
-		totalPages++
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data":        orders,
-		"total":       total,
-		"page":        req.PageNumber,
-		"page_size":   req.PageSize,
-		"total_pages": totalPages,
-	})
+	envelope := pagination.BuildEnvelope(
+		orders,
+		limit,
+		orderListSort,
+		func(o orderRow) []any {
+			return []any{o.CreatedAt.UTC().Format(time.RFC3339Nano), int64(o.ID)}
+		},
+	)
+	c.JSON(http.StatusOK, envelope)
 }
 
 // ── GET /api/v2/order/:id ───────────────────────────────────────────────────

@@ -1,5 +1,16 @@
 -- name: GetClients :many
-SELECT * FROM client where is_deleted = FALSE ORDER BY updated_at  DESC LIMIT ? OFFSET ?;
+-- Keyset pagination on (updated_at DESC, id DESC). Backed by
+-- idx_client_keyset (migration 0003). Sort key carries updated_at so
+-- the FE keeps the existing "recently-touched first" UX.
+SELECT * FROM client
+WHERE is_deleted = FALSE
+  AND (
+        sqlc.narg('cursor_updated_at') IS NULL
+     OR updated_at < sqlc.narg('cursor_updated_at')
+     OR (updated_at = sqlc.narg('cursor_updated_at') AND id < sqlc.narg('cursor_id'))
+  )
+ORDER BY updated_at DESC, id DESC
+LIMIT ?;
 
 -- name: GetClientByID :one
 SELECT * FROM client WHERE id = ? and is_deleted = FALSE LIMIT 1;

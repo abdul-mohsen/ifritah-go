@@ -3,12 +3,14 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"slices"
 	"strconv"
 
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
+	"ifritah/web-service-gin/pkg/pagination"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
@@ -110,31 +112,50 @@ func (h *handler) UpdateProduct(c *gin.Context) {
 
 }
 
+const productListSort = "-id"
+
 func (h *handler) GetAllProducts(c *gin.Context) {
 	user := GetSessionInfo(c)
 
-	request := model.PaginationRequest{
-		Page:     0,
-		PageSize: 10,
-	}
+	request := model.PaginationRequest{}
 
 	if err := c.BindJSON(&request); err != nil {
+		log.Printf("GetAllProducts: %v", err)
+		c.Status(http.StatusBadRequest)
 		return
 	}
 
+	listReq := listRequestFromPagination(request)
+	if err := listReq.Validate(productListSort); err != nil {
+		log.Printf("GetAllProducts: %v", err)
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	cur, _ := listReq.DecodedCursor()
+	cursorID := cursorIDOnly(cur)
+	limit := listReq.EffectiveLimit()
+
 	args := db.GetAllProductParams{
-		ID:     int32(user.id),
-		Limit:  request.PageSize,
-		Offset: request.PageSize * request.Page,
+		ID:       int32(user.id),
+		CursorID: cursorID,
+		Limit:    int32(limit + 1),
 	}
 
 	products, err := h.queries.GetAllProduct(c.Request.Context(), args)
 	if err != nil {
+		log.Printf("GetAllProducts: %v", err)
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, products)
+	envelope := pagination.BuildEnvelope(
+		products,
+		limit,
+		productListSort,
+		func(p db.Product) []any { return []any{p.ID} },
+	)
+	c.JSON(http.StatusOK, envelope)
 }
 
 func (h *handler) DeleteProduct(c *gin.Context) {

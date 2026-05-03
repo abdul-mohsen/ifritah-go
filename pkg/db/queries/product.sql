@@ -2,12 +2,17 @@
 select p.* from product p where p.id = ? and is_deleted = False;
 
 -- name: GetAllProduct :many
+-- Keyset pagination on (id DESC). The InnoDB primary key already
+-- serves the scan order natively — no extra index needed. Caller
+-- fetches limit+1 to detect has_more.
 select p.*
 from user
 join store s on s.company_id = user.company_id
 join product p on p.store_id = s.id
 where user.id = ? and is_deleted = False
-ORDER BY p.id DESC LIMIT ? OFFSET ?;
+  and (sqlc.narg('cursor_id') is null or p.id < sqlc.narg('cursor_id'))
+ORDER BY p.id DESC
+LIMIT ?;
 
 -- name: AddProduct :execresult
 INSERT INTO product (article_id, quantity, price, cost_price ,shelf_number, store_id, name) VALUES (?,?,?,?,?,?,?)

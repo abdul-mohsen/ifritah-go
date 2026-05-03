@@ -6,6 +6,7 @@ import (
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
+	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
 	"slices"
@@ -18,13 +19,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func (h *handler) getPurchaseBills(c *gin.Context, page int32, pageSize int32, userID int32) []db.PurchaseBill {
-
-	args := db.GetAllPurchaseBillParams{
-		ID:     userID,
-		Limit:  pageSize,
-		Offset: pageSize * page,
-	}
+func (h *handler) getPurchaseBills(c *gin.Context, args db.GetAllPurchaseBillParams) []db.PurchaseBill {
 
 	bills, err := h.queries.GetAllPurchaseBill(c.Request.Context(), args)
 
@@ -328,6 +323,8 @@ func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.P
 	return nil
 }
 
+const purchaseBillListSort = "-effective_date"
+
 func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
@@ -337,10 +334,7 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		storeIds = append(storeIds, value.Id)
 	}
 
-	request := model.BillRequestFilter{
-		Page:     0,
-		PageSize: 10,
-	}
+	request := model.BillRequestFilter{}
 
 	if err := c.BindJSON(&request); err != nil {
 		log.Printf("GetAllPurchaseBill: %v", err)
@@ -348,19 +342,25 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		return
 	}
 
-	if request.Page < 0 || request.PageSize <= 0 {
+	listReq := pagination.ListRequest{
+		Limit:      request.Limit,
+		Cursor:     request.Cursor,
+		Sort:       request.Sort,
+		Query:      request.Query,
+		PageNumber: request.Page,
+		PageSize:   request.PageSize,
+	}
+	if err := listReq.Validate(purchaseBillListSort); err != nil {
+		log.Printf("GetAllPurchaseBill: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
 
-	// store_ids is a filter, not a primary key. When omitted, default to
-	// every store the caller can access. Truly no accessible stores means
-	// "empty result", not "bad request".
 	if len(request.StoreIds) == 0 {
 		request.StoreIds = storeIds
 	}
 	if len(request.StoreIds) == 0 {
-		c.JSON(http.StatusOK, []any{})
+		c.JSON(http.StatusOK, pagination.Envelope[db.PurchaseBill]{Items: []db.PurchaseBill{}})
 		return
 	}
 
@@ -371,9 +371,32 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		}
 	}
 
-	bill := h.getPurchaseBills(c, int32(request.Page), int32(request.PageSize), int32(userSession.id))
+	cur, _ := listReq.DecodedCursor()
+	cursorDate, cursorID, ok := cursorDateAndID(cur)
+	if !ok {
+		log.Printf("GetAllPurchaseBill: malformed cursor")
+		c.Status(http.StatusBadRequest)
+		return
+	}
 
-	c.JSON(http.StatusOK, bill)
+	limit := listReq.EffectiveLimit()
+
+	bill := h.getPurchaseBills(c, db.GetAllPurchaseBillParams{
+		ID:         int32(userSession.id),
+		CursorDate: cursorDate,
+		CursorID:   cursorID,
+		Limit:      int32(limit + 1),
+	})
+
+	envelope := pagination.BuildEnvelope(
+		bill,
+		limit,
+		purchaseBillListSort,
+		func(b db.PurchaseBill) []any {
+			return []any{b.EffectiveDate.UTC().Format(time.RFC3339Nano), b.ID}
+		},
+	)
+	c.JSON(http.StatusOK, envelope)
 }
 
 func (h *handler) GetPurchaseBillDetail(c *gin.Context) {

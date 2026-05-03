@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
 	"strconv"
@@ -62,8 +63,17 @@ func (h *handler) getStoreIds(c *gin.Context) []int32 {
 	return ids
 }
 
+// GetStores returns the calling user's accessible stores wrapped in
+// the standard cursor-pagination envelope. Stores per company are
+// bounded (typically <10), so we return the full set in one page —
+// no real seek; HasMore is always false. Keeping the envelope shape
+// keeps the wire contract uniform across all list endpoints.
 func (h *handler) GetStores(c *gin.Context) {
-	c.JSON(http.StatusOK, h.getStores(GetSessionInfo(c)))
+	stores := h.getStores(GetSessionInfo(c))
+	if stores == nil {
+		stores = []Store{}
+	}
+	c.JSON(http.StatusOK, pagination.Envelope[Store]{Items: stores})
 }
 
 // ── GET /api/v2/store/:id ───────────────────────────────────────────────────

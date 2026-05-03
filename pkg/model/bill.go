@@ -28,9 +28,15 @@ type BillRequestFilter struct {
 	StoreIds  []int      `json:"store_ids"`
 	StartDate *time.Time `json:"start_date"`
 	EndDate   *time.Time `json:"end_date"`
-	Page      int        `json:"page_number"`
-	PageSize  int        `json:"page_size"`
-	Query     *string    `json:"query"`
+	// Cursor pagination (preferred). Empty Cursor + zero Limit falls
+	// back to the legacy Page/PageSize keys for one release.
+	Limit  int    `json:"limit"`
+	Cursor string `json:"cursor"`
+	Sort   string `json:"sort"`
+	// Legacy offset paging — accepted but ignored once Cursor is set.
+	Page     int     `json:"page_number"`
+	PageSize int     `json:"page_size"`
+	Query    *string `json:"query"`
 }
 
 type AddBillRequest struct {

@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"database/sql"
 	"ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
+	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
 	"strconv"
@@ -28,30 +30,53 @@ type SupplierRequest struct {
 	Email                  *string          `json:"email"`
 }
 
+const supplierListSort = "-id"
+
 func (h *handler) GetAllSupplier(c *gin.Context) {
 
-	request := model.PaginationRequest{
-		PageSize: 10,
-		Page:     0,
-	}
+	request := model.PaginationRequest{}
 
 	if err := c.BindJSON(&request); err != nil {
 		log.Printf("GetAllSupplier: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
+
+	listReq := listRequestFromPagination(request)
+	if err := listReq.Validate(supplierListSort); err != nil {
+		log.Printf("GetAllSupplier: %v", err)
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	cur, _ := listReq.DecodedCursor()
+	cursorID := cursorIDOnly(cur)
+	var cursorIDNullable sql.NullInt64
+	if cursorID != nil {
+		cursorIDNullable = sql.NullInt64{Int64: int64(*cursorID), Valid: true}
+	}
+
+	limit := listReq.EffectiveLimit()
+
 	args := db.GetAllSupplierParams{
-		Limit:  request.PageSize,
-		Offset: request.Page * request.PageSize,
+		CursorID: cursorIDNullable,
+		Limit:    int32(limit + 1),
 	}
 
 	suppliers, err := h.queries.GetAllSupplier(c.Request.Context(), args)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
+		log.Printf("GetAllSupplier: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	c.IndentedJSON(http.StatusOK, suppliers)
+	envelope := pagination.BuildEnvelope(
+		suppliers,
+		limit,
+		supplierListSort,
+		func(s db.Supplier) []any { return []any{s.ID} },
+	)
+	c.IndentedJSON(http.StatusOK, envelope)
 }
 
 func (h *handler) GetSupplier(c *gin.Context) {

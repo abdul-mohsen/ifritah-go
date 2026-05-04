@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "agent-mailbox": {
+      "type": "stdio",
+      "command": "C:\\ssda\\chatGPT\\agent-mailbox\\agent-mailbox.exe",
+      "env": {
+        "MAILBOX_ROOT": "C:\\ssda\\chatGPT\\shared-chat"
+      }
+    }
+  }
+}

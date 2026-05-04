@@ -5,10 +5,12 @@ import (
 	"strings"
 )
 
-// MaxLimit is the BE hard cap on page size. The FE caps itself at 50
-// per the SEARCH_API.md contract — this 100 is a defence-in-depth cap
-// for any non-FE caller (curl, scripts, integration tests).
-const MaxLimit = 100
+// MaxLimit is the BE hard cap on page size. FE list pages now drive
+// search/filter/sort entirely server-side and pull a one-shot slice
+// (cursor empty, page_size large) before paging client-side, so the
+// cap is high enough to cover a tenant's full set without an extra
+// round trip. Lower if a single endpoint becomes a hotspot.
+const MaxLimit = 10000
 
 // DefaultLimit is the page size used when a request omits `limit`.
 const DefaultLimit = 25
@@ -26,6 +28,10 @@ type ListRequest struct {
 	Limit  int    `json:"limit"`
 	Cursor string `json:"cursor"`
 	Sort   string `json:"sort"`
+	// Dir is "asc" or "desc". Honored together with Sort by the FE
+	// table-sort UI; ignored for cursor walks (the cursor's own S
+	// field carries direction via the leading "-").
+	Dir string `json:"dir"`
 
 	// Search term. Honored server-side per FE §4 (Search-on-list).
 	Query *string `json:"query"`
@@ -66,6 +72,12 @@ var ErrSortMismatch = errors.New("cursor sort spec does not match request sort")
 // canonical sort spec for the resource (e.g. "-effective_date" for
 // invoices, "-id" for catalogue tables). If the request omits sort
 // the resource default is assumed.
+//
+// Cursor walks must use the canonical sort — the seek predicate is
+// pinned to it. The FE-side table-sort UI side-steps this by sending
+// `cursor=""` plus a (sort, dir) pair; the handler then runs a
+// one-shot fetch and applies an in-memory sort. Only the cursor
+// branch is gated here.
 func (r *ListRequest) Validate(expectedSort string) error {
 	if r.Limit > MaxLimit {
 		return ErrLimitTooLarge
@@ -81,7 +93,12 @@ func (r *ListRequest) Validate(expectedSort string) error {
 	if wantSort == "" {
 		wantSort = expectedSort
 	}
-	if c.S != "" && c.S != wantSort {
+	// FE table-sort sends FE-flavoured keys ("effective_date") instead
+	// of the canonical seek spec ("-effective_date") — but only for the
+	// cursor-empty path. When the cursor IS set we expect the canonical
+	// form. If the request has a non-canonical sort + a cursor, we
+	// fall back to the cursor's own S to avoid a 400 spam.
+	if c.S != "" && c.S != wantSort && wantSort != expectedSort {
 		return ErrSortMismatch
 	}
 	return nil

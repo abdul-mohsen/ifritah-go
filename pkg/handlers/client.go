@@ -90,6 +90,21 @@ func (h *handler) GetAllClient(c *gin.Context) {
 		return
 	}
 
+	// Server-driven table sort (FE round-2 §1).
+	applyListSort(res, listReq.Sort, listReq.Dir, func(a, b db.Client, k string) (int, bool) {
+		switch k {
+		case "name":
+			return strCmp(a.Name, b.Name), true
+		case "company_name":
+			return strPtrCmp(a.CompanyName, b.CompanyName), true
+		case "email":
+			return strPtrCmp(a.Email, b.Email), true
+		case "phone":
+			return strPtrCmp(a.Phone, b.Phone), true
+		}
+		return 0, false
+	})
+
 	envelope := pagination.BuildEnvelope(
 		res,
 		limit,

@@ -166,6 +166,60 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 		return
 	}
 
+	// Stock filter (FE round-2 P0 #2). Applied in-memory because the
+	// SQL is sqlc-generated and adding a new narg would explode the
+	// query branches. With FE driving page_size up the bounded slice
+	// here is what the user already sees on screen.
+	//   "in"  → quantity > 0
+	//   "out" → quantity == 0
+	//   "low" → 0 < quantity <= min_stock
+	if request.Stock != "" {
+		filtered := make([]db.Product, 0, len(products))
+		for _, p := range products {
+			gtZero := p.Quantity.GreaterThan(decimal.Zero)
+			eqZero := p.Quantity.IsZero()
+			lowThr := decimal.NewFromInt(int64(p.MinStock))
+			low := gtZero && p.Quantity.LessThanOrEqual(lowThr)
+			switch request.Stock {
+			case "in":
+				if gtZero {
+					filtered = append(filtered, p)
+				}
+			case "out":
+				if eqZero {
+					filtered = append(filtered, p)
+				}
+			case "low":
+				if low {
+					filtered = append(filtered, p)
+				}
+			default:
+				filtered = append(filtered, p)
+			}
+		}
+		products = filtered
+	}
+
+	// Server-driven table sort (FE round-2 §1). part_name isn't a
+	// column on the catalog product table — it lives on bill_product
+	// and order_items rows. Sorting by part_name therefore falls back
+	// to product.name (the user-facing label on the catalog list).
+	applyListSort(products, listReq.Sort, listReq.Dir, func(a, b db.Product, k string) (int, bool) {
+		switch k {
+		case "id":
+			return uint64Cmp(a.ID, b.ID), true
+		case "part_name", "name":
+			return strPtrCmp(a.Name, b.Name), true
+		case "price":
+			return decCmp(a.Price, b.Price), true
+		case "quantity":
+			return decCmp(a.Quantity, b.Quantity), true
+		case "status":
+			return int32Cmp(a.Status, b.Status), true
+		}
+		return 0, false
+	})
+
 	envelope := pagination.BuildEnvelope(
 		products,
 		limit,

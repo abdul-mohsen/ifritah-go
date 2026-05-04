@@ -6,8 +6,10 @@
 --
 -- Search:
 --   - query_like: pre-wrapped %term% used against supplier.name.
---   - query_seq_exact: integer value of q when q is all-digits
---     (exact match on supplier_sequence_number). NULL otherwise.
+--   - query_seq_exact: integer value of q when q is all-digits.
+--     Matches both supplier_sequence_number AND b.id so users can
+--     paste either an internal id or the supplier's reference number
+--     and get a direct hit (FE round-2 ask).
 --   All-NULL = "no search".
 --
 -- NOTE: total exact-match deferred — sqlc nullable-decimal narg
@@ -30,6 +32,7 @@ select b.*
 	         and sqlc.narg('query_seq_exact') is null)
 	     or supplier.name like sqlc.narg('query_like')
 	     or CAST(b.supplier_sequence_number AS CHAR) = sqlc.narg('query_seq_exact')
+	     or CAST(b.id AS CHAR) = sqlc.narg('query_seq_exact')
 	  )
 	  and (
 	        sqlc.narg('cursor_date') is null

@@ -17,15 +17,18 @@
 -- OR-tree is the canonical lex-compare seek predicate
 -- (Markus Winand, use-the-index-luke.com/no-offset).
 --
--- Search (query_like / query_seq_exact / query_total_exact):
---   - query_like: pre-wrapped %term% used against userName + user_phone_number.
+-- Search (query_like / query_seq_exact):
+--   - query_like: pre-wrapped %term% used against userName,
+--     user_phone_number, and client.name (LEFT JOIN already in place).
 --   - query_seq_exact: integer value of q when q is all-digits (exact
 --     match on sequence_number). NULL otherwise.
---   - query_total_str: decimal-as-string value of q when q parses as a
---     decimal (exact match on total). NULL otherwise. We compare via
---     CONCAT(total) so sqlc infers a *string narg, otherwise it would
---     pin the type to the non-nullable decimal column.
 -- All-NULL on the search args = "no search".
+--
+-- NOTE: total exact-match was scoped here but pulled to a follow-up
+-- (sqlc v1.31 emits a non-nullable decimal.Decimal narg for params
+-- bound against a NOT-NULL decimal column even with CAST AS CHAR /
+-- CONCAT). userName/phone/sequence/client.name covers the dominant
+-- search intents in our usage data.
 --
 -- state_filter (sqlc.narg('state_filter')):
 --   - NULL = "any non-deleted" (state >= 0). Default.
@@ -57,6 +60,7 @@ WHERE bill.state >= 0
          AND sqlc.narg('query_seq_exact') IS NULL)
      OR bill.user_phone_number LIKE sqlc.narg('query_like')
      OR bill.userName LIKE sqlc.narg('query_like')
+     OR client.name LIKE sqlc.narg('query_like')
      OR CAST(bill.sequence_number AS CHAR) = sqlc.narg('query_seq_exact')
   )
   AND (
@@ -88,6 +92,7 @@ WHERE bill.state >= 0
          AND sqlc.narg('query_seq_exact') IS NULL)
      OR bill.user_phone_number LIKE sqlc.narg('query_like')
      OR bill.userName LIKE sqlc.narg('query_like')
+     OR client.name LIKE sqlc.narg('query_like')
      OR CAST(bill.sequence_number AS CHAR) = sqlc.narg('query_seq_exact')
   )
   AND (

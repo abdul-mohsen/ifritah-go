@@ -77,6 +77,8 @@ func (h *handler) getStoreIds(c *gin.Context) []int32 {
 func (h *handler) GetStores(c *gin.Context) {
 	var req struct {
 		Query *string `json:"query"`
+		Sort  string  `json:"sort"`
+		Dir   string  `json:"dir"`
 	}
 	_ = c.ShouldBindJSON(&req)
 
@@ -99,6 +101,16 @@ func (h *handler) GetStores(c *gin.Context) {
 		}
 		stores = filtered
 	}
+
+	applyListSort(stores, req.Sort, req.Dir, func(a, b Store, k string) (int, bool) {
+		switch k {
+		case "id":
+			return int64Cmp(int64(a.Id), int64(b.Id)), true
+		case "name":
+			return strPtrCmp(a.Name, b.Name), true
+		}
+		return 0, false
+	})
 
 	c.JSON(http.StatusOK, pagination.Envelope[Store]{Items: stores})
 }

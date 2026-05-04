@@ -44,6 +44,7 @@ type cashVoucherListRequest struct {
 	Limit  int    `json:"limit"`
 	Cursor string `json:"cursor"`
 	Sort   string `json:"sort"`
+	Dir    string `json:"dir"`
 	// Legacy keys — accepted for backwards compat, ignored once Cursor != "".
 	PageNumber int `json:"page_number"`
 	PageSize   int `json:"page_size"`
@@ -141,6 +142,7 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 		Limit:      req.Limit,
 		Cursor:     req.Cursor,
 		Sort:       req.Sort,
+		Dir:        req.Dir,
 		PageNumber: req.PageNumber,
 		PageSize:   req.PageSize,
 	}
@@ -227,6 +229,29 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 		}
 		items = append(items, v)
 	}
+
+	// Server-driven table sort (FE round-2 §1). Amount is wire-encoded
+	// as a decimal string for precision; parse once per compare so the
+	// numeric ordering matches the on-screen value.
+	applyListSort(items, listReq.Sort, listReq.Dir, func(a, b cashVoucherListItem, k string) (int, bool) {
+		switch k {
+		case "voucher_number":
+			return int64Cmp(int64(a.VoucherNumber), int64(b.VoucherNumber)), true
+		case "voucher_type":
+			return strCmp(a.VoucherType, b.VoucherType), true
+		case "recipient_name":
+			return strCmp(a.RecipientName, b.RecipientName), true
+		case "amount":
+			da, _ := decimal.NewFromString(a.Amount)
+			db_, _ := decimal.NewFromString(b.Amount)
+			return decCmp(da, db_), true
+		case "effective_date":
+			return timeCmp(a.EffectiveDate, b.EffectiveDate), true
+		case "state":
+			return int64Cmp(int64(a.State), int64(b.State)), true
+		}
+		return 0, false
+	})
 
 	envelope := pagination.BuildEnvelope(
 		items,

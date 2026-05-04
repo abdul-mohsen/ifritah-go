@@ -34,6 +34,7 @@ func (h *handler) ListBranches(c *gin.Context) {
 		Limit  int     `json:"limit"`
 		Cursor string  `json:"cursor"`
 		Sort   string  `json:"sort"`
+		Dir    string  `json:"dir"`
 		Query  *string `json:"query"`
 		// Legacy keys ignored once Cursor != "".
 		PageNumber int `json:"page_number"`
@@ -45,6 +46,7 @@ func (h *handler) ListBranches(c *gin.Context) {
 		Limit:      req.Limit,
 		Cursor:     req.Cursor,
 		Sort:       req.Sort,
+		Dir:        req.Dir,
 		Query:      req.Query,
 		PageNumber: req.PageNumber,
 		PageSize:   req.PageSize,
@@ -125,6 +127,17 @@ func (h *handler) ListBranches(c *gin.Context) {
 		}
 		branches = append(branches, b)
 	}
+
+	// Server-driven table sort (FE round-2 §1).
+	applyListSort(branches, listReq.Sort, listReq.Dir, func(a, b branchRow, k string) (int, bool) {
+		switch k {
+		case "name":
+			return strCmp(a.Name, b.Name), true
+		case "address":
+			return strCmp(a.Address, b.Address), true
+		}
+		return 0, false
+	})
 
 	envelope := pagination.BuildEnvelope(
 		branches,

@@ -12,6 +12,13 @@ type PaginationRequest struct {
 	Limit  int32  `json:"limit"`
 	Cursor string `json:"cursor"`
 	Sort   string `json:"sort"`
+	Dir    string `json:"dir"`
+	// Resource-specific filters that some FE list pages forward through
+	// this shared struct (kept here so handlers don't each define their
+	// own near-identical wrapper). Unused on most endpoints.
+	//
+	//   Stock — product list only. "in" / "out" / "low" / "" .
+	Stock string `json:"stock"`
 	// Legacy offset paging — accepted but ignored once Cursor is set.
 	Page     int32 `json:"page"`
 	PageSize int32 `json:"page_size"`

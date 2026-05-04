@@ -65,6 +65,7 @@ func (h *handler) GetOrders(c *gin.Context) {
 		Limit  int    `json:"limit"`
 		Cursor string `json:"cursor"`
 		Sort   string `json:"sort"`
+		Dir    string `json:"dir"`
 		Query  string `json:"query"`
 		// Legacy offset keys — accepted but ignored once Cursor != "".
 		PageNumber int `json:"page_number"`
@@ -76,6 +77,7 @@ func (h *handler) GetOrders(c *gin.Context) {
 		Limit:      req.Limit,
 		Cursor:     req.Cursor,
 		Sort:       req.Sort,
+		Dir:        req.Dir,
 		PageNumber: req.PageNumber,
 		PageSize:   req.PageSize,
 	}
@@ -161,6 +163,22 @@ func (h *handler) GetOrders(c *gin.Context) {
 	if orders == nil {
 		orders = []orderRow{}
 	}
+
+	// Server-driven table sort (FE round-2 §1). "client" maps to
+	// ClientName which already coalesces customer_name → client.name.
+	applyListSort(orders, listReq.Sort, listReq.Dir, func(a, b orderRow, k string) (int, bool) {
+		switch k {
+		case "sequence_number":
+			return strCmp(a.SequenceNumber, b.SequenceNumber), true
+		case "client":
+			return strCmp(a.ClientName, b.ClientName), true
+		case "total":
+			return float64Cmp(a.Total, b.Total), true
+		case "status":
+			return strCmp(a.Status, b.Status), true
+		}
+		return 0, false
+	})
 
 	envelope := pagination.BuildEnvelope(
 		orders,

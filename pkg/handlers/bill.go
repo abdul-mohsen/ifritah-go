@@ -80,6 +80,7 @@ func (h *handler) GetBills(c *gin.Context) {
 		Limit:      request.Limit,
 		Cursor:     request.Cursor,
 		Sort:       request.Sort,
+		Dir:        request.Dir,
 		Query:      request.Query,
 		PageNumber: request.Page,
 		PageSize:   request.PageSize,
@@ -212,6 +213,26 @@ func (h *handler) GetBills(c *gin.Context) {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
+
+	// Server-driven table sort (FE round-2 §1). The "type" key maps to
+	// BillType (B2B when client_id is set, B2C otherwise). Cursor walks
+	// stay on the canonical (effective_date DESC, id DESC, is_credit
+	// DESC) seek key — the FE table sort sends an empty cursor.
+	applyListSort(bills, listReq.Sort, listReq.Dir, func(a, b db.GetAllBillRow, k string) (int, bool) {
+		switch k {
+		case "sequence_number":
+			return uint64PtrCmp(a.SequenceNumber, b.SequenceNumber), true
+		case "total":
+			return decCmp(a.Total, b.Total), true
+		case "effective_date":
+			return timeCmp(a.EffectiveDate, b.EffectiveDate), true
+		case "type":
+			return boolCmp(a.BillType, b.BillType), true
+		case "state":
+			return int32Cmp(a.State, b.State), true
+		}
+		return 0, false
+	})
 
 	envelope := pagination.BuildEnvelope(
 		bills,

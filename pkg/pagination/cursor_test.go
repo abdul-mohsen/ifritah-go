@@ -87,7 +87,7 @@ func TestEffectiveLimit(t *testing.T) {
 		{"default when zero", ListRequest{}, DefaultLimit},
 		{"legacy page_size", ListRequest{PageSize: 7}, 7},
 		{"new limit beats legacy", ListRequest{Limit: 10, PageSize: 99}, 10},
-		{"clamped to max", ListRequest{Limit: 9999}, MaxLimit},
+		{"clamped to max", ListRequest{Limit: MaxLimit + 5}, MaxLimit},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

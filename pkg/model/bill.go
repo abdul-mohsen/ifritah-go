@@ -33,6 +33,7 @@ type BillRequestFilter struct {
 	Limit  int    `json:"limit"`
 	Cursor string `json:"cursor"`
 	Sort   string `json:"sort"`
+	Dir    string `json:"dir"`
 	// Legacy offset paging — accepted but ignored once Cursor is set.
 	Page     int     `json:"page_number"`
 	PageSize int     `json:"page_size"`

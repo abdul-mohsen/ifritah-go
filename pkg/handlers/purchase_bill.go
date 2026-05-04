@@ -346,6 +346,7 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		Limit:      request.Limit,
 		Cursor:     request.Cursor,
 		Sort:       request.Sort,
+		Dir:        request.Dir,
 		Query:      request.Query,
 		PageNumber: request.Page,
 		PageSize:   request.PageSize,
@@ -413,6 +414,26 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		CursorDate:    cursorDate,
 		CursorID:      cursorID,
 		Limit:         int32(limit + 1),
+	})
+
+	// Server-driven table sort (FE round-2 §1). PurchaseBill has no
+	// "type" column on the schema; we keep the FE-listed key as a
+	// no-op so an unknown-key send doesn't 500. State suffices for
+	// most "split paid vs draft" needs.
+	applyListSort(bill, listReq.Sort, listReq.Dir, func(a, b db.PurchaseBill, k string) (int, bool) {
+		switch k {
+		case "id":
+			return uint64Cmp(a.ID, b.ID), true
+		case "supplier_sequence_number":
+			return uint64PtrCmp(a.SupplierSequenceNumber, b.SupplierSequenceNumber), true
+		case "total":
+			return decCmp(a.Total, b.Total), true
+		case "effective_date":
+			return timeCmp(a.EffectiveDate, b.EffectiveDate), true
+		case "state":
+			return int32Cmp(a.State, b.State), true
+		}
+		return 0, false
 	})
 
 	envelope := pagination.BuildEnvelope(

@@ -31,9 +31,10 @@ const branchListSort = "id"
 
 func (h *handler) ListBranches(c *gin.Context) {
 	var req struct {
-		Limit  int    `json:"limit"`
-		Cursor string `json:"cursor"`
-		Sort   string `json:"sort"`
+		Limit  int     `json:"limit"`
+		Cursor string  `json:"cursor"`
+		Sort   string  `json:"sort"`
+		Query  *string `json:"query"`
 		// Legacy keys ignored once Cursor != "".
 		PageNumber int `json:"page_number"`
 		PageSize   int `json:"page_size"`
@@ -44,6 +45,7 @@ func (h *handler) ListBranches(c *gin.Context) {
 		Limit:      req.Limit,
 		Cursor:     req.Cursor,
 		Sort:       req.Sort,
+		Query:      req.Query,
 		PageNumber: req.PageNumber,
 		PageSize:   req.PageSize,
 	}
@@ -58,10 +60,19 @@ func (h *handler) ListBranches(c *gin.Context) {
 
 	limit := listReq.EffectiveLimit()
 
-	where := ""
-	args := []any{}
+	// Sentinel-filter pattern in the dynamic builder: `(? = '' OR …)`
+	// keeps the SQL effectively static so MySQL still plans it as a
+	// composite range scan when the search is empty.
+	q := ""
+	if req.Query != nil {
+		q = *req.Query
+	}
+	qLike := "%" + q + "%"
+
+	where := "WHERE (? = '' OR b.name LIKE ? OR COALESCE(b.address,'') LIKE ? OR COALESCE(b.phone,'') LIKE ?)"
+	args := []any{q, qLike, qLike, qLike}
 	if cursorID != nil {
-		where = "WHERE b.id > ?"
+		where += " AND b.id > ?"
 		args = append(args, *cursorID)
 	}
 	args = append(args, limit+1)

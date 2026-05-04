@@ -17,6 +17,22 @@
 -- OR-tree is the canonical lex-compare seek predicate
 -- (Markus Winand, use-the-index-luke.com/no-offset).
 --
+-- Search (query_like / query_seq_exact / query_total_exact):
+--   - query_like: pre-wrapped %term% used against userName + user_phone_number.
+--   - query_seq_exact: integer value of q when q is all-digits (exact
+--     match on sequence_number). NULL otherwise.
+--   - query_total_str: decimal-as-string value of q when q parses as a
+--     decimal (exact match on total). NULL otherwise. We compare via
+--     CONCAT(total) so sqlc infers a *string narg, otherwise it would
+--     pin the type to the non-nullable decimal column.
+-- All-NULL on the search args = "no search".
+--
+-- state_filter (sqlc.narg('state_filter')):
+--   - NULL = "any non-deleted" (state >= 0). Default.
+--   - any int >= 0 = exact match (caller supplies 0/1/2/3).
+--   - We never accept negative values here; the request layer maps
+--     a missing/sentinel filter to NULL before binding.
+--
 -- Caller fetches `limit + 1` to detect has_more without a COUNT(*).
 SELECT bill.id AS id,
        bill.effective_date AS effective_date,
@@ -35,7 +51,14 @@ FROM bill
 JOIN credit_note cn ON cn.bill_id = bill.id
 LEFT JOIN client  ON client.id = bill.client_id
 WHERE bill.state >= 0
-  AND (sqlc.narg('phonenumber') IS NULL OR bill.user_phone_number LIKE sqlc.narg('phonenumber'))
+  AND (sqlc.narg('state_filter') IS NULL OR bill.state = sqlc.narg('state_filter'))
+  AND (
+        (sqlc.narg('query_like') IS NULL
+         AND sqlc.narg('query_seq_exact') IS NULL)
+     OR bill.user_phone_number LIKE sqlc.narg('query_like')
+     OR bill.userName LIKE sqlc.narg('query_like')
+     OR CAST(bill.sequence_number AS CHAR) = sqlc.narg('query_seq_exact')
+  )
   AND (
         sqlc.narg('cursor_date') IS NULL
      OR bill.effective_date < sqlc.narg('cursor_date')
@@ -59,7 +82,14 @@ SELECT bill.id AS id,
 FROM bill
 LEFT JOIN client ON client.id = bill.client_id
 WHERE bill.state >= 0
-  AND (sqlc.narg('phonenumber') IS NULL OR bill.user_phone_number LIKE sqlc.narg('phonenumber'))
+  AND (sqlc.narg('state_filter') IS NULL OR bill.state = sqlc.narg('state_filter'))
+  AND (
+        (sqlc.narg('query_like') IS NULL
+         AND sqlc.narg('query_seq_exact') IS NULL)
+     OR bill.user_phone_number LIKE sqlc.narg('query_like')
+     OR bill.userName LIKE sqlc.narg('query_like')
+     OR CAST(bill.sequence_number AS CHAR) = sqlc.narg('query_seq_exact')
+  )
   AND (
         sqlc.narg('cursor_date') IS NULL
      OR bill.effective_date < sqlc.narg('cursor_date')

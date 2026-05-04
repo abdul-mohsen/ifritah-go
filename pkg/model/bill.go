@@ -37,6 +37,10 @@ type BillRequestFilter struct {
 	Page     int     `json:"page_number"`
 	PageSize int     `json:"page_size"`
 	Query    *string `json:"query"`
+	// State filter (FE §3). nil/absent or -1 = "any non-deleted" (server
+	// already excludes soft-deleted state<0). Otherwise an exact match
+	// on bill.state / purchase_bill.state.
+	State *int32 `json:"state"`
 }
 
 type AddBillRequest struct {

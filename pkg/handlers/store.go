@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -68,11 +69,37 @@ func (h *handler) getStoreIds(c *gin.Context) []int32 {
 // bounded (typically <10), so we return the full set in one page —
 // no real seek; HasMore is always false. Keeping the envelope shape
 // keeps the wire contract uniform across all list endpoints.
+//
+// Search (FE §1): a free-text `query` is matched case-insensitively
+// against `name`. Filter is applied in-memory because the row count
+// is bounded and pushing it to SQL would mean teaching the legacy
+// `getStores` query about a new arg path.
 func (h *handler) GetStores(c *gin.Context) {
+	var req struct {
+		Query *string `json:"query"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
 	stores := h.getStores(GetSessionInfo(c))
 	if stores == nil {
 		stores = []Store{}
 	}
+
+	if req.Query != nil && *req.Query != "" {
+		needle := strings.ToLower(*req.Query)
+		filtered := make([]Store, 0, len(stores))
+		for _, s := range stores {
+			name := ""
+			if s.Name != nil {
+				name = strings.ToLower(*s.Name)
+			}
+			if strings.Contains(name, needle) {
+				filtered = append(filtered, s)
+			}
+		}
+		stores = filtered
+	}
+
 	c.JSON(http.StatusOK, pagination.Envelope[Store]{Items: stores})
 }
 

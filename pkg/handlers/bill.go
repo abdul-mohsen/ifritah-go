@@ -108,12 +108,30 @@ func (h *handler) GetBills(c *gin.Context) {
 		}
 	}
 
-	var phoneFilter *string
-	if request.Query != nil {
+	// Search sentinels (FE §1, §2):
+	//   - queryLike: pre-wrapped %term% used against userName + user_phone_number.
+	//   - querySeqExact: integer value of q when q is all-digits — exact
+	//     match on bill.sequence_number for users pasting an invoice no.
+	// All-NULL = "no search". The SQL uses AND-of-NULLs as the open-gate
+	// sentinel so the WHERE stays static and Sonar S2077-clean.
+	var queryLike *string
+	var querySeqExact *uint64
+	if request.Query != nil && *request.Query != "" {
 		s := "%" + *request.Query + "%"
-		phoneFilter = &s
+		queryLike = &s
+		if n, err := strconv.ParseUint(*request.Query, 10, 64); err == nil && n > 0 {
+			querySeqExact = &n
+		}
 	}
 
+	// State filter (FE §3): -1 (or absent) means "any non-deleted".
+	// Anything >= 0 is exact match. We never bind a negative value;
+	// the SQL already enforces state >= 0 as a soft-delete guard.
+	var stateFilter *int32
+	if request.State != nil && *request.State >= 0 {
+		v := *request.State
+		stateFilter = &v
+	}
 	// Decode cursor into the (cursor_date, cursor_id, cursor_is_credit)
 	// triple the SQL expects. All nil on the first page; all set on
 	// subsequent pages. We keep them paired — a half-decoded cursor is
@@ -179,7 +197,9 @@ func (h *handler) GetBills(c *gin.Context) {
 	limit := listReq.EffectiveLimit()
 
 	args := db.GetAllBillParams{
-		Phonenumber:    phoneFilter,
+		StateFilter:    stateFilter,
+		QueryLike:      queryLike,
+		QuerySeqExact:  querySeqExact,
 		CursorDate:     cursorDate,
 		CursorID:       cursorID,
 		CursorIsCredit: cursorIsCredit,

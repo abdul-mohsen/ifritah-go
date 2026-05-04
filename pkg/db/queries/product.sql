@@ -5,11 +5,19 @@ select p.* from product p where p.id = ? and is_deleted = False;
 -- Keyset pagination on (id DESC). The InnoDB primary key already
 -- serves the scan order natively — no extra index needed. Caller
 -- fetches limit+1 to detect has_more.
+-- query_like is the sentinel-filter for search across name and
+-- shelf_number; query_id_match is set to the integer value of q
+-- when q is all-digits (exact id match), 0 otherwise. NULL on both
+-- means "no search".
 select p.*
 from user
 join store s on s.company_id = user.company_id
 join product p on p.store_id = s.id
 where user.id = ? and is_deleted = False
+  and (sqlc.narg('query_like') is null
+       or p.name like sqlc.narg('query_like')
+       or coalesce(p.shelf_number,'') like sqlc.narg('query_like')
+       or p.id = sqlc.narg('query_id_match'))
   and (sqlc.narg('cursor_id') is null or p.id < sqlc.narg('cursor_id'))
 ORDER BY p.id DESC
 LIMIT ?;

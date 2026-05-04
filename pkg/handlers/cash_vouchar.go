@@ -50,6 +50,10 @@ type cashVoucherListRequest struct {
 
 	Query       string `json:"query"`
 	VoucherType string `json:"voucher_type"` // "disbursement", "receipt", or "" for all
+	// State filter (FE §3). nil/absent = "any state" for cash vouchers
+	// (workflow: 0=draft, 1=approved, 2=posted). Negative values are
+	// treated as "any" so the FE can send -1 as the sentinel.
+	State *int `json:"state"`
 }
 
 type cashVoucherCreateRequest struct {
@@ -167,6 +171,12 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 		}
 		where += " AND voucher_type = ?"
 		args = append(args, req.VoucherType)
+	}
+
+	// State filter (FE §3). Skip when nil or negative ("any state").
+	if req.State != nil && *req.State >= 0 {
+		where += " AND state = ?"
+		args = append(args, *req.State)
 	}
 
 	if req.Query != "" {

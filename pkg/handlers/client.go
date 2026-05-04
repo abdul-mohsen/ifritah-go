@@ -70,7 +70,16 @@ func (h *handler) GetAllClient(c *gin.Context) {
 
 	limit := listReq.EffectiveLimit()
 
+	// Search sentinel: NULL = no search; otherwise %term% used against
+	// name / email / phone (FE §1).
+	var queryLike *string
+	if request.Query != nil && *request.Query != "" {
+		s := "%" + *request.Query + "%"
+		queryLike = &s
+	}
+
 	res, err := h.queries.GetClients(c.Request.Context(), db.GetClientsParams{
+		QueryLike:       queryLike,
 		CursorUpdatedAt: cursorUpdatedAt,
 		CursorID:        cursorIDU32,
 		Limit:           int32(limit + 1),

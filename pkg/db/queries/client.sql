@@ -2,8 +2,14 @@
 -- Keyset pagination on (updated_at DESC, id DESC). Backed by
 -- idx_client_keyset (migration 0003). Sort key carries updated_at so
 -- the FE keeps the existing "recently-touched first" UX.
+-- query_like is the sentinel-filter for search (pre-wrapped %term%
+-- on the Go side; NULL = "no search"). Keeps SQL static (Sonar S2077).
 SELECT * FROM client
 WHERE is_deleted = FALSE
+  AND (sqlc.narg('query_like') IS NULL
+       OR name LIKE sqlc.narg('query_like')
+       OR email LIKE sqlc.narg('query_like')
+       OR phone LIKE sqlc.narg('query_like'))
   AND (
         sqlc.narg('cursor_updated_at') IS NULL
      OR updated_at < sqlc.narg('cursor_updated_at')

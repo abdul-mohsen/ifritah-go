@@ -58,9 +58,18 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 
 	limit := listReq.EffectiveLimit()
 
+	// Sentinel-filter for search: NULL = no search, otherwise %term%.
+	// Same shape as bill / cash_voucher / client / product (FE §1).
+	var queryLike *string
+	if request.Query != nil && *request.Query != "" {
+		s := "%" + *request.Query + "%"
+		queryLike = &s
+	}
+
 	args := db.GetAllSupplierParams{
-		CursorID: cursorIDNullable,
-		Limit:    int32(limit + 1),
+		QueryLike: queryLike,
+		CursorID:  cursorIDNullable,
+		Limit:     int32(limit + 1),
 	}
 
 	suppliers, err := h.queries.GetAllSupplier(c.Request.Context(), args)

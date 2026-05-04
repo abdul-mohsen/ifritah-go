@@ -136,10 +136,27 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 	cursorID := cursorIDOnly(cur)
 	limit := listReq.EffectiveLimit()
 
+	// Search sentinels (FE §1):
+	//   - QueryLike: %term% used against name + shelf_number.
+	//   - QueryIDMatch: when q is all-digits, the integer value for an
+	//     exact PK match (so users can paste a sticker id and get a
+	//     direct hit). NULL otherwise.
+	var queryLike *string
+	var queryIDMatch *uint64
+	if request.Query != nil && *request.Query != "" {
+		s := "%" + *request.Query + "%"
+		queryLike = &s
+		if id, err := strconv.ParseUint(*request.Query, 10, 64); err == nil && id > 0 {
+			queryIDMatch = &id
+		}
+	}
+
 	args := db.GetAllProductParams{
-		ID:       int32(user.id),
-		CursorID: cursorID,
-		Limit:    int32(limit + 1),
+		ID:           int32(user.id),
+		QueryLike:    queryLike,
+		QueryIDMatch: queryIDMatch,
+		CursorID:     cursorID,
+		Limit:        int32(limit + 1),
 	}
 
 	products, err := h.queries.GetAllProduct(c.Request.Context(), args)

@@ -381,11 +381,38 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 
 	limit := listReq.EffectiveLimit()
 
+	// Search sentinels (FE §1, §2):
+	//   - queryLike: %term% used against supplier.name (LEFT JOIN added
+	//     in the SQL so empty supplier still scans).
+	//   - querySeqExact: integer value of q when q is all-digits —
+	//     exact match on supplier_sequence_number.
+	// All-NULL = "no search".
+	var queryLike *string
+	var querySeqExact *uint64
+	if request.Query != nil && *request.Query != "" {
+		s := "%" + *request.Query + "%"
+		queryLike = &s
+		if n, err := strconv.ParseUint(*request.Query, 10, 64); err == nil && n > 0 {
+			querySeqExact = &n
+		}
+	}
+
+	// State filter (FE §3): -1/absent = any non-deleted (state >= 0
+	// already enforced); otherwise exact match.
+	var stateFilter *int32
+	if request.State != nil && *request.State >= 0 {
+		v := *request.State
+		stateFilter = &v
+	}
+
 	bill := h.getPurchaseBills(c, db.GetAllPurchaseBillParams{
-		ID:         int32(userSession.id),
-		CursorDate: cursorDate,
-		CursorID:   cursorID,
-		Limit:      int32(limit + 1),
+		ID:            int32(userSession.id),
+		StateFilter:   stateFilter,
+		QueryLike:     queryLike,
+		QuerySeqExact: querySeqExact,
+		CursorDate:    cursorDate,
+		CursorID:      cursorID,
+		Limit:         int32(limit + 1),
 	})
 
 	envelope := pagination.BuildEnvelope(

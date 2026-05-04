@@ -1,0 +1,13 @@
+2026/05/04 16:14:21 purchase_bill.go:55: beginPurchaseBillTx: Key: 'AddPurchaseBillRequest.SupplierId' Error:Field validation for 'SupplierId' failed on the 'required' tag
+Key: 'AddPurchaseBillRequest.SupplierSequenceNumber' Error:Field validation for 'SupplierSequenceNumber' failed on the 'required' tag
+2026/05/04 16:14:37 purchase_bill.go:55: beginPurchaseBillTx: Key: 'AddPurchaseBillRequest.SupplierSequenceNumber' Error:Field validation for 'SupplierSequenceNumber' failed on the 'required' tag
+2026/05/04 16:14:46 purchase_bill.go:55: beginPurchaseBillTx: json: cannot unmarshal string into Go struct field AddPurchaseBillRequest.supplier_sequence_number of type uint64
+2026/05/04 16:14:55 stock.go:68: {"product_id":285209107,"store_id":58,"quantity":"20","movement_type":"purchase","reference_type":"purchase_bill","reference_id":393,"item_id":null,"reason":null,"note":"فاتورة مشتريات #99100","created_by":20,"created_at":"2026-05-04T16:14:55.4272904+03:00"}
+2026/05/04 16:15:07 stock.go:68: {"product_id":285209108,"store_id":58,"quantity":"20","movement_type":"purchase","reference_type":"purchase_bill","reference_id":394,"item_id":null,"reason":null,"note":"فاتورة مشتريات #99101","created_by":20,"created_at":"2026-05-04T16:15:07.802469+03:00"}
+2026/05/04 16:16:31 stock.go:68: {"product_id":285209109,"store_id":58,"quantity":"20","movement_type":"purchase","reference_type":"purchase_bill","reference_id":395,"item_id":null,"reason":null,"note":"فاتورة مشتريات #777001","created_by":20,"created_at":"2026-05-04T16:16:31.5410832+03:00"}
+2026/05/04 16:17:51 stock.go:68: {"product_id":285209080,"store_id":58,"quantity":"50","movement_type":"purchase","reference_type":"purchase_bill","reference_id":396,"item_id":null,"reason":null,"note":"فاتورة مشتريات #777002","created_by":20,"created_at":"2026-05-04T16:17:51.8141615+03:00"}
+2026/05/04 16:22:13 product.go:147: GetAllProducts: Error 1052 (23000): Column 'is_deleted' in where clause is ambiguous
+2026/05/04 16:22:23 product.go:147: GetAllProducts: Error 1052 (23000): Column 'is_deleted' in where clause is ambiguous
+2026/05/04 16:22:26 product.go:147: GetAllProducts: Error 1052 (23000): Column 'is_deleted' in where clause is ambiguous
+2026/05/04 17:28:30 product.go:147: GetAllProducts: Error 1052 (23000): Column 'is_deleted' in where clause is ambiguous
+2026/05/04 18:00:24 pub.go:44: [zatca-publisher] nats disconnected: read tcp [::1]:19633->[::1]:14222: wsarecv: An existing connection was forcibly closed by the remote host.

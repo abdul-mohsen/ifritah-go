@@ -121,6 +121,7 @@ func main() {
 
 		// ── Stores (write is admin-only) ───────────────────────────────
 		authorized.GET("stores/all", h.GetStores)
+		authorized.POST("stores/all", h.GetStores)
 		authorized.GET("store/:id", h.GetStore)
 		authorized.POST("store", admin, h.CreateStore)
 		authorized.PUT("store/:id", admin, h.UpdateStore)

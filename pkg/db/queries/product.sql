@@ -1,5 +1,5 @@
 -- name: GetProduct :one
-select p.* from product p where p.id = ? and is_deleted = False;
+select p.* from product p where p.id = ? and p.is_deleted = False;
 
 -- name: GetAllProduct :many
 -- Keyset pagination on (id DESC). The InnoDB primary key already
@@ -13,7 +13,7 @@ select p.*
 from user
 join store s on s.company_id = user.company_id
 join product p on p.store_id = s.id
-where user.id = ? and is_deleted = False
+where user.id = ? and p.is_deleted = False
   and (sqlc.narg('query_like') is null
        or p.name like sqlc.narg('query_like')
        or coalesce(p.shelf_number,'') like sqlc.narg('query_like')

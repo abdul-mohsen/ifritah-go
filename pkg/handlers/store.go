@@ -80,7 +80,23 @@ func (h *handler) GetStores(c *gin.Context) {
 		Sort  string  `json:"sort"`
 		Dir   string  `json:"dir"`
 	}
+	// Best-effort JSON bind (POST clients). GET callers send no body.
 	_ = c.ShouldBindJSON(&req)
+
+	// Query-string overlay so GET ?query=&sort=&dir= works the same as
+	// the POST JSON body. FE currently calls GET with query params; we
+	// also accept POST so the wire shape matches the other 8 list
+	// endpoints. Query-string wins when both present.
+	if q := c.Query("query"); q != "" {
+		v := q
+		req.Query = &v
+	}
+	if s := c.Query("sort"); s != "" {
+		req.Sort = s
+	}
+	if d := c.Query("dir"); d != "" {
+		req.Dir = d
+	}
 
 	stores := h.getStores(GetSessionInfo(c))
 	if stores == nil {

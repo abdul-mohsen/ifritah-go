@@ -1,0 +1,227 @@
+Connected!
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /healthz                  --> main.main.func1 (4 handlers)
+[GIN-debug] POST   /api/v2/supplier/all      --> ifritah/web-service-gin/pkg/handlers.(*handler).GetAllSupplier-fm (5 handlers)
+[GIN-debug] GET    /api/v2/supplier/:id      --> ifritah/web-service-gin/pkg/handlers.(*handler).GetSupplier-fm (5 handlers)
+[GIN-debug] POST   /api/v2/supplier          --> ifritah/web-service-gin/pkg/handlers.(*handler).AddSupplier-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/supplier/:id      --> ifritah/web-service-gin/pkg/handlers.(*handler).EditSupplier-fm (6 handlers)
+[GIN-debug] DELETE /api/v2/supplier/:id      --> ifritah/web-service-gin/pkg/handlers.(*handler).DeleteSupplier-fm (6 handlers)
+[GIN-debug] GET    /api/v2/company/all       --> ifritah/web-service-gin/pkg/handlers.(*handler).GetAllCompanies-fm (5 handlers)
+[GIN-debug] GET    /api/v2/company           --> ifritah/web-service-gin/pkg/handlers.(*handler).GetCompany-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/company           --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdateCompany-fm (6 handlers)
+[GIN-debug] GET    /api/v2/vin/car/info/:vin --> ifritah/web-service-gin/pkg/handlers.(*handler).GetCarInfoByVin-fm (5 handlers)
+[GIN-debug] GET    /api/v2/vin/car/:vin      --> ifritah/web-service-gin/pkg/handlers.(*handler).GetCarsByVin-fm (5 handlers)
+[GIN-debug] POST   /api/v2/vin/part/details/:vin --> ifritah/web-service-gin/pkg/handlers.(*handler).GetPartByVinDetails-fm (5 handlers)
+[GIN-debug] POST   /api/v2/vin/part/:vin     --> ifritah/web-service-gin/pkg/handlers.(*handler).GetPartByVin-fm (5 handlers)
+[GIN-debug] GET    /api/v2/vin/car/csv/:vin  --> ifritah/web-service-gin/pkg/handlers.(*handler).DownloadAllVinPartCSV-fm (5 handlers)
+[GIN-debug] GET    /api/v2/vin/all           --> ifritah/web-service-gin/pkg/handlers.(*handler).GetAllCachedVin-fm (5 handlers)
+[GIN-debug] GET    /api/v2/vin/no_cache/:vin --> ifritah/web-service-gin/pkg/handlers.(*handler).SearchByVinSkipCache-fm (5 handlers)
+[GIN-debug] GET    /api/v2/vin/:vin          --> ifritah/web-service-gin/pkg/handlers.(*handler).SearchByVin-fm (5 handlers)
+[GIN-debug] GET    /api/v2/car_part/:id      --> ifritah/web-service-gin/pkg/handlers.(*handler).GetAllCachedVin-fm (5 handlers)
+[GIN-debug] GET    /api/v2/bill/:id          --> ifritah/web-service-gin/pkg/handlers.(*handler).GetBillDetail-fm (5 handlers)
+[GIN-debug] POST   /api/v2/bill/all          --> ifritah/web-service-gin/pkg/handlers.(*handler).GetBills-fm (5 handlers)
+[GIN-debug] POST   /api/v2/bill              --> ifritah/web-service-gin/pkg/handlers.(*handler).AddBill-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/bill/:id          --> ifritah/web-service-gin/pkg/handlers.(*handler).SubmitDraftBill-fm (5 handlers)
+[GIN-debug] DELETE /api/v2/bill/:id          --> ifritah/web-service-gin/pkg/handlers.(*handler).DeleteBillDetail-fm (6 handlers)
+[GIN-debug] GET    /api/v2/credit_bill/:id   --> ifritah/web-service-gin/pkg/handlers.(*handler).GetBillCreditDetail-fm (5 handlers)
+[GIN-debug] POST   /api/v2/bill/credit       --> ifritah/web-service-gin/pkg/handlers.(*handler).CreditBill-fm (5 handlers)
+[GIN-debug] GET    /api/v2/purchase_bill/:id --> ifritah/web-service-gin/pkg/handlers.(*handler).GetPurchaseBillDetail-fm (5 handlers)
+[GIN-debug] POST   /api/v2/purchase_bill     --> ifritah/web-service-gin/pkg/handlers.(*handler).AddPurchaseBill-fm (5 handlers)
+[GIN-debug] POST   /api/v2/purchase_bill/all --> ifritah/web-service-gin/pkg/handlers.(*handler).GetAllPurchaseBill-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/purchase_bill/:id --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdatePurchaseBill-fm (5 handlers)
+[GIN-debug] DELETE /api/v2/purchase_bill/:id --> ifritah/web-service-gin/pkg/handlers.(*handler).DeletePurchaseBillDetail-fm (6 handlers)
+[GIN-debug] POST   /api/v2/product/search    --> ifritah/web-service-gin/pkg/handlers.(*handler).SearchProducts-fm (5 handlers)
+[GIN-debug] GET    /api/v2/product/:id       --> ifritah/web-service-gin/pkg/handlers.(*handler).GetProduct-fm (5 handlers)
+[GIN-debug] POST   /api/v2/product/all       --> ifritah/web-service-gin/pkg/handlers.(*handler).GetAllProducts-fm (5 handlers)
+[GIN-debug] POST   /api/v2/product           --> ifritah/web-service-gin/pkg/handlers.(*handler).AddQuantity-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/product/:id       --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdateProduct-fm (5 handlers)
+[GIN-debug] DELETE /api/v2/product/:id       --> ifritah/web-service-gin/pkg/handlers.(*handler).DeleteProduct-fm (6 handlers)
+[GIN-debug] GET    /api/v2/client/:id        --> ifritah/web-service-gin/pkg/handlers.(*handler).GetClient-fm (5 handlers)
+[GIN-debug] POST   /api/v2/client/all        --> ifritah/web-service-gin/pkg/handlers.(*handler).GetAllClient-fm (5 handlers)
+[GIN-debug] POST   /api/v2/client            --> ifritah/web-service-gin/pkg/handlers.(*handler).CreateClient-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/client/:id        --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdateClient-fm (5 handlers)
+[GIN-debug] DELETE /api/v2/client/:id        --> ifritah/web-service-gin/pkg/handlers.(*handler).DeleteClient-fm (6 handlers)
+[GIN-debug] POST   /api/v2/branch/all        --> ifritah/web-service-gin/pkg/handlers.(*handler).ListBranches-fm (5 handlers)
+[GIN-debug] GET    /api/v2/branch/:id        --> ifritah/web-service-gin/pkg/handlers.(*handler).GetBranch-fm (5 handlers)
+[GIN-debug] POST   /api/v2/branch            --> ifritah/web-service-gin/pkg/handlers.(*handler).CreateBranch-fm (6 handlers)
+[GIN-debug] PUT    /api/v2/branch/:id        --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdateBranch-fm (6 handlers)
+[GIN-debug] DELETE /api/v2/branch/:id        --> ifritah/web-service-gin/pkg/handlers.(*handler).DeleteBranch-fm (6 handlers)
+[GIN-debug] GET    /api/v2/branch/:id/zatca  --> ifritah/web-service-gin/pkg/handlers.(*handler).GetBranchZatcaConfig-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/branch/:id/zatca  --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdateBranchZatcaConfig-fm (6 handlers)
+[GIN-debug] POST   /api/v2/branch/:id/zatca/onboard --> ifritah/web-service-gin/pkg/handlers.(*handler).OnboardBranchZatca-fm (6 handlers)
+[GIN-debug] GET    /api/v2/stores/all        --> ifritah/web-service-gin/pkg/handlers.(*handler).GetStores-fm (5 handlers)
+[GIN-debug] GET    /api/v2/store/:id         --> ifritah/web-service-gin/pkg/handlers.(*handler).GetStore-fm (5 handlers)
+[GIN-debug] POST   /api/v2/store             --> ifritah/web-service-gin/pkg/handlers.(*handler).CreateStore-fm (6 handlers)
+[GIN-debug] PUT    /api/v2/store/:id         --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdateStore-fm (6 handlers)
+[GIN-debug] DELETE /api/v2/store/:id         --> ifritah/web-service-gin/pkg/handlers.(*handler).DeleteStore-fm (6 handlers)
+[GIN-debug] GET    /api/v2/settings          --> ifritah/web-service-gin/pkg/handlers.(*handler).GetSettings-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/settings          --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdateSettings-fm (6 handlers)
+[GIN-debug] POST   /api/v2/stock/adjust      --> ifritah/web-service-gin/pkg/handlers.(*handler).StockAdjust-fm (5 handlers)
+[GIN-debug] POST   /api/v2/stock/check       --> ifritah/web-service-gin/pkg/handlers.(*handler).StockCheck-fm (5 handlers)
+[GIN-debug] GET    /api/v2/stock/movements/:product_id --> ifritah/web-service-gin/pkg/handlers.(*handler).GetStockMovements-fm (5 handlers)
+[GIN-debug] GET    /api/v2/stock/enforcement --> ifritah/web-service-gin/pkg/handlers.(*handler).GetStockEnforcement-fm (5 handlers)
+[GIN-debug] GET    /api/v2/notification      --> ifritah/web-service-gin/pkg/handlers.(*handler).GetNotifications-fm (5 handlers)
+[GIN-debug] GET    /api/v2/notification/unread-count --> ifritah/web-service-gin/pkg/handlers.(*handler).GetUnreadCount-fm (5 handlers)
+[GIN-debug] GET    /api/v2/notification/config --> ifritah/web-service-gin/pkg/handlers.(*handler).GetNotificationConfig-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/notification/config --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdateNotificationConfig-fm (5 handlers)
+[GIN-debug] POST   /api/v2/notification/read-all --> ifritah/web-service-gin/pkg/handlers.(*handler).MarkAllNotificationsRead-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/notification/read-all --> ifritah/web-service-gin/pkg/handlers.(*handler).MarkAllNotificationsRead-fm (5 handlers)
+[GIN-debug] POST   /api/v2/notification/:id/read --> ifritah/web-service-gin/pkg/handlers.(*handler).MarkNotificationRead-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/notification/:id/read --> ifritah/web-service-gin/pkg/handlers.(*handler).MarkNotificationRead-fm (5 handlers)
+[GIN-debug] POST   /api/v2/notification/scan-payment-due --> ifritah/web-service-gin/pkg/handlers.(*handler).ScanPaymentDue-fm (6 handlers)
+[GIN-debug] GET    /api/v2/dashboard         --> ifritah/web-service-gin/pkg/handlers.(*handler).GetDashboard-fm (5 handlers)
+[GIN-debug] GET    /api/v2/dashboard/analytics --> ifritah/web-service-gin/pkg/handlers.(*handler).GetDashboardAnalytics-fm (5 handlers)
+[GIN-debug] GET    /api/v2/dashboard/compare --> ifritah/web-service-gin/pkg/handlers.(*handler).GetDashboardCompare-fm (5 handlers)
+[GIN-debug] GET    /api/v2/part/type         --> main.main.CachePage.func3 (5 handlers)
+[GIN-debug] POST   /api/v2/part/             --> ifritah/web-service-gin/pkg/handlers.(*handler).GetPart-fm (5 handlers)
+[GIN-debug] POST   /api/v2/upload            --> ifritah/web-service-gin/pkg/handlers.(*handler).UploadFile-fm (5 handlers)
+[GIN-debug] GET    /api/v2/files/:key        --> ifritah/web-service-gin/pkg/handlers.(*handler).DownloadFile-fm (5 handlers)
+[GIN-debug] DELETE /api/v2/files/:key        --> ifritah/web-service-gin/pkg/handlers.(*handler).DeleteFile-fm (6 handlers)
+[GIN-debug] POST   /api/v2/order/all         --> ifritah/web-service-gin/pkg/handlers.(*handler).GetOrders-fm (5 handlers)
+[GIN-debug] GET    /api/v2/order/:id         --> ifritah/web-service-gin/pkg/handlers.(*handler).GetOrder-fm (5 handlers)
+[GIN-debug] POST   /api/v2/order             --> ifritah/web-service-gin/pkg/handlers.(*handler).CreateOrder-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/order/:id         --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdateOrder-fm (5 handlers)
+[GIN-debug] DELETE /api/v2/order/:id         --> ifritah/web-service-gin/pkg/handlers.(*handler).DeleteOrder-fm (6 handlers)
+[GIN-debug] POST   /api/v2/cash_voucher/all  --> ifritah/web-service-gin/pkg/handlers.(*handler).ListCashVouchers-fm (5 handlers)
+[GIN-debug] GET    /api/v2/cash_voucher/summary --> ifritah/web-service-gin/pkg/handlers.(*handler).GetCashVoucherSummary-fm (5 handlers)
+[GIN-debug] GET    /api/v2/cash_voucher/:id  --> ifritah/web-service-gin/pkg/handlers.(*handler).GetCashVoucher-fm (5 handlers)
+[GIN-debug] POST   /api/v2/cash_voucher      --> ifritah/web-service-gin/pkg/handlers.(*handler).CreateCashVoucher-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/cash_voucher/:id  --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdateCashVoucher-fm (5 handlers)
+[GIN-debug] DELETE /api/v2/cash_voucher/:id  --> ifritah/web-service-gin/pkg/handlers.(*handler).DeleteCashVoucher-fm (6 handlers)
+[GIN-debug] POST   /api/v2/cash_voucher/:id/approve --> ifritah/web-service-gin/pkg/handlers.(*handler).ApproveCashVoucher-fm (6 handlers)
+[GIN-debug] POST   /api/v2/cash_voucher/:id/post --> ifritah/web-service-gin/pkg/handlers.(*handler).PostCashVoucher-fm (6 handlers)
+[GIN-debug] GET    /api/v2/supplier/:id/report --> ifritah/web-service-gin/pkg/handlers.(*handler).GetSupplierReport-fm (5 handlers)
+[GIN-debug] PUT    /api/v2/purchase_bill/:id/received --> ifritah/web-service-gin/pkg/handlers.(*handler).MarkBillReceived-fm (6 handlers)
+[GIN-debug] DELETE /api/v2/purchase_bill/:id/received --> ifritah/web-service-gin/pkg/handlers.(*handler).UnmarkBillReceived-fm (6 handlers)
+[GIN-debug] GET    /api/v2/users/me          --> ifritah/web-service-gin/pkg/handlers.(*handler).GetMe-fm (5 handlers)
+[GIN-debug] GET    /api/v2/user/all          --> ifritah/web-service-gin/pkg/handlers.(*handler).ListUsers-fm (6 handlers)
+[GIN-debug] GET    /api/v2/user/:id          --> ifritah/web-service-gin/pkg/handlers.(*handler).GetUserByID-fm (6 handlers)
+[GIN-debug] POST   /api/v2/user              --> ifritah/web-service-gin/pkg/handlers.(*handler).CreateUser-fm (6 handlers)
+[GIN-debug] PUT    /api/v2/user/:id          --> ifritah/web-service-gin/pkg/handlers.(*handler).UpdateUser-fm (6 handlers)
+[GIN-debug] DELETE /api/v2/user/:id          --> ifritah/web-service-gin/pkg/handlers.(*handler).DeleteUser-fm (6 handlers)
+[GIN-debug] POST   /api/v2/user/:id/password --> ifritah/web-service-gin/pkg/handlers.(*handler).AdminResetUserPassword-fm (6 handlers)
+[GIN-debug] GET    /api/v2/zatca/monitor/stats --> ifritah/web-service-gin/pkg/handlers.(*handler).ZatcaMonitorStats-fm (6 handlers)
+[GIN-debug] GET    /api/v2/zatca/monitor/branches --> ifritah/web-service-gin/pkg/handlers.(*handler).ZatcaMonitorBranches-fm (6 handlers)
+[GIN-debug] GET    /api/v2/zatca/monitor/submissions --> ifritah/web-service-gin/pkg/handlers.(*handler).ZatcaMonitorSubmissions-fm (6 handlers)
+[GIN-debug] GET    /api/v2/bill/pdf/:id      --> ifritah/web-service-gin/pkg/handlers.(*handler).GetBillPDF-fm (4 handlers)
+[GIN-debug] GET    /api/v2/bill/credit/pdf/:id --> ifritah/web-service-gin/pkg/handlers.(*handler).GetCreditBillPDF-fm (4 handlers)
+[GIN-debug] POST   /api/v2/register          --> ifritah/web-service-gin/pkg/handlers.(*handler).Register-fm (4 handlers)
+[GIN-debug] POST   /api/v2/login             --> ifritah/web-service-gin/pkg/handlers.(*handler).Login-fm (4 handlers)
+[GIN-debug] POST   /api/v2/refresh           --> ifritah/web-service-gin/pkg/handlers.(*handler).Refresh-fm (4 handlers)
+[GIN-debug] POST   /api/v2/forgot-password   --> ifritah/web-service-gin/pkg/handlers.(*handler).ForgotPassword-fm (4 handlers)
+[GIN-debug] POST   /api/v2/reset-password    --> ifritah/web-service-gin/pkg/handlers.(*handler).ResetPassword-fm (4 handlers)
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on :8090
+[GIN] 2026/05/04 - 16:02:27 | 200 |       0s |       127.0.0.1 | GET      "/healthz"
+[GIN] 2026/05/04 - 16:02:38 | 200 |       0s |       127.0.0.1 | GET      "/healthz"
+[GIN] 2026/05/04 - 16:02:38 | 200 |  88.02ms |       127.0.0.1 | POST     "/api/v2/login"
+[GIN] 2026/05/04 - 16:02:38 | 200 |   9.69ms |       127.0.0.1 | POST     "/api/v2/notification/read-all"
+[GIN] 2026/05/04 - 16:14:09 | 401 |       0s |       127.0.0.1 | POST     "/api/v2/purchase_bill"
+[GIN] 2026/05/04 - 16:14:10 | 401 |       0s |       127.0.0.1 | GET      "/api/v2/product/285209080"
+[GIN] 2026/05/04 - 16:14:10 | 401 |       0s |       127.0.0.1 | GET      "/api/v2/notification?limit=4"
+[GIN] 2026/05/04 - 16:14:21 | 200 |  90.73ms |       127.0.0.1 | POST     "/api/v2/login"
+[GIN] 2026/05/04 - 16:14:21 | 200 |   2.72ms |       127.0.0.1 | GET      "/api/v2/product/285209080"
+[GIN] 2026/05/04 - 16:14:21 | 400 |  505.9µs |       127.0.0.1 | POST     "/api/v2/purchase_bill"
+[GIN] 2026/05/04 - 16:14:22 | 200 |   6.24ms |       127.0.0.1 | GET      "/api/v2/product/285209080"
+[GIN] 2026/05/04 - 16:14:22 | 200 |   4.56ms |       127.0.0.1 | GET      "/api/v2/notification?limit=4"
+[GIN] 2026/05/04 - 16:14:30 | 404 |       0s |       127.0.0.1 | GET      "/api/v2/supplier"
+[GIN] 2026/05/04 - 16:14:30 | 404 |       0s |       127.0.0.1 | GET      "/api/v2/suppliers"
+[GIN] 2026/05/04 - 16:14:30 | 400 |       0s |       127.0.0.1 | GET      "/api/v2/supplier/all"
+Error #01: strconv.ParseInt: parsing "all": invalid syntax
+[GIN] 2026/05/04 - 16:14:30 | 200 |    6.8ms |       127.0.0.1 | POST     "/api/v2/supplier/all"
+[GIN] 2026/05/04 - 16:14:37 | 400 |  577.3µs |       127.0.0.1 | POST     "/api/v2/purchase_bill"
+[GIN] 2026/05/04 - 16:14:38 | 200 |   5.87ms |       127.0.0.1 | GET      "/api/v2/product/285209080"
+[GIN] 2026/05/04 - 16:14:46 | 400 |   1.12ms |       127.0.0.1 | POST     "/api/v2/purchase_bill"
+[GIN] 2026/05/04 - 16:14:47 | 200 |   5.55ms |       127.0.0.1 | GET      "/api/v2/product/285209080"
+[GIN] 2026/05/04 - 16:14:47 | 200 |   3.75ms |       127.0.0.1 | GET      "/api/v2/notification?limit=5"
+[GIN] 2026/05/04 - 16:14:55 | 201 |   76.5ms |       127.0.0.1 | POST     "/api/v2/purchase_bill"
+[GIN] 2026/05/04 - 16:14:56 | 200 |  11.56ms |       127.0.0.1 | GET      "/api/v2/product/285209080"
+[GIN] 2026/05/04 - 16:14:56 | 200 |   6.56ms |       127.0.0.1 | GET      "/api/v2/notification?limit=5"
+[GIN] 2026/05/04 - 16:15:07 | 201 |  29.29ms |       127.0.0.1 | POST     "/api/v2/purchase_bill"
+[GIN] 2026/05/04 - 16:15:08 | 200 |    5.3ms |       127.0.0.1 | GET      "/api/v2/product/285209080"
+[GIN] 2026/05/04 - 16:15:08 | 200 |   3.47ms |       127.0.0.1 | GET      "/api/v2/notification?limit=5"
+[GIN] 2026/05/04 - 16:16:31 | 200 |  90.52ms |       127.0.0.1 | POST     "/api/v2/login"
+[GIN] 2026/05/04 - 16:16:31 | 201 |  37.41ms |       127.0.0.1 | POST     "/api/v2/purchase_bill"
+[GIN] 2026/05/04 - 16:17:50 | 200 |  81.99ms |       127.0.0.1 | POST     "/api/v2/login"
+[GIN] 2026/05/04 - 16:17:51 | 201 |  38.03ms |       127.0.0.1 | POST     "/api/v2/purchase_bill"
+[GIN] 2026/05/04 - 16:22:13 | 200 | 246.25ms |       127.0.0.1 | POST     "/api/v2/login"
+[GIN] 2026/05/04 - 16:22:13 | 500 |  22.05ms |       127.0.0.1 | POST     "/api/v2/product/all"
+Error #01: Error 1052 (23000): Column 'is_deleted' in where clause is ambiguous
+[GIN] 2026/05/04 - 16:22:13 | 200 |  54.85ms |       127.0.0.1 | POST     "/api/v2/supplier/all"
+[GIN] 2026/05/04 - 16:22:13 | 200 |   55.8ms |       127.0.0.1 | POST     "/api/v2/client/all"
+[GIN] 2026/05/04 - 16:22:13 | 200 |  57.59ms |       127.0.0.1 | POST     "/api/v2/purchase_bill/all"
+[GIN] 2026/05/04 - 16:22:13 | 200 |  63.65ms |       127.0.0.1 | POST     "/api/v2/order/all"
+[GIN] 2026/05/04 - 16:22:13 | 200 |  89.35ms |       127.0.0.1 | POST     "/api/v2/bill/all"
+[GIN] 2026/05/04 - 16:22:13 | 200 |    6.5ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:23 | 500 |   4.41ms |       127.0.0.1 | POST     "/api/v2/product/all"
+Error #01: Error 1052 (23000): Column 'is_deleted' in where clause is ambiguous
+[GIN] 2026/05/04 - 16:22:23 | 200 |   2.66ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:24 | 200 |  15.14ms |       127.0.0.1 | POST     "/api/v2/cash_voucher/all"
+[GIN] 2026/05/04 - 16:22:24 | 200 |   3.41ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:25 | 200 |   2.87ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:26 | 200 |  35.02ms |       127.0.0.1 | POST     "/api/v2/bill/all"
+[GIN] 2026/05/04 - 16:22:26 | 200 |   2.43ms |       127.0.0.1 | GET      "/api/v2/stores/all"
+[GIN] 2026/05/04 - 16:22:26 | 200 |   2.74ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:26 | 500 |    2.3ms |       127.0.0.1 | POST     "/api/v2/product/all"
+Error #01: Error 1052 (23000): Column 'is_deleted' in where clause is ambiguous
+[GIN] 2026/05/04 - 16:22:26 | 200 |   3.47ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:27 | 200 |  39.61ms |       127.0.0.1 | POST     "/api/v2/branch/all"
+[GIN] 2026/05/04 - 16:22:27 | 200 |   5.24ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:30 | 200 |   3.93ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:33 | 200 |    8.9ms |       127.0.0.1 | GET      "/api/v2/notification?limit=50"
+[GIN] 2026/05/04 - 16:22:33 | 200 |   2.82ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:35 | 200 |   8.27ms |       127.0.0.1 | POST     "/api/v2/bill/all"
+[GIN] 2026/05/04 - 16:22:35 | 200 |   3.94ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:37 | 200 |   6.25ms |       127.0.0.1 | GET      "/api/v2/notification?limit=50"
+[GIN] 2026/05/04 - 16:22:37 | 200 |   4.29ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:41 | 200 |   7.29ms |       127.0.0.1 | POST     "/api/v2/bill/all"
+[GIN] 2026/05/04 - 16:22:41 | 200 |   2.31ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:22:44 | 200 |   3.73ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:28:11 | 200 | 152.32ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:33:28 | 200 | 388.11ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:40:22 | 401 |  41.71ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 16:40:23 | 200 | 453.58ms |       127.0.0.1 | POST     "/api/v2/refresh"
+[GIN] 2026/05/04 - 16:40:26 | 200 |  18.06ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:02:09 | 401 |  14.19ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:02:09 | 200 | 284.26ms |       127.0.0.1 | POST     "/api/v2/refresh"
+[GIN] 2026/05/04 - 17:02:09 | 200 |  11.49ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:21:00 | 401 |   44.4ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:21:02 | 200 |    1.49s |       127.0.0.1 | POST     "/api/v2/refresh"
+[GIN] 2026/05/04 - 17:21:03 | 200 |  49.45ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:21:05 | 200 |   3.61ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:21:07 | 200 |  98.07ms |       127.0.0.1 | POST     "/api/v2/bill/all"
+[GIN] 2026/05/04 - 17:21:07 | 200 |  11.21ms |       127.0.0.1 | POST     "/api/v2/client/all"
+[GIN] 2026/05/04 - 17:21:07 | 200 |   3.98ms |       127.0.0.1 | GET      "/api/v2/stores/all"
+[GIN] 2026/05/04 - 17:21:07 | 200 |   3.23ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:21:09 | 200 |    8.5ms |       127.0.0.1 | POST     "/api/v2/bill/all"
+[GIN] 2026/05/04 - 17:21:10 | 200 |   6.06ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:21:11 | 200 |  25.46ms |       127.0.0.1 | POST     "/api/v2/cash_voucher/all"
+[GIN] 2026/05/04 - 17:21:11 | 200 |   2.48ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:26:15 | 200 |  95.19ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:27:50 | 200 |  62.07ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:27:51 | 200 | 151.47ms |       127.0.0.1 | POST     "/api/v2/bill/all"
+[GIN] 2026/05/04 - 17:27:51 | 200 |  20.16ms |       127.0.0.1 | POST     "/api/v2/client/all"
+[GIN] 2026/05/04 - 17:27:51 | 200 |   4.45ms |       127.0.0.1 | GET      "/api/v2/stores/all"
+[GIN] 2026/05/04 - 17:27:51 | 200 |   5.74ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:27:55 | 200 |   7.43ms |       127.0.0.1 | POST     "/api/v2/bill/all"
+[GIN] 2026/05/04 - 17:27:55 | 200 |   3.64ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:27:59 | 200 |   9.29ms |       127.0.0.1 | POST     "/api/v2/bill/all"
+[GIN] 2026/05/04 - 17:27:59 | 200 |   3.61ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:28:26 | 200 |  10.98ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:28:28 | 200 |  16.25ms |       127.0.0.1 | POST     "/api/v2/cash_voucher/all"
+[GIN] 2026/05/04 - 17:28:28 | 200 |   3.39ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:28:30 | 500 | 137.89ms |       127.0.0.1 | POST     "/api/v2/product/all"
+Error #01: Error 1052 (23000): Column 'is_deleted' in where clause is ambiguous
+[GIN] 2026/05/04 - 17:28:30 | 200 |   2.55ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:28:34 | 200 |   3.98ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:28:55 | 200 |   6.84ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:33:57 | 200 |  48.58ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:38:58 | 401 |   1.57ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"
+[GIN] 2026/05/04 - 17:38:58 | 200 | 178.96ms |       127.0.0.1 | POST     "/api/v2/refresh"
+[GIN] 2026/05/04 - 17:38:58 | 200 |  12.26ms |       127.0.0.1 | GET      "/api/v2/notification/unread-count"

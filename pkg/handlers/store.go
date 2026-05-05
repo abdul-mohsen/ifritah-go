@@ -119,16 +119,7 @@ func filterStoresByQuery(stores []Store, query *string) []Store {
 	return out
 }
 
-// storeSortCmp wires the FE table-sort UX for /stores/all.
-func storeSortCmp(a, b Store, k string) (int, bool) {
-	switch k {
-	case "id":
-		return int64Cmp(int64(a.Id), int64(b.Id)), true
-	case "name":
-		return strPtrCmp(a.Name, b.Name), true
-	}
-	return 0, false
-}
+// storeSortCmp removed: sort over the current page is now FE-driven.
 
 func (h *handler) GetStores(c *gin.Context) {
 	var req storesListRequest
@@ -141,7 +132,6 @@ func (h *handler) GetStores(c *gin.Context) {
 		stores = []Store{}
 	}
 	stores = filterStoresByQuery(stores, req.Query)
-	applyListSort(stores, req.Sort, req.Dir, storeSortCmp)
 
 	c.JSON(http.StatusOK, pagination.Envelope[Store]{Items: stores})
 }

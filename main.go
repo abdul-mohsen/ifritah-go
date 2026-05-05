@@ -1,7 +1,7 @@
 package main
 
 import (
-	"ifritah/web-service-gin/pkg/db/gen"
+	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/handlers"
 
 	"log"
@@ -35,7 +35,6 @@ func main() {
 	h := handlers.New(DB, queries, pub)
 
 	router := gin.Default()
-	baseUrl := os.Getenv("BASEURL")
 	store := persistence.NewInMemoryStore(time.Second)
 	// Recovery middleware recovers from any panics and writes a 500 if there was one.
 	router.Use(gin.Recovery())
@@ -45,16 +44,7 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	// Route-id template strings reused across REST verbs (Sonar S1192).
-	const (
-		routeSupplierByID     = "supplier/:id"
-		routeBillByID         = "bill/:id"
-		routePurchaseBillByID = "purchase_bill/:id"
-		routeProductByID      = "product/:id"
-		routeClientByID       = "client/:id"
-	)
-
-	authorized := router.Group(baseUrl)
+	authorized := router.Group(os.Getenv("BASEURL"))
 	authorized.Use(handlers.JWTVerifyMiddleware)
 	{
 		// Convenience aliases for role-gated routes.
@@ -63,10 +53,10 @@ func main() {
 
 		// ── Suppliers (employees can read/create, manager+ can edit/delete) ──
 		authorized.POST("supplier/all", h.GetAllSupplier)
-		authorized.GET(routeSupplierByID, h.GetSupplier)
+		authorized.GET("supplier/:id", h.GetSupplier)
 		authorized.POST("supplier", h.AddSupplier)
-		authorized.PUT(routeSupplierByID, mgr, h.EditSupplier)
-		authorized.DELETE(routeSupplierByID, mgr, h.DeleteSupplier)
+		authorized.PUT("supplier/:id", mgr, h.EditSupplier)
+		authorized.DELETE("supplier/:id", mgr, h.DeleteSupplier)
 
 		// ── Companies (read for everyone, edit admin-only) ─────────────
 		authorized.GET("company/all", h.GetAllCompanies)
@@ -85,36 +75,36 @@ func main() {
 		authorized.GET("car_part/:id", h.GetAllCachedVin)
 
 		// ── Bills (delete is manager+) ─────────────────────────────────
-		authorized.GET(routeBillByID, h.GetBillDetail)
+		authorized.GET("bill/:id", h.GetBillDetail)
 		authorized.POST("bill/all", h.GetBills)
 		authorized.POST("bill", h.AddBill)
-		authorized.PUT(routeBillByID, h.SubmitDraftBill)
-		authorized.DELETE(routeBillByID, mgr, h.DeleteBillDetail)
+		authorized.PUT("bill/:id", h.SubmitDraftBill)
+		authorized.DELETE("bill/:id", mgr, h.DeleteBillDetail)
 
 		authorized.GET("credit_bill/:id", h.GetBillCreditDetail)
 		authorized.POST("bill/credit", h.CreditBill)
 
 		// ── Purchase Bills (delete & receipt-tracking are manager+) ────
-		authorized.GET(routePurchaseBillByID, h.GetPurchaseBillDetail)
+		authorized.GET("purchase_bill/:id", h.GetPurchaseBillDetail)
 		authorized.POST("purchase_bill", h.AddPurchaseBill)
 		authorized.POST("purchase_bill/all", h.GetAllPurchaseBill)
-		authorized.PUT(routePurchaseBillByID, h.UpdatePurchaseBill)
-		authorized.DELETE(routePurchaseBillByID, mgr, h.DeletePurchaseBillDetail)
+		authorized.PUT("purchase_bill/:id", h.UpdatePurchaseBill)
+		authorized.DELETE("purchase_bill/:id", mgr, h.DeletePurchaseBillDetail)
 
 		// ── Products (delete is manager+) ──────────────────────────────
 		authorized.POST("product/search", h.SearchProducts)
-		authorized.GET(routeProductByID, h.GetProduct)
+		authorized.GET("product/:id", h.GetProduct)
 		authorized.POST("product/all", h.GetAllProducts)
 		authorized.POST("product", h.AddQuantity)
-		authorized.PUT(routeProductByID, h.UpdateProduct)
-		authorized.DELETE(routeProductByID, mgr, h.DeleteProduct)
+		authorized.PUT("product/:id", h.UpdateProduct)
+		authorized.DELETE("product/:id", mgr, h.DeleteProduct)
 
 		// ── Clients (delete is manager+) ───────────────────────────────
-		authorized.GET(routeClientByID, h.GetClient)
+		authorized.GET("client/:id", h.GetClient)
 		authorized.POST("client/all", h.GetAllClient)
 		authorized.POST("client", h.CreateClient)
-		authorized.PUT(routeClientByID, h.UpdateClient)
-		authorized.DELETE(routeClientByID, mgr, h.DeleteClient)
+		authorized.PUT("client/:id", h.UpdateClient)
+		authorized.DELETE("client/:id", mgr, h.DeleteClient)
 
 		// ── Branches (write is admin-only) ─────────────────────────────
 		authorized.POST("branch/all", h.ListBranches)
@@ -207,7 +197,7 @@ func main() {
 		authorized.GET("zatca/monitor/submissions", admin, h.ZatcaMonitorSubmissions)
 	}
 
-	nonAuthGroup := router.Group(baseUrl)
+	nonAuthGroup := router.Group(os.Getenv("BASEURL"))
 	{
 		nonAuthGroup.GET("bill/pdf/:id", h.GetBillPDF)
 		nonAuthGroup.GET("bill/credit/pdf/:id", h.GetCreditBillPDF)

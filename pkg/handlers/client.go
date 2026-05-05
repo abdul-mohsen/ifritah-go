@@ -43,22 +43,6 @@ const clientListSort = "-updated_at"
 // in GetAllClient (Sonar S1192).
 const errGetAllClient = "GetAllClient: %v"
 
-// clientSortCmp wires the FE table-sort UX. Cursor walks stay on the
-// canonical (updated_at DESC, id DESC) seek key and skip this path.
-func clientSortCmp(a, b db.Client, k string) (int, bool) {
-	switch k {
-	case "name":
-		return strCmp(a.Name, b.Name), true
-	case "company_name":
-		return strPtrCmp(a.CompanyName, b.CompanyName), true
-	case "email":
-		return strPtrCmp(a.Email, b.Email), true
-	case "phone":
-		return strPtrCmp(a.Phone, b.Phone), true
-	}
-	return 0, false
-}
-
 func (h *handler) GetAllClient(c *gin.Context) {
 	request := model.PaginationRequest{}
 
@@ -107,8 +91,6 @@ func (h *handler) GetAllClient(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-
-	applyListSort(res, listReq.Sort, listReq.Dir, clientSortCmp)
 
 	envelope := pagination.BuildEnvelope(
 		res,

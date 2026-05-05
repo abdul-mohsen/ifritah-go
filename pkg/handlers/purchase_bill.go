@@ -325,25 +325,8 @@ func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.P
 
 const purchaseBillListSort = "-effective_date"
 
-// purchaseBillSortCmp wires the FE table-sort UX. PurchaseBill has
-// no "type" column on the schema; the FE-listed key is intentionally
-// absent here so an unknown-key send falls through to the no-op
-// branch (instead of returning a misleading order).
-func purchaseBillSortCmp(a, b db.PurchaseBill, k string) (int, bool) {
-	switch k {
-	case "id":
-		return uint64Cmp(a.ID, b.ID), true
-	case "supplier_sequence_number":
-		return uint64PtrCmp(a.SupplierSequenceNumber, b.SupplierSequenceNumber), true
-	case "total":
-		return decCmp(a.Total, b.Total), true
-	case "effective_date":
-		return timeCmp(a.EffectiveDate, b.EffectiveDate), true
-	case "state":
-		return int32Cmp(a.State, b.State), true
-	}
-	return 0, false
-}
+// purchaseBillSortCmp removed: sort over the current page is now
+// FE-driven (BE returns rows in canonical keyset order only).
 
 func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 
@@ -419,8 +402,6 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		CursorID:      nullInt64FromUint64Ptr(cursorID),
 		Limit:         int32(limit + 1),
 	})
-
-	applyListSort(bill, listReq.Sort, listReq.Dir, purchaseBillSortCmp)
 
 	envelope := pagination.BuildEnvelope(
 		bill,

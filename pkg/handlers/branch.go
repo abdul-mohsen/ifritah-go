@@ -128,16 +128,8 @@ func (h *handler) ListBranches(c *gin.Context) {
 		branches = append(branches, b)
 	}
 
-	// Server-driven table sort (FE round-2 §1).
-	applyListSort(branches, listReq.Sort, listReq.Dir, func(a, b branchRow, k string) (int, bool) {
-		switch k {
-		case "name":
-			return strCmp(a.Name, b.Name), true
-		case "address":
-			return strCmp(a.Address, b.Address), true
-		}
-		return 0, false
-	})
+	// Sort over the current page is FE-driven; BE returns rows in
+	// the canonical keyset order only.
 
 	envelope := pagination.BuildEnvelope(
 		branches,

@@ -164,21 +164,8 @@ func (h *handler) GetOrders(c *gin.Context) {
 		orders = []orderRow{}
 	}
 
-	// Server-driven table sort (FE round-2 §1). "client" maps to
-	// ClientName which already coalesces customer_name → client.name.
-	applyListSort(orders, listReq.Sort, listReq.Dir, func(a, b orderRow, k string) (int, bool) {
-		switch k {
-		case "sequence_number":
-			return strCmp(a.SequenceNumber, b.SequenceNumber), true
-		case "client":
-			return strCmp(a.ClientName, b.ClientName), true
-		case "total":
-			return float64Cmp(a.Total, b.Total), true
-		case "status":
-			return strCmp(a.Status, b.Status), true
-		}
-		return 0, false
-	})
+	// Sort over the current page is FE-driven; BE returns rows in
+	// the canonical keyset order only.
 
 	envelope := pagination.BuildEnvelope(
 		orders,

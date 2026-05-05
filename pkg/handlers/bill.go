@@ -61,26 +61,6 @@ const billListSort = "-effective_date"
 // GetBills (Sonar S1192).
 const errGetBills = "GetBills: %v"
 
-// billSortCmp is the per-key 3-way comparator wired into the FE
-// table-sort UX. "type" maps to BillType (true = B2B). Cursor walks
-// stay on the canonical (effective_date, id, is_credit) seek key —
-// the FE sort header sends an empty cursor.
-func billSortCmp(a, b db.GetAllBillRow, k string) (int, bool) {
-	switch k {
-	case "sequence_number":
-		return uint64PtrCmp(a.SequenceNumber, b.SequenceNumber), true
-	case "total":
-		return decCmp(a.Total, b.Total), true
-	case "effective_date":
-		return timeCmp(a.EffectiveDate, b.EffectiveDate), true
-	case "type":
-		return boolCmp(a.BillType, b.BillType), true
-	case "state":
-		return int32Cmp(a.State, b.State), true
-	}
-	return 0, false
-}
-
 // billCursorKeys is the keyset extractor BuildEnvelope uses to mint
 // the next-page cursor. (effective_date, id, is_credit) — the
 // is_credit tiebreaker is required because credit-note variants
@@ -174,8 +154,6 @@ func (h *handler) GetBills(c *gin.Context) {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-
-	applyListSort(bills, listReq.Sort, listReq.Dir, billSortCmp)
 
 	envelope := pagination.BuildEnvelope(bills, limit, billListSort, billCursorKeys)
 	c.JSON(http.StatusOK, envelope)
@@ -606,10 +584,10 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		// client" flag (B2B) vs an anonymous walk-in (B2C). It is fully
 		// derivable from the presence of client_id, so do that here instead
 		// of leaving the field as the zero value.
-		Type:                         bill.ClientID != nil,
-		PaymentMethod:                bill.PaymentMethod,
-		DeliverDate:                  bill.DeliverDate,
-		BranchID:                     bill.BranchID,
+		Type:          bill.ClientID != nil,
+		PaymentMethod: bill.PaymentMethod,
+		DeliverDate:   bill.DeliverDate,
+		BranchID:      bill.BranchID,
 	}, xProducts
 }
 

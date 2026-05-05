@@ -118,35 +118,16 @@ const productListSort = "-id"
 // in GetAllProducts (Sonar S1192).
 const errGetAllProducts = "GetAllProducts: %v"
 
-// productSortCmp wires the FE table-sort UX. part_name isn't a
-// column on the catalog product table — it lives on bill_product
-// and order_items rows. Sorting by part_name therefore falls back
-// to product.name (the user-facing label on the catalog list).
-func productSortCmp(a, b db.Product, k string) (int, bool) {
-	switch k {
-	case "id":
-		return uint64Cmp(a.ID, b.ID), true
-	case "part_name", "name":
-		return strPtrCmp(a.Name, b.Name), true
-	case "price":
-		return decCmp(a.Price, b.Price), true
-	case "quantity":
-		return decCmp(a.Quantity, b.Quantity), true
-	case "status":
-		return int32Cmp(a.Status, b.Status), true
-	}
-	return 0, false
-}
-
 // applyProductStockFilter is the in-memory implementation of the
 // FE round-2 P0 #2 "stock" filter. It runs against the bounded
 // page slice because adding a new sqlc narg would explode the
 // generated query branches.
-//   "in"  → quantity > 0
-//   "out" → quantity == 0
-//   "low" → 0 < quantity <= min_stock
-//   ""    → no filter (returns input unchanged)
-//   any other value → no-op (degrades to "no filter")
+//
+//	"in"  → quantity > 0
+//	"out" → quantity == 0
+//	"low" → 0 < quantity <= min_stock
+//	""    → no filter (returns input unchanged)
+//	any other value → no-op (degrades to "no filter")
 func applyProductStockFilter(products []db.Product, stock string) []db.Product {
 	if stock == "" {
 		return products
@@ -219,7 +200,6 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 	}
 
 	products = applyProductStockFilter(products, request.Stock)
-	applyListSort(products, listReq.Sort, listReq.Dir, productSortCmp)
 
 	envelope := pagination.BuildEnvelope(
 		products,

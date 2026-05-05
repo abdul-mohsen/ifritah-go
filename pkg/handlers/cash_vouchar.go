@@ -138,28 +138,8 @@ var validVoucherTypes = map[string]struct{}{
 	"cash_box":     {},
 }
 
-// cashVoucherSortCmp wires the FE table-sort UX. Amount is
-// wire-encoded as a decimal string for precision; parse once per
-// compare so the numeric ordering matches the on-screen value.
-func cashVoucherSortCmp(a, b cashVoucherListItem, k string) (int, bool) {
-	switch k {
-	case "voucher_number":
-		return int64Cmp(int64(a.VoucherNumber), int64(b.VoucherNumber)), true
-	case "voucher_type":
-		return strCmp(a.VoucherType, b.VoucherType), true
-	case "recipient_name":
-		return strCmp(a.RecipientName, b.RecipientName), true
-	case "amount":
-		da, _ := decimal.NewFromString(a.Amount)
-		dbAmt, _ := decimal.NewFromString(b.Amount)
-		return decCmp(da, dbAmt), true
-	case "effective_date":
-		return timeCmp(a.EffectiveDate, b.EffectiveDate), true
-	case "state":
-		return int64Cmp(int64(a.State), int64(b.State)), true
-	}
-	return 0, false
-}
+// cashVoucherSortCmp removed: sort over the current page is now
+// FE-driven (BE returns rows in canonical keyset order only).
 
 // buildCashVoucherWhere assembles the dynamic WHERE clause + bound
 // args for the cash_voucher list. Returned err is non-nil only when
@@ -279,8 +259,6 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 		}
 		items = append(items, v)
 	}
-
-	applyListSort(items, listReq.Sort, listReq.Dir, cashVoucherSortCmp)
 
 	envelope := pagination.BuildEnvelope(
 		items,

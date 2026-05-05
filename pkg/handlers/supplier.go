@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"database/sql"
-	"ifritah/web-service-gin/pkg/db/gen"
+	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
 	"ifritah/web-service-gin/pkg/pagination"
 	"log"
@@ -35,24 +35,6 @@ const supplierListSort = "-id"
 // errGetAllSupplier is the log-prefix format used by every error path
 // in GetAllSupplier (Sonar S1192).
 const errGetAllSupplier = "GetAllSupplier: %v"
-
-// supplierSortCmp wires the FE table-sort UX. Cursor walks ignore
-// this — they're pinned to the canonical "id DESC" seek key.
-func supplierSortCmp(a, b db.Supplier, k string) (int, bool) {
-	switch k {
-	case "name":
-		return strPtrCmp(a.Name, b.Name), true
-	case "email":
-		return strPtrCmp(a.Email, b.Email), true
-	case "phone_number":
-		return strPtrCmp(a.PhoneNumber, b.PhoneNumber), true
-	case "address":
-		return strPtrCmp(a.Address, b.Address), true
-	case "vat_number":
-		return strPtrCmp(a.VatNumber, b.VatNumber), true
-	}
-	return 0, false
-}
 
 func (h *handler) GetAllSupplier(c *gin.Context) {
 
@@ -96,8 +78,6 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-
-	applyListSort(suppliers, listReq.Sort, listReq.Dir, supplierSortCmp)
 
 	envelope := pagination.BuildEnvelope(
 		suppliers,

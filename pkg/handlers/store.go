@@ -74,19 +74,19 @@ func (h *handler) getStoreIds(c *gin.Context) []int32 {
 // against `name`. Filter is applied in-memory because the row count
 // is bounded and pushing it to SQL would mean teaching the legacy
 // `getStores` query about a new arg path.
-func (h *handler) GetStores(c *gin.Context) {
-	var req struct {
-		Query *string `json:"query"`
-		Sort  string  `json:"sort"`
-		Dir   string  `json:"dir"`
-	}
-	// Best-effort JSON bind (POST clients). GET callers send no body.
-	_ = c.ShouldBindJSON(&req)
+// storesListRequest is the wire shape for GetStores. POST clients
+// send it as a JSON body; GET clients send the same fields via the
+// query string and we overlay them in applyStoresQueryStringOverlay.
+type storesListRequest struct {
+	Query *string `json:"query"`
+	Sort  string  `json:"sort"`
+	Dir   string  `json:"dir"`
+}
 
-	// Query-string overlay so GET ?query=&sort=&dir= works the same as
-	// the POST JSON body. FE currently calls GET with query params; we
-	// also accept POST so the wire shape matches the other 8 list
-	// endpoints. Query-string wins when both present.
+// applyStoresQueryStringOverlay copies non-empty `?query=&sort=&dir=`
+// query-string params on top of the JSON body so GET and POST share
+// one code path. Query-string wins when both are present.
+func applyStoresQueryStringOverlay(c *gin.Context, req *storesListRequest) {
 	if q := c.Query("query"); q != "" {
 		v := q
 		req.Query = &v
@@ -97,36 +97,51 @@ func (h *handler) GetStores(c *gin.Context) {
 	if d := c.Query("dir"); d != "" {
 		req.Dir = d
 	}
+}
+
+// filterStoresByQuery does a case-insensitive substring match on
+// Store.Name. Bounded slice → in-memory is the right tool here.
+func filterStoresByQuery(stores []Store, query *string) []Store {
+	if query == nil || *query == "" {
+		return stores
+	}
+	needle := strings.ToLower(*query)
+	out := make([]Store, 0, len(stores))
+	for _, s := range stores {
+		name := ""
+		if s.Name != nil {
+			name = strings.ToLower(*s.Name)
+		}
+		if strings.Contains(name, needle) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// storeSortCmp wires the FE table-sort UX for /stores/all.
+func storeSortCmp(a, b Store, k string) (int, bool) {
+	switch k {
+	case "id":
+		return int64Cmp(int64(a.Id), int64(b.Id)), true
+	case "name":
+		return strPtrCmp(a.Name, b.Name), true
+	}
+	return 0, false
+}
+
+func (h *handler) GetStores(c *gin.Context) {
+	var req storesListRequest
+	// Best-effort JSON bind (POST clients). GET callers send no body.
+	_ = c.ShouldBindJSON(&req)
+	applyStoresQueryStringOverlay(c, &req)
 
 	stores := h.getStores(GetSessionInfo(c))
 	if stores == nil {
 		stores = []Store{}
 	}
-
-	if req.Query != nil && *req.Query != "" {
-		needle := strings.ToLower(*req.Query)
-		filtered := make([]Store, 0, len(stores))
-		for _, s := range stores {
-			name := ""
-			if s.Name != nil {
-				name = strings.ToLower(*s.Name)
-			}
-			if strings.Contains(name, needle) {
-				filtered = append(filtered, s)
-			}
-		}
-		stores = filtered
-	}
-
-	applyListSort(stores, req.Sort, req.Dir, func(a, b Store, k string) (int, bool) {
-		switch k {
-		case "id":
-			return int64Cmp(int64(a.Id), int64(b.Id)), true
-		case "name":
-			return strPtrCmp(a.Name, b.Name), true
-		}
-		return 0, false
-	})
+	stores = filterStoresByQuery(stores, req.Query)
+	applyListSort(stores, req.Sort, req.Dir, storeSortCmp)
 
 	c.JSON(http.StatusOK, pagination.Envelope[Store]{Items: stores})
 }

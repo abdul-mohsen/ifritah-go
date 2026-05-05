@@ -3,7 +3,9 @@ package handlers
 import (
 	"ifritah/web-service-gin/pkg/model"
 	"ifritah/web-service-gin/pkg/pagination"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -196,4 +198,142 @@ func timeCmp(a, b time.Time) int {
 	default:
 		return 0
 	}
+}
+
+// ── Shared filter / cursor helpers ──────────────────────────────────────────
+//
+// These factor out small repetitive blocks from list handlers so the
+// per-handler cognitive complexity stays under Sonar's S3776 ceiling
+// without changing observable behaviour.
+
+// buildLikeAndDigitsExact splits a free-text query into the two
+// sentinels every list endpoint that supports digits-exact search
+// uses: a `%term%` LIKE wrapper and an integer value when the query
+// is all digits. Returns (nil, nil) when the query is absent or
+// empty. The integer is non-zero — a leading-zero / negative input
+// degrades to a LIKE-only search.
+func buildLikeAndDigitsExact(query *string) (like *string, digits *uint64) {
+	if query == nil || *query == "" {
+		return nil, nil
+	}
+	s := "%" + *query + "%"
+	like = &s
+	if n, err := strconv.ParseUint(*query, 10, 64); err == nil && n > 0 {
+		digits = &n
+	}
+	return like, digits
+}
+
+// nonNegativeStateFilter normalises the FE-supplied `state` filter:
+// nil or negative → return nil ("any state, soft-deletes excluded
+// by the SQL"); >= 0 → return a non-aliased pointer to the value.
+func nonNegativeStateFilter(state *int32) *int32 {
+	if state == nil || *state < 0 {
+		return nil
+	}
+	v := *state
+	return &v
+}
+
+// allStoresAllowed returns true iff every requested store id is in
+// the caller's accessible set. Used by bill / purchase_bill list to
+// gate scope-jumping requests with a 400.
+func allStoresAllowed(reqIDs, allowed []int) bool {
+	for _, id := range reqIDs {
+		if !slices.Contains(allowed, id) {
+			return false
+		}
+	}
+	return true
+}
+
+// decodeCursorUint64 unwraps an opaque cursor key that was JSON-encoded
+// as a number (typed as float64 / int64 / json.Number after the
+// round trip). Returns nil on any zero / invalid value so the caller
+// can treat it as "no cursor set".
+func decodeCursorUint64(v any) *uint64 {
+	if v == nil {
+		return nil
+	}
+	switch x := v.(type) {
+	case float64:
+		if x > 0 {
+			u := uint64(x)
+			return &u
+		}
+	case int64:
+		if x > 0 {
+			u := uint64(x)
+			return &u
+		}
+	default:
+		if n, ok := v.(interface{ Int64() (int64, error) }); ok {
+			if i, err := n.Int64(); err == nil && i > 0 {
+				u := uint64(i)
+				return &u
+			}
+		}
+	}
+	return nil
+}
+
+// decodeCursorInt32 mirrors decodeCursorUint64 for signed-int32
+// cursor keys (e.g. bill.is_credit). Returns nil when the input is
+// nil; otherwise always returns a value (zero is a legitimate key
+// for boolean-shaped columns).
+func decodeCursorInt32(v any) *int32 {
+	if v == nil {
+		return nil
+	}
+	switch x := v.(type) {
+	case float64:
+		i := int32(x)
+		return &i
+	case int64:
+		i := int32(x)
+		return &i
+	default:
+		if n, ok := v.(interface{ Int64() (int64, error) }); ok {
+			if i, err := n.Int64(); err == nil {
+				ii := int32(i)
+				return &ii
+			}
+		}
+	}
+	return nil
+}
+
+// parseRFC3339Cursor decodes the leading time-keyed cursor key. The
+// FE round-trips the date as a string so we accept both Nano and
+// non-Nano forms (some legacy paths drop the fractional seconds).
+func parseRFC3339Cursor(v any) *time.Time {
+	dStr, ok := v.(string)
+	if !ok || dStr == "" {
+		return nil
+	}
+	if t, err := time.Parse(time.RFC3339Nano, dStr); err == nil {
+		return &t
+	}
+	if t, err := time.Parse(time.RFC3339, dStr); err == nil {
+		return &t
+	}
+	return nil
+}
+
+// decodeBillCursor decodes the (effective_date, id, is_credit) triple.
+// Returns ok=false on a half-decoded cursor so the caller can map it
+// to a 400. ok=true with all-nil out-params is the first-page case.
+func decodeBillCursor(c pagination.Cursor) (date *time.Time, id *uint64, isCredit any, ok bool) {
+	if len(c.K) < 3 {
+		return nil, nil, nil, true
+	}
+	date = parseRFC3339Cursor(c.K[0])
+	id = decodeCursorUint64(c.K[1])
+	if v := decodeCursorInt32(c.K[2]); v != nil {
+		isCredit = *v
+	}
+	if date == nil || id == nil || isCredit == nil {
+		return nil, nil, nil, false
+	}
+	return date, id, isCredit, true
 }

@@ -57,6 +57,42 @@ func effectiveDateOr(ed *time.Time) time.Time {
 // validation rejects any client-supplied sort that doesn't match this.
 const billListSort = "-effective_date"
 
+// errGetBills is the log-prefix format used by every error path in
+// GetBills (Sonar S1192).
+const errGetBills = "GetBills: %v"
+
+// billSortCmp is the per-key 3-way comparator wired into the FE
+// table-sort UX. "type" maps to BillType (true = B2B). Cursor walks
+// stay on the canonical (effective_date, id, is_credit) seek key —
+// the FE sort header sends an empty cursor.
+func billSortCmp(a, b db.GetAllBillRow, k string) (int, bool) {
+	switch k {
+	case "sequence_number":
+		return uint64PtrCmp(a.SequenceNumber, b.SequenceNumber), true
+	case "total":
+		return decCmp(a.Total, b.Total), true
+	case "effective_date":
+		return timeCmp(a.EffectiveDate, b.EffectiveDate), true
+	case "type":
+		return boolCmp(a.BillType, b.BillType), true
+	case "state":
+		return int32Cmp(a.State, b.State), true
+	}
+	return 0, false
+}
+
+// billCursorKeys is the keyset extractor BuildEnvelope uses to mint
+// the next-page cursor. (effective_date, id, is_credit) — the
+// is_credit tiebreaker is required because credit-note variants
+// share the bill's id and date in the UNION-ALL output.
+func billCursorKeys(r db.GetAllBillRow) []any {
+	return []any{
+		r.EffectiveDate.UTC().Format(time.RFC3339Nano),
+		r.ID,
+		r.IsCredit,
+	}
+}
+
 func (h *handler) GetBills(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
@@ -69,7 +105,7 @@ func (h *handler) GetBills(c *gin.Context) {
 	request := model.BillRequestFilter{}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Printf("GetBills: %v", err)
+		log.Printf(errGetBills, err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -86,7 +122,7 @@ func (h *handler) GetBills(c *gin.Context) {
 		PageSize:   request.PageSize,
 	}
 	if err := listReq.Validate(billListSort); err != nil {
-		log.Printf("GetBills: %v", err)
+		log.Printf(errGetBills, err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -101,98 +137,20 @@ func (h *handler) GetBills(c *gin.Context) {
 		c.JSON(http.StatusOK, pagination.Envelope[db.GetAllBillRow]{Items: []db.GetAllBillRow{}})
 		return
 	}
-
-	for _, value := range request.StoreIds {
-		if !slices.Contains(storeIds, value) {
-			c.Status(http.StatusBadRequest)
-			return
-		}
+	if !allStoresAllowed(request.StoreIds, storeIds) {
+		c.Status(http.StatusBadRequest)
+		return
 	}
 
-	// Search sentinels (FE §1, §2):
-	//   - queryLike: pre-wrapped %term% used against userName + user_phone_number.
-	//   - querySeqExact: integer value of q when q is all-digits — exact
-	//     match on bill.sequence_number for users pasting an invoice no.
-	// All-NULL = "no search". The SQL uses AND-of-NULLs as the open-gate
-	// sentinel so the WHERE stays static and Sonar S2077-clean.
-	var queryLike *string
-	var querySeqExact *uint64
-	if request.Query != nil && *request.Query != "" {
-		s := "%" + *request.Query + "%"
-		queryLike = &s
-		if n, err := strconv.ParseUint(*request.Query, 10, 64); err == nil && n > 0 {
-			querySeqExact = &n
-		}
-	}
+	queryLike, querySeqExact := buildLikeAndDigitsExact(request.Query)
+	stateFilter := nonNegativeStateFilter(request.State)
 
-	// State filter (FE §3): -1 (or absent) means "any non-deleted".
-	// Anything >= 0 is exact match. We never bind a negative value;
-	// the SQL already enforces state >= 0 as a soft-delete guard.
-	var stateFilter *int32
-	if request.State != nil && *request.State >= 0 {
-		v := *request.State
-		stateFilter = &v
-	}
-	// Decode cursor into the (cursor_date, cursor_id, cursor_is_credit)
-	// triple the SQL expects. All nil on the first page; all set on
-	// subsequent pages. We keep them paired — a half-decoded cursor is
-	// a 400. The third key (`is_credit`) is needed because a bill with
-	// a credit_note appears as two distinct rows sharing the same
-	// (effective_date, id); without it the seek would skip or duplicate
-	// the second row.
 	cur, _ := listReq.DecodedCursor()
-	var cursorDate *time.Time
-	var cursorID *uint64
-	var cursorIsCredit any
-	if len(cur.K) >= 3 {
-		if dStr, ok := cur.K[0].(string); ok {
-			if t, err := time.Parse(time.RFC3339Nano, dStr); err == nil {
-				cursorDate = &t
-			} else if t, err := time.Parse(time.RFC3339, dStr); err == nil {
-				cursorDate = &t
-			}
-		}
-		if idAny := cur.K[1]; idAny != nil {
-			switch v := idAny.(type) {
-			case float64:
-				if v > 0 {
-					u := uint64(v)
-					cursorID = &u
-				}
-			case int64:
-				if v > 0 {
-					u := uint64(v)
-					cursorID = &u
-				}
-			default:
-				// json.Number path
-				if n, ok := idAny.(interface{ Int64() (int64, error) }); ok {
-					if i, err := n.Int64(); err == nil && i > 0 {
-						u := uint64(i)
-						cursorID = &u
-					}
-				}
-			}
-		}
-		if icAny := cur.K[2]; icAny != nil {
-			switch v := icAny.(type) {
-			case float64:
-				cursorIsCredit = int32(v)
-			case int64:
-				cursorIsCredit = int32(v)
-			default:
-				if n, ok := icAny.(interface{ Int64() (int64, error) }); ok {
-					if i, err := n.Int64(); err == nil {
-						cursorIsCredit = int32(i)
-					}
-				}
-			}
-		}
-		if cursorDate == nil || cursorID == nil || cursorIsCredit == nil {
-			log.Printf("GetBills: cursor missing date, id or is_credit")
-			c.Status(http.StatusBadRequest)
-			return
-		}
+	cursorDate, cursorID, cursorIsCredit, ok := decodeBillCursor(cur)
+	if !ok {
+		log.Printf("GetBills: cursor missing date, id or is_credit")
+		c.Status(http.StatusBadRequest)
+		return
 	}
 
 	limit := listReq.EffectiveLimit()
@@ -209,48 +167,14 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 	bills, err := h.queries.GetAllBill(c.Request.Context(), args)
 	if err != nil {
-		log.Printf("GetBills: %v", err)
+		log.Printf(errGetBills, err)
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	// Server-driven table sort (FE round-2 §1). The "type" key maps to
-	// BillType (B2B when client_id is set, B2C otherwise). Cursor walks
-	// stay on the canonical (effective_date DESC, id DESC, is_credit
-	// DESC) seek key — the FE table sort sends an empty cursor.
-	applyListSort(bills, listReq.Sort, listReq.Dir, func(a, b db.GetAllBillRow, k string) (int, bool) {
-		switch k {
-		case "sequence_number":
-			return uint64PtrCmp(a.SequenceNumber, b.SequenceNumber), true
-		case "total":
-			return decCmp(a.Total, b.Total), true
-		case "effective_date":
-			return timeCmp(a.EffectiveDate, b.EffectiveDate), true
-		case "type":
-			return boolCmp(a.BillType, b.BillType), true
-		case "state":
-			return int32Cmp(a.State, b.State), true
-		}
-		return 0, false
-	})
+	applyListSort(bills, listReq.Sort, listReq.Dir, billSortCmp)
 
-	envelope := pagination.BuildEnvelope(
-		bills,
-		limit,
-		billListSort,
-		// Keyset for the next page is (effective_date, id, is_credit)
-		// of the last kept row. The is_credit tiebreaker is required
-		// because credit-note variants share the bill's id and date.
-		// Date is RFC3339Nano so the FE round-trips it as a string and
-		// hands it back verbatim — keeps the cursor timezone-stable.
-		func(r db.GetAllBillRow) []any {
-			return []any{
-				r.EffectiveDate.UTC().Format(time.RFC3339Nano),
-				r.ID,
-				r.IsCredit,
-			}
-		},
-	)
+	envelope := pagination.BuildEnvelope(bills, limit, billListSort, billCursorKeys)
 	c.JSON(http.StatusOK, envelope)
 }
 

@@ -38,18 +38,38 @@ func (h *handler) GetClient(c *gin.Context) {
 
 const clientListSort = "-updated_at"
 
+// errGetAllClient is the log-prefix format used by every error path
+// in GetAllClient (Sonar S1192).
+const errGetAllClient = "GetAllClient: %v"
+
+// clientSortCmp wires the FE table-sort UX. Cursor walks stay on the
+// canonical (updated_at DESC, id DESC) seek key and skip this path.
+func clientSortCmp(a, b db.Client, k string) (int, bool) {
+	switch k {
+	case "name":
+		return strCmp(a.Name, b.Name), true
+	case "company_name":
+		return strPtrCmp(a.CompanyName, b.CompanyName), true
+	case "email":
+		return strPtrCmp(a.Email, b.Email), true
+	case "phone":
+		return strPtrCmp(a.Phone, b.Phone), true
+	}
+	return 0, false
+}
+
 func (h *handler) GetAllClient(c *gin.Context) {
 	request := model.PaginationRequest{}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Printf("GetAllClient: %v", err)
+		log.Printf(errGetAllClient, err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
 
 	listReq := listRequestFromPagination(request)
 	if err := listReq.Validate(clientListSort); err != nil {
-		log.Printf("GetAllClient: %v", err)
+		log.Printf(errGetAllClient, err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -71,12 +91,9 @@ func (h *handler) GetAllClient(c *gin.Context) {
 	limit := listReq.EffectiveLimit()
 
 	// Search sentinel: NULL = no search; otherwise %term% used against
-	// name / email / phone (FE §1).
-	var queryLike *string
-	if request.Query != nil && *request.Query != "" {
-		s := "%" + *request.Query + "%"
-		queryLike = &s
-	}
+	// name / email / phone (FE §1). Digits-exact isn't supported on
+	// client (id is internal); only the LIKE wrapper is computed.
+	queryLike, _ := buildLikeAndDigitsExact(request.Query)
 
 	res, err := h.queries.GetClients(c.Request.Context(), db.GetClientsParams{
 		QueryLike:       queryLike,
@@ -85,25 +102,12 @@ func (h *handler) GetAllClient(c *gin.Context) {
 		Limit:           int32(limit + 1),
 	})
 	if err != nil {
-		log.Printf("GetAllClient: %v", err)
+		log.Printf(errGetAllClient, err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
-	// Server-driven table sort (FE round-2 §1).
-	applyListSort(res, listReq.Sort, listReq.Dir, func(a, b db.Client, k string) (int, bool) {
-		switch k {
-		case "name":
-			return strCmp(a.Name, b.Name), true
-		case "company_name":
-			return strPtrCmp(a.CompanyName, b.CompanyName), true
-		case "email":
-			return strPtrCmp(a.Email, b.Email), true
-		case "phone":
-			return strPtrCmp(a.Phone, b.Phone), true
-		}
-		return 0, false
-	})
+	applyListSort(res, listReq.Sort, listReq.Dir, clientSortCmp)
 
 	envelope := pagination.BuildEnvelope(
 		res,

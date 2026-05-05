@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/pagination"
 	"log"
@@ -128,6 +129,79 @@ type cashVoucherDetail struct {
 
 const cashVoucherListSort = "-effective_date"
 
+// validVoucherTypes is the closed set of voucher_type values that
+// the FE filter accepts. Anything else gets a 400 — silently
+// degrading to "no filter" would mask a typo at the client.
+var validVoucherTypes = map[string]struct{}{
+	"disbursement": {},
+	"receipt":      {},
+	"cash_box":     {},
+}
+
+// cashVoucherSortCmp wires the FE table-sort UX. Amount is
+// wire-encoded as a decimal string for precision; parse once per
+// compare so the numeric ordering matches the on-screen value.
+func cashVoucherSortCmp(a, b cashVoucherListItem, k string) (int, bool) {
+	switch k {
+	case "voucher_number":
+		return int64Cmp(int64(a.VoucherNumber), int64(b.VoucherNumber)), true
+	case "voucher_type":
+		return strCmp(a.VoucherType, b.VoucherType), true
+	case "recipient_name":
+		return strCmp(a.RecipientName, b.RecipientName), true
+	case "amount":
+		da, _ := decimal.NewFromString(a.Amount)
+		dbAmt, _ := decimal.NewFromString(b.Amount)
+		return decCmp(da, dbAmt), true
+	case "effective_date":
+		return timeCmp(a.EffectiveDate, b.EffectiveDate), true
+	case "state":
+		return int64Cmp(int64(a.State), int64(b.State)), true
+	}
+	return 0, false
+}
+
+// buildCashVoucherWhere assembles the dynamic WHERE clause + bound
+// args for the cash_voucher list. Returned err is non-nil only when
+// the caller supplied an invalid filter value (mapped to 400).
+func buildCashVoucherWhere(req cashVoucherListRequest, merchantID int64, cursorDate *time.Time, cursorID *uint64) (string, []any, error) {
+	where := "WHERE merchant_id = ?"
+	args := []any{merchantID}
+
+	if req.VoucherType != "" {
+		if _, ok := validVoucherTypes[req.VoucherType]; !ok {
+			return "", nil, errInvalidVoucherType
+		}
+		where += " AND voucher_type = ?"
+		args = append(args, req.VoucherType)
+	}
+
+	// State filter (FE §3). Skip when nil or negative ("any state").
+	if req.State != nil && *req.State >= 0 {
+		where += " AND state = ?"
+		args = append(args, *req.State)
+	}
+
+	if req.Query != "" {
+		where += " AND (recipient_name LIKE ? OR description LIKE ? OR note LIKE ?)"
+		q := "%" + req.Query + "%"
+		args = append(args, q, q, q)
+	}
+
+	// Seek predicate (skip on first page).
+	if cursorDate != nil && cursorID != nil {
+		where += " AND (effective_date < ? OR (effective_date = ? AND id < ?))"
+		args = append(args, *cursorDate, *cursorDate, *cursorID)
+	}
+
+	return where, args, nil
+}
+
+// errInvalidVoucherType is returned by buildCashVoucherWhere when
+// the FE supplies a voucher_type outside validVoucherTypes. It's a
+// sentinel — handlers map it to a 400 with the localised message.
+var errInvalidVoucherType = errors.New("invalid voucher type")
+
 // ListCashVouchers returns a cursor-paginated page of cash vouchers
 // scoped to the calling merchant. Sort key: (effective_date DESC, id
 // DESC), backed by idx_cv_keyset (migration 0003).
@@ -163,34 +237,10 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 	limit := listReq.EffectiveLimit()
 	merchantID := getMerchantID(c)
 
-	where := "WHERE merchant_id = ?"
-	args := []any{merchantID}
-
-	if req.VoucherType != "" {
-		if req.VoucherType != "disbursement" && req.VoucherType != "receipt" && req.VoucherType != "cash_box" {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "نوع السند غير صالح"})
-			return
-		}
-		where += " AND voucher_type = ?"
-		args = append(args, req.VoucherType)
-	}
-
-	// State filter (FE §3). Skip when nil or negative ("any state").
-	if req.State != nil && *req.State >= 0 {
-		where += " AND state = ?"
-		args = append(args, *req.State)
-	}
-
-	if req.Query != "" {
-		where += " AND (recipient_name LIKE ? OR description LIKE ? OR note LIKE ?)"
-		q := "%" + req.Query + "%"
-		args = append(args, q, q, q)
-	}
-
-	// Seek predicate (skip on first page).
-	if cursorDate != nil && cursorID != nil {
-		where += " AND (effective_date < ? OR (effective_date = ? AND id < ?))"
-		args = append(args, *cursorDate, *cursorDate, *cursorID)
+	where, args, err := buildCashVoucherWhere(req, merchantID, cursorDate, cursorID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "نوع السند غير صالح"})
+		return
 	}
 
 	// +1 row trick for has_more.
@@ -230,28 +280,7 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 		items = append(items, v)
 	}
 
-	// Server-driven table sort (FE round-2 §1). Amount is wire-encoded
-	// as a decimal string for precision; parse once per compare so the
-	// numeric ordering matches the on-screen value.
-	applyListSort(items, listReq.Sort, listReq.Dir, func(a, b cashVoucherListItem, k string) (int, bool) {
-		switch k {
-		case "voucher_number":
-			return int64Cmp(int64(a.VoucherNumber), int64(b.VoucherNumber)), true
-		case "voucher_type":
-			return strCmp(a.VoucherType, b.VoucherType), true
-		case "recipient_name":
-			return strCmp(a.RecipientName, b.RecipientName), true
-		case "amount":
-			da, _ := decimal.NewFromString(a.Amount)
-			db_, _ := decimal.NewFromString(b.Amount)
-			return decCmp(da, db_), true
-		case "effective_date":
-			return timeCmp(a.EffectiveDate, b.EffectiveDate), true
-		case "state":
-			return int64Cmp(int64(a.State), int64(b.State)), true
-		}
-		return 0, false
-	})
+	applyListSort(items, listReq.Sort, listReq.Dir, cashVoucherSortCmp)
 
 	envelope := pagination.BuildEnvelope(
 		items,

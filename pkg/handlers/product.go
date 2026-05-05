@@ -114,20 +114,82 @@ func (h *handler) UpdateProduct(c *gin.Context) {
 
 const productListSort = "-id"
 
+// errGetAllProducts is the log-prefix format used by every error path
+// in GetAllProducts (Sonar S1192).
+const errGetAllProducts = "GetAllProducts: %v"
+
+// productSortCmp wires the FE table-sort UX. part_name isn't a
+// column on the catalog product table — it lives on bill_product
+// and order_items rows. Sorting by part_name therefore falls back
+// to product.name (the user-facing label on the catalog list).
+func productSortCmp(a, b db.Product, k string) (int, bool) {
+	switch k {
+	case "id":
+		return uint64Cmp(a.ID, b.ID), true
+	case "part_name", "name":
+		return strPtrCmp(a.Name, b.Name), true
+	case "price":
+		return decCmp(a.Price, b.Price), true
+	case "quantity":
+		return decCmp(a.Quantity, b.Quantity), true
+	case "status":
+		return int32Cmp(a.Status, b.Status), true
+	}
+	return 0, false
+}
+
+// applyProductStockFilter is the in-memory implementation of the
+// FE round-2 P0 #2 "stock" filter. It runs against the bounded
+// page slice because adding a new sqlc narg would explode the
+// generated query branches.
+//   "in"  → quantity > 0
+//   "out" → quantity == 0
+//   "low" → 0 < quantity <= min_stock
+//   ""    → no filter (returns input unchanged)
+//   any other value → no-op (degrades to "no filter")
+func applyProductStockFilter(products []db.Product, stock string) []db.Product {
+	if stock == "" {
+		return products
+	}
+	out := make([]db.Product, 0, len(products))
+	for _, p := range products {
+		if productMatchesStock(p, stock) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func productMatchesStock(p db.Product, stock string) bool {
+	switch stock {
+	case "in":
+		return p.Quantity.GreaterThan(decimal.Zero)
+	case "out":
+		return p.Quantity.IsZero()
+	case "low":
+		lowThr := decimal.NewFromInt(int64(p.MinStock))
+		return p.Quantity.GreaterThan(decimal.Zero) && p.Quantity.LessThanOrEqual(lowThr)
+	default:
+		// Unknown value — treat as "no filter" to keep the response
+		// non-empty rather than silently discarding the page.
+		return true
+	}
+}
+
 func (h *handler) GetAllProducts(c *gin.Context) {
 	user := GetSessionInfo(c)
 
 	request := model.PaginationRequest{}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Printf("GetAllProducts: %v", err)
+		log.Printf(errGetAllProducts, err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
 
 	listReq := listRequestFromPagination(request)
 	if err := listReq.Validate(productListSort); err != nil {
-		log.Printf("GetAllProducts: %v", err)
+		log.Printf(errGetAllProducts, err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -136,20 +198,10 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 	cursorID := cursorIDOnly(cur)
 	limit := listReq.EffectiveLimit()
 
-	// Search sentinels (FE §1):
-	//   - QueryLike: %term% used against name + shelf_number.
-	//   - QueryIDMatch: when q is all-digits, the integer value for an
-	//     exact PK match (so users can paste a sticker id and get a
-	//     direct hit). NULL otherwise.
-	var queryLike *string
-	var queryIDMatch *uint64
-	if request.Query != nil && *request.Query != "" {
-		s := "%" + *request.Query + "%"
-		queryLike = &s
-		if id, err := strconv.ParseUint(*request.Query, 10, 64); err == nil && id > 0 {
-			queryIDMatch = &id
-		}
-	}
+	// Search sentinels (FE §1): %term% LIKE wrapper plus an exact-PK
+	// match when the query is all digits, so users can paste a
+	// sticker id and get a direct hit.
+	queryLike, queryIDMatch := buildLikeAndDigitsExact(request.Query)
 
 	args := db.GetAllProductParams{
 		ID:           int32(user.id),
@@ -161,64 +213,13 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 
 	products, err := h.queries.GetAllProduct(c.Request.Context(), args)
 	if err != nil {
-		log.Printf("GetAllProducts: %v", err)
+		log.Printf(errGetAllProducts, err)
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	// Stock filter (FE round-2 P0 #2). Applied in-memory because the
-	// SQL is sqlc-generated and adding a new narg would explode the
-	// query branches. With FE driving page_size up the bounded slice
-	// here is what the user already sees on screen.
-	//   "in"  → quantity > 0
-	//   "out" → quantity == 0
-	//   "low" → 0 < quantity <= min_stock
-	if request.Stock != "" {
-		filtered := make([]db.Product, 0, len(products))
-		for _, p := range products {
-			gtZero := p.Quantity.GreaterThan(decimal.Zero)
-			eqZero := p.Quantity.IsZero()
-			lowThr := decimal.NewFromInt(int64(p.MinStock))
-			low := gtZero && p.Quantity.LessThanOrEqual(lowThr)
-			switch request.Stock {
-			case "in":
-				if gtZero {
-					filtered = append(filtered, p)
-				}
-			case "out":
-				if eqZero {
-					filtered = append(filtered, p)
-				}
-			case "low":
-				if low {
-					filtered = append(filtered, p)
-				}
-			default:
-				filtered = append(filtered, p)
-			}
-		}
-		products = filtered
-	}
-
-	// Server-driven table sort (FE round-2 §1). part_name isn't a
-	// column on the catalog product table — it lives on bill_product
-	// and order_items rows. Sorting by part_name therefore falls back
-	// to product.name (the user-facing label on the catalog list).
-	applyListSort(products, listReq.Sort, listReq.Dir, func(a, b db.Product, k string) (int, bool) {
-		switch k {
-		case "id":
-			return uint64Cmp(a.ID, b.ID), true
-		case "part_name", "name":
-			return strPtrCmp(a.Name, b.Name), true
-		case "price":
-			return decCmp(a.Price, b.Price), true
-		case "quantity":
-			return decCmp(a.Quantity, b.Quantity), true
-		case "status":
-			return int32Cmp(a.Status, b.Status), true
-		}
-		return 0, false
-	})
+	products = applyProductStockFilter(products, request.Stock)
+	applyListSort(products, listReq.Sort, listReq.Dir, productSortCmp)
 
 	envelope := pagination.BuildEnvelope(
 		products,

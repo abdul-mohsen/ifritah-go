@@ -325,6 +325,26 @@ func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.P
 
 const purchaseBillListSort = "-effective_date"
 
+// purchaseBillSortCmp wires the FE table-sort UX. PurchaseBill has
+// no "type" column on the schema; the FE-listed key is intentionally
+// absent here so an unknown-key send falls through to the no-op
+// branch (instead of returning a misleading order).
+func purchaseBillSortCmp(a, b db.PurchaseBill, k string) (int, bool) {
+	switch k {
+	case "id":
+		return uint64Cmp(a.ID, b.ID), true
+	case "supplier_sequence_number":
+		return uint64PtrCmp(a.SupplierSequenceNumber, b.SupplierSequenceNumber), true
+	case "total":
+		return decCmp(a.Total, b.Total), true
+	case "effective_date":
+		return timeCmp(a.EffectiveDate, b.EffectiveDate), true
+	case "state":
+		return int32Cmp(a.State, b.State), true
+	}
+	return 0, false
+}
+
 func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
@@ -364,12 +384,9 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		c.JSON(http.StatusOK, pagination.Envelope[db.PurchaseBill]{Items: []db.PurchaseBill{}})
 		return
 	}
-
-	for _, value := range request.StoreIds {
-		if !slices.Contains(storeIds, value) {
-			c.Status(http.StatusBadRequest)
-			return
-		}
+	if !allStoresAllowed(request.StoreIds, storeIds) {
+		c.Status(http.StatusBadRequest)
+		return
 	}
 
 	cur, _ := listReq.DecodedCursor()
@@ -385,26 +402,13 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 	// Search sentinels (FE §1, §2):
 	//   - queryLike: %term% used against supplier.name (LEFT JOIN added
 	//     in the SQL so empty supplier still scans).
-	//   - querySeqExact: integer value of q when q is all-digits —
-	//     exact match on supplier_sequence_number.
-	// All-NULL = "no search".
-	var queryLike *string
-	var querySeqExact *uint64
-	if request.Query != nil && *request.Query != "" {
-		s := "%" + *request.Query + "%"
-		queryLike = &s
-		if n, err := strconv.ParseUint(*request.Query, 10, 64); err == nil && n > 0 {
-			querySeqExact = &n
-		}
-	}
+	//   - querySeqExact: integer value of q when q is all-digits — exact
+	//     match on supplier_sequence_number AND b.id (FE round-2 P0 #4).
+	queryLike, querySeqExact := buildLikeAndDigitsExact(request.Query)
 
 	// State filter (FE §3): -1/absent = any non-deleted (state >= 0
-	// already enforced); otherwise exact match.
-	var stateFilter *int32
-	if request.State != nil && *request.State >= 0 {
-		v := *request.State
-		stateFilter = &v
-	}
+	// already enforced by the SQL); otherwise exact match.
+	stateFilter := nonNegativeStateFilter(request.State)
 
 	bill := h.getPurchaseBills(c, db.GetAllPurchaseBillParams{
 		ID:            int32(userSession.id),
@@ -416,25 +420,7 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		Limit:         int32(limit + 1),
 	})
 
-	// Server-driven table sort (FE round-2 §1). PurchaseBill has no
-	// "type" column on the schema; we keep the FE-listed key as a
-	// no-op so an unknown-key send doesn't 500. State suffices for
-	// most "split paid vs draft" needs.
-	applyListSort(bill, listReq.Sort, listReq.Dir, func(a, b db.PurchaseBill, k string) (int, bool) {
-		switch k {
-		case "id":
-			return uint64Cmp(a.ID, b.ID), true
-		case "supplier_sequence_number":
-			return uint64PtrCmp(a.SupplierSequenceNumber, b.SupplierSequenceNumber), true
-		case "total":
-			return decCmp(a.Total, b.Total), true
-		case "effective_date":
-			return timeCmp(a.EffectiveDate, b.EffectiveDate), true
-		case "state":
-			return int32Cmp(a.State, b.State), true
-		}
-		return 0, false
-	})
+	applyListSort(bill, listReq.Sort, listReq.Dir, purchaseBillSortCmp)
 
 	envelope := pagination.BuildEnvelope(
 		bill,

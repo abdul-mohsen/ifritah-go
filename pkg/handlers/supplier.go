@@ -32,19 +32,41 @@ type SupplierRequest struct {
 
 const supplierListSort = "-id"
 
+// errGetAllSupplier is the log-prefix format used by every error path
+// in GetAllSupplier (Sonar S1192).
+const errGetAllSupplier = "GetAllSupplier: %v"
+
+// supplierSortCmp wires the FE table-sort UX. Cursor walks ignore
+// this — they're pinned to the canonical "id DESC" seek key.
+func supplierSortCmp(a, b db.Supplier, k string) (int, bool) {
+	switch k {
+	case "name":
+		return strPtrCmp(a.Name, b.Name), true
+	case "email":
+		return strPtrCmp(a.Email, b.Email), true
+	case "phone_number":
+		return strPtrCmp(a.PhoneNumber, b.PhoneNumber), true
+	case "address":
+		return strPtrCmp(a.Address, b.Address), true
+	case "vat_number":
+		return strPtrCmp(a.VatNumber, b.VatNumber), true
+	}
+	return 0, false
+}
+
 func (h *handler) GetAllSupplier(c *gin.Context) {
 
 	request := model.PaginationRequest{}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Printf("GetAllSupplier: %v", err)
+		log.Printf(errGetAllSupplier, err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
 
 	listReq := listRequestFromPagination(request)
 	if err := listReq.Validate(supplierListSort); err != nil {
-		log.Printf("GetAllSupplier: %v", err)
+		log.Printf(errGetAllSupplier, err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -60,11 +82,7 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 
 	// Sentinel-filter for search: NULL = no search, otherwise %term%.
 	// Same shape as bill / cash_voucher / client / product (FE §1).
-	var queryLike *string
-	if request.Query != nil && *request.Query != "" {
-		s := "%" + *request.Query + "%"
-		queryLike = &s
-	}
+	queryLike, _ := buildLikeAndDigitsExact(request.Query)
 
 	args := db.GetAllSupplierParams{
 		QueryLike: queryLike,
@@ -74,28 +92,12 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 
 	suppliers, err := h.queries.GetAllSupplier(c.Request.Context(), args)
 	if err != nil {
-		log.Printf("GetAllSupplier: %v", err)
+		log.Printf(errGetAllSupplier, err)
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	// Server-driven table sort (FE round-2 §1). Cursor walks ignore
-	// this — they're pinned to the canonical "id DESC" seek key.
-	applyListSort(suppliers, listReq.Sort, listReq.Dir, func(a, b db.Supplier, k string) (int, bool) {
-		switch k {
-		case "name":
-			return strPtrCmp(a.Name, b.Name), true
-		case "email":
-			return strPtrCmp(a.Email, b.Email), true
-		case "phone_number":
-			return strPtrCmp(a.PhoneNumber, b.PhoneNumber), true
-		case "address":
-			return strPtrCmp(a.Address, b.Address), true
-		case "vat_number":
-			return strPtrCmp(a.VatNumber, b.VatNumber), true
-		}
-		return 0, false
-	})
+	applyListSort(suppliers, listReq.Sort, listReq.Dir, supplierSortCmp)
 
 	envelope := pagination.BuildEnvelope(
 		suppliers,

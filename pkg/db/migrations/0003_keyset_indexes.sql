@@ -21,47 +21,29 @@
 -- (which actually stores the creator user id, not a tenant id) is not
 -- in the WHERE clause of the new list queries.
 --
--- Idempotent: same gate-on-information_schema pattern as 0002.
+-- Idempotent: `CREATE INDEX IF NOT EXISTS` (MySQL 8.0.29+) makes each
+-- statement a no-op on a second run, so we no longer need the
+-- per-index information_schema gate that 0002 used.
 -- ============================================================================
 
--- bill ----------------------------------------------------------------------
-SET @s := IF(EXISTS(SELECT 1 FROM information_schema.statistics
-  WHERE table_schema=DATABASE() AND table_name='bill' AND index_name='idx_bill_keyset'),
-  'SELECT 1',
-  'ALTER TABLE `bill` ADD INDEX `idx_bill_keyset` (`effective_date` DESC, `id` DESC)');
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+CREATE INDEX IF NOT EXISTS `idx_bill_keyset`
+    ON `bill` (`effective_date` DESC, `id` DESC);
 
--- purchase_bill -------------------------------------------------------------
-SET @s := IF(EXISTS(SELECT 1 FROM information_schema.statistics
-  WHERE table_schema=DATABASE() AND table_name='purchase_bill' AND index_name='idx_pb_keyset'),
-  'SELECT 1',
-  'ALTER TABLE `purchase_bill` ADD INDEX `idx_pb_keyset` (`effective_date` DESC, `id` DESC)');
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+CREATE INDEX IF NOT EXISTS `idx_pb_keyset`
+    ON `purchase_bill` (`effective_date` DESC, `id` DESC);
 
--- cash_voucher --------------------------------------------------------------
-SET @s := IF(EXISTS(SELECT 1 FROM information_schema.statistics
-  WHERE table_schema=DATABASE() AND table_name='cash_voucher' AND index_name='idx_cv_keyset'),
-  'SELECT 1',
-  'ALTER TABLE `cash_voucher` ADD INDEX `idx_cv_keyset` (`effective_date` DESC, `id` DESC)');
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+CREATE INDEX IF NOT EXISTS `idx_cv_keyset`
+    ON `cash_voucher` (`effective_date` DESC, `id` DESC);
 
--- orders --------------------------------------------------------------------
 -- Sorted by created_at DESC for the list page. Same DESC-DESC composite
 -- so the seek is one index range read.
-SET @s := IF(EXISTS(SELECT 1 FROM information_schema.statistics
-  WHERE table_schema=DATABASE() AND table_name='orders' AND index_name='idx_orders_keyset'),
-  'SELECT 1',
-  'ALTER TABLE `orders` ADD INDEX `idx_orders_keyset` (`created_at` DESC, `id` DESC)');
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+CREATE INDEX IF NOT EXISTS `idx_orders_keyset`
+    ON `orders` (`created_at` DESC, `id` DESC);
 
--- client --------------------------------------------------------------------
 -- Sorted by updated_at DESC, id DESC (matches existing GetClients ORDER BY
 -- and surfaces recently-touched clients first, the existing UX contract).
-SET @s := IF(EXISTS(SELECT 1 FROM information_schema.statistics
-  WHERE table_schema=DATABASE() AND table_name='client' AND index_name='idx_client_keyset'),
-  'SELECT 1',
-  'ALTER TABLE `client` ADD INDEX `idx_client_keyset` (`is_deleted`, `updated_at` DESC, `id` DESC)');
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+CREATE INDEX IF NOT EXISTS `idx_client_keyset`
+    ON `client` (`is_deleted`, `updated_at` DESC, `id` DESC);
 
 -- supplier, product, branch, stores list pages all sort by `id DESC` only.
 -- The InnoDB primary key already serves that scan order natively — no

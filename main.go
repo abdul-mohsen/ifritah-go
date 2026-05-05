@@ -1,7 +1,7 @@
 package main
 
 import (
-	"ifritah/web-service-gin/pkg/db/gen"
+	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/handlers"
 
 	"log"
@@ -35,7 +35,6 @@ func main() {
 	h := handlers.New(DB, queries, pub)
 
 	router := gin.Default()
-	baseUrl := os.Getenv("BASEURL")
 	store := persistence.NewInMemoryStore(time.Second)
 	// Recovery middleware recovers from any panics and writes a 500 if there was one.
 	router.Use(gin.Recovery())
@@ -45,7 +44,7 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	authorized := router.Group(baseUrl)
+	authorized := router.Group(os.Getenv("BASEURL"))
 	authorized.Use(handlers.JWTVerifyMiddleware)
 	{
 		// Convenience aliases for role-gated routes.
@@ -121,6 +120,7 @@ func main() {
 
 		// ── Stores (write is admin-only) ───────────────────────────────
 		authorized.GET("stores/all", h.GetStores)
+		authorized.POST("stores/all", h.GetStores)
 		authorized.GET("store/:id", h.GetStore)
 		authorized.POST("store", admin, h.CreateStore)
 		authorized.PUT("store/:id", admin, h.UpdateStore)
@@ -197,7 +197,7 @@ func main() {
 		authorized.GET("zatca/monitor/submissions", admin, h.ZatcaMonitorSubmissions)
 	}
 
-	nonAuthGroup := router.Group(baseUrl)
+	nonAuthGroup := router.Group(os.Getenv("BASEURL"))
 	{
 		nonAuthGroup.GET("bill/pdf/:id", h.GetBillPDF)
 		nonAuthGroup.GET("bill/credit/pdf/:id", h.GetCreditBillPDF)

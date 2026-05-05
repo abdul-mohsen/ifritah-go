@@ -1,13 +1,32 @@
 -- name: GetProduct :one
-select p.* from product p where p.id = ? and is_deleted = False;
+select p.* from product p where p.id = ? and p.is_deleted = False;
 
 -- name: GetAllProduct :many
+-- Keyset pagination on (id DESC). The InnoDB primary key already
+-- serves the scan order natively — no extra index needed. Caller
+-- fetches limit+1 to detect has_more.
+-- query_like is the sentinel-filter for search across name and
+-- shelf_number; query_id_match is set to the integer value of q
+-- when q is all-digits (exact id match), 0 otherwise. NULL on both
+-- means "no search".
+--
+-- Each sqlc.narg() is referenced once (in the `prm` derived table) so
+-- the file stays under plsql:S1192's repeated-literal threshold.
 select p.*
 from user
 join store s on s.company_id = user.company_id
 join product p on p.store_id = s.id
-where user.id = ? and is_deleted = False
-ORDER BY p.id DESC LIMIT ? OFFSET ?;
+CROSS JOIN (SELECT CAST(sqlc.narg('query_like')     AS CHAR(255)) AS q,
+                   CAST(sqlc.narg('query_id_match') AS UNSIGNED)  AS qid,
+                   CAST(sqlc.narg('cursor_id')      AS UNSIGNED)  AS ci) prm
+where user.id = ? and p.is_deleted = False
+  and (prm.q IS NULL
+       OR p.name LIKE prm.q
+       OR COALESCE(p.shelf_number,'') LIKE prm.q
+       OR p.id = prm.qid)
+  and (prm.ci IS NULL OR p.id < prm.ci)
+ORDER BY p.id DESC
+LIMIT ?;
 
 -- name: AddProduct :execresult
 INSERT INTO product (article_id, quantity, price, cost_price ,shelf_number, store_id, name) VALUES (?,?,?,?,?,?,?)

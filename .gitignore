@@ -15,3 +15,7 @@ docker-compose.yml
 docker/
 cmd/hashpw/
 
+err.log
+out.log
+/.vscode/
+/.github/chatmodes/

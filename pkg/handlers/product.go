@@ -3,12 +3,14 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"slices"
 	"strconv"
 
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
+	"ifritah/web-service-gin/pkg/pagination"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
@@ -110,31 +112,102 @@ func (h *handler) UpdateProduct(c *gin.Context) {
 
 }
 
+const productListSort = "-id"
+
+// errGetAllProducts is the log-prefix format used by every error path
+// in GetAllProducts (Sonar S1192).
+const errGetAllProducts = "GetAllProducts: %v"
+
+// applyProductStockFilter is the in-memory implementation of the
+// FE round-2 P0 #2 "stock" filter. It runs against the bounded
+// page slice because adding a new sqlc narg would explode the
+// generated query branches.
+//
+//	"in"  → quantity > 0
+//	"out" → quantity == 0
+//	"low" → 0 < quantity <= min_stock
+//	""    → no filter (returns input unchanged)
+//	any other value → no-op (degrades to "no filter")
+func applyProductStockFilter(products []db.Product, stock string) []db.Product {
+	if stock == "" {
+		return products
+	}
+	out := make([]db.Product, 0, len(products))
+	for _, p := range products {
+		if productMatchesStock(p, stock) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func productMatchesStock(p db.Product, stock string) bool {
+	switch stock {
+	case "in":
+		return p.Quantity.GreaterThan(decimal.Zero)
+	case "out":
+		return p.Quantity.IsZero()
+	case "low":
+		lowThr := decimal.NewFromInt(int64(p.MinStock))
+		return p.Quantity.GreaterThan(decimal.Zero) && p.Quantity.LessThanOrEqual(lowThr)
+	default:
+		// Unknown value — treat as "no filter" to keep the response
+		// non-empty rather than silently discarding the page.
+		return true
+	}
+}
+
 func (h *handler) GetAllProducts(c *gin.Context) {
 	user := GetSessionInfo(c)
 
-	request := model.PaginationRequest{
-		Page:     0,
-		PageSize: 10,
-	}
+	request := model.PaginationRequest{}
 
 	if err := c.BindJSON(&request); err != nil {
+		log.Printf(errGetAllProducts, err)
+		c.Status(http.StatusBadRequest)
 		return
 	}
 
+	listReq := listRequestFromPagination(request)
+	if err := listReq.Validate(productListSort); err != nil {
+		log.Printf(errGetAllProducts, err)
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	cur, _ := listReq.DecodedCursor()
+	cursorID := cursorIDOnly(cur)
+	limit := listReq.EffectiveLimit()
+
+	// Search sentinels (FE §1): %term% LIKE wrapper plus an exact-PK
+	// match when the query is all digits, so users can paste a
+	// sticker id and get a direct hit.
+	queryLike, queryIDMatch := buildLikeAndDigitsExact(request.Query)
+
 	args := db.GetAllProductParams{
-		ID:     int32(user.id),
-		Limit:  request.PageSize,
-		Offset: request.PageSize * request.Page,
+		ID:           int32(user.id),
+		QueryLike:    queryLike,
+		QueryIDMatch: nullInt64FromUint64Ptr(queryIDMatch),
+		CursorID:     nullInt64FromUint64Ptr(cursorID),
+		Limit:        int32(limit + 1),
 	}
 
 	products, err := h.queries.GetAllProduct(c.Request.Context(), args)
 	if err != nil {
+		log.Printf(errGetAllProducts, err)
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, products)
+	products = applyProductStockFilter(products, request.Stock)
+
+	envelope := pagination.BuildEnvelope(
+		products,
+		limit,
+		productListSort,
+		func(p db.Product) []any { return []any{p.ID} },
+	)
+	c.JSON(http.StatusOK, envelope)
 }
 
 func (h *handler) DeleteProduct(c *gin.Context) {

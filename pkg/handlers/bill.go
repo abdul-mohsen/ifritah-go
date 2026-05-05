@@ -14,9 +14,11 @@ package handlers
 // ============================================================================
 
 import (
+	"context"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
+	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"math/big"
 	"net/http"
@@ -52,6 +54,26 @@ func effectiveDateOr(ed *time.Time) time.Time {
 	return time.Now()
 }
 
+// billListSort is the canonical sort spec for the bill list. Cursor
+// validation rejects any client-supplied sort that doesn't match this.
+const billListSort = "-effective_date"
+
+// errGetBills is the log-prefix format used by every error path in
+// GetBills (Sonar S1192).
+const errGetBills = "GetBills: %v"
+
+// billCursorKeys is the keyset extractor BuildEnvelope uses to mint
+// the next-page cursor. (effective_date, id, is_credit) — the
+// is_credit tiebreaker is required because credit-note variants
+// share the bill's id and date in the UNION-ALL output.
+func billCursorKeys(r db.GetAllBillRow) []any {
+	return []any{
+		r.EffectiveDate.UTC().Format(time.RFC3339Nano),
+		r.ID,
+		r.IsCredit,
+	}
+}
+
 func (h *handler) GetBills(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
@@ -61,18 +83,27 @@ func (h *handler) GetBills(c *gin.Context) {
 		storeIds = append(storeIds, value.Id)
 	}
 
-	request := model.BillRequestFilter{
-		Page:     0,
-		PageSize: 10,
-	}
+	request := model.BillRequestFilter{}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Printf("GetBills: %v", err)
+		log.Printf(errGetBills, err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
 
-	if request.Page < 0 || request.PageSize <= 0 {
+	// Build a ListRequest view to hand to the shared validator. It
+	// shares the same wire keys (limit/cursor/sort/page_size/...).
+	listReq := pagination.ListRequest{
+		Limit:      request.Limit,
+		Cursor:     request.Cursor,
+		Sort:       request.Sort,
+		Dir:        request.Dir,
+		Query:      request.Query,
+		PageNumber: request.Page,
+		PageSize:   request.PageSize,
+	}
+	if err := listReq.Validate(billListSort); err != nil {
+		log.Printf(errGetBills, err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -84,33 +115,49 @@ func (h *handler) GetBills(c *gin.Context) {
 		request.StoreIds = storeIds
 	}
 	if len(request.StoreIds) == 0 {
-		c.JSON(http.StatusOK, []any{})
+		c.JSON(http.StatusOK, pagination.Envelope[db.GetAllBillRow]{Items: []db.GetAllBillRow{}})
+		return
+	}
+	if !allStoresAllowed(request.StoreIds, storeIds) {
+		c.Status(http.StatusBadRequest)
 		return
 	}
 
-	for _, value := range request.StoreIds {
-		if !slices.Contains(storeIds, value) {
-			c.Status(http.StatusBadRequest)
-			return
-		}
+	queryLike, querySeqExact := buildLikeAndDigitsExact(request.Query)
+	stateFilter := nonNegativeStateFilter(request.State)
+
+	cur, _ := listReq.DecodedCursor()
+	cursorDate, cursorID, cursorIsCredit, ok := decodeBillCursor(cur)
+	if !ok {
+		log.Printf("GetBills: cursor missing date, id or is_credit")
+		c.Status(http.StatusBadRequest)
+		return
 	}
 
-	if request.Query != nil {
-		data := "%" + *request.Query + "%"
-		request.Query = &data
-	}
+	limit := listReq.EffectiveLimit()
 
+	// Adapt the *T sentinel pointers to sql.NullInt64 for the
+	// generated params: the CAST(... AS UNSIGNED/SIGNED) wrapper in
+	// bill.sql forces sqlc to emit Null* types for the keyset cols.
 	args := db.GetAllBillParams{
-		Phonenumber: request.Query,
-		Limit:       int32(request.PageSize),
-		Offset:      int32(request.Page) * int32(request.PageSize),
+		StateFilter:    nullInt64FromInt32Ptr(stateFilter),
+		QueryLike:      queryLike,
+		QuerySeqExact:  nullInt64FromUint64Ptr(querySeqExact),
+		CursorDate:     cursorDate,
+		CursorID:       nullInt64FromUint64Ptr(cursorID),
+		CursorIsCredit: nullInt64FromAny(cursorIsCredit),
+		// +1 row signals has_more without a COUNT(*).
+		Limit: int32(limit + 1),
 	}
 	bills, err := h.queries.GetAllBill(c.Request.Context(), args)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
+		log.Printf(errGetBills, err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	c.JSON(http.StatusOK, bills)
+
+	envelope := pagination.BuildEnvelope(bills, limit, billListSort, billCursorKeys)
+	c.JSON(http.StatusOK, envelope)
 }
 
 func (h *handler) AddBill(c *gin.Context) {
@@ -538,10 +585,10 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		// client" flag (B2B) vs an anonymous walk-in (B2C). It is fully
 		// derivable from the presence of client_id, so do that here instead
 		// of leaving the field as the zero value.
-		Type:                         bill.ClientID != nil,
-		PaymentMethod:                bill.PaymentMethod,
-		DeliverDate:                  bill.DeliverDate,
-		BranchID:                     bill.BranchID,
+		Type:          bill.ClientID != nil,
+		PaymentMethod: bill.PaymentMethod,
+		DeliverDate:   bill.DeliverDate,
+		BranchID:      bill.BranchID,
 	}, xProducts
 }
 
@@ -554,7 +601,17 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 func (h *handler) GetBillPDF(c *gin.Context) {
 
-	var id string = c.Param("id")
+	// Validate id is a positive integer before composing a path with it.
+	// Path-traversal hardening (Sonar gosecurity:S2083): the param feeds
+	// filepath.Join below, so any value containing path separators or
+	// `..` segments could escape the downloads directory.
+	rawID := c.Param("id")
+	billID, err := strconv.ParseUint(rawID, 10, 64)
+	if err != nil || billID == 0 {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	id := strconv.FormatUint(billID, 10)
 
 	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
 	if true {
@@ -676,27 +733,31 @@ func b2bInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 }
 
 func (h *handler) getProducts(billId uint64) []model.ProductDetails {
-	query := `
-	select product_id, price, quantity , articles.id, articles.articleNumber, articles.genericArticleDescription from bill_product
-	left join articles on articles.id = product_id where bill_id = ?
-	`
-	rows, err := h.DB.Query(query, billId)
+	rows, err := h.queries.GetBillProductsWithArticle(context.Background(), billId)
 	if err != nil {
-		log.Printf("getBillProducts query: %v", err)
+		log.Printf("getBillProducts: %v", err)
 		return nil
 	}
-	var products []model.ProductDetails
-	for rows.Next() {
-		var product model.ProductDetails
-
-		if err := rows.Scan(&product.Id, &product.Price, &product.Quantity, &product.ArticleId, &product.ArticleNumber, &product.Description); err != nil {
-			log.Printf("getBillProducts scan: %v", err)
-			return nil
+	products := make([]model.ProductDetails, 0, len(rows))
+	for _, r := range rows {
+		p := model.ProductDetails{
+			Price:    r.Price.String(),
+			Quantity: r.Quantity.IntPart(),
 		}
-
-		products = append(products, product)
+		if r.ProductID != nil {
+			p.Id = int(*r.ProductID)
+		}
+		if r.ArticleID.Valid {
+			p.ArticleId = int(r.ArticleID.Int64)
+		}
+		if r.Articlenumber != nil {
+			p.ArticleNumber = *r.Articlenumber
+		}
+		if r.Genericarticledescription != nil {
+			p.Description = *r.Genericarticledescription
+		}
+		products = append(products, p)
 	}
-
 	return products
 }
 
@@ -731,7 +792,7 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	}
 
 	// Soft-delete the bill
-	res, err := tx.Exec("UPDATE bill SET state = -1 WHERE id = ?", billID)
+	res, err := qtx.SoftDeleteBill(c.Request.Context(), billID)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return

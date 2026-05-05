@@ -2,6 +2,7 @@ package handlers
 
 import (
 	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
 	"strconv"
@@ -21,10 +22,63 @@ type OTPRequest struct {
 	OTP string `json:"otp" binding:"required"`
 }
 
+const branchListSort = "id"
+
 // ── POST /api/v2/branch/all ─────────────────────────────────────────────────
-// Returns all branches with store count and ZATCA registration status.
+// Cursor-paginated list of branches with store count and ZATCA
+// registration status. Sort key: id ASC (matches the pre-cursor ORDER
+// BY b.id ascending). Primary key serves the seek directly.
 
 func (h *handler) ListBranches(c *gin.Context) {
+	var req struct {
+		Limit  int     `json:"limit"`
+		Cursor string  `json:"cursor"`
+		Sort   string  `json:"sort"`
+		Dir    string  `json:"dir"`
+		Query  *string `json:"query"`
+		// Legacy keys ignored once Cursor != "".
+		PageNumber int `json:"page_number"`
+		PageSize   int `json:"page_size"`
+	}
+	c.ShouldBindJSON(&req)
+
+	listReq := pagination.ListRequest{
+		Limit:      req.Limit,
+		Cursor:     req.Cursor,
+		Sort:       req.Sort,
+		Dir:        req.Dir,
+		Query:      req.Query,
+		PageNumber: req.PageNumber,
+		PageSize:   req.PageSize,
+	}
+	if err := listReq.Validate(branchListSort); err != nil {
+		log.Printf("ListBranches: %v", err)
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	cur, _ := listReq.DecodedCursor()
+	cursorID := cursorIDOnly(cur)
+
+	limit := listReq.EffectiveLimit()
+
+	// Sentinel-filter pattern in the dynamic builder: `(? = '' OR …)`
+	// keeps the SQL effectively static so MySQL still plans it as a
+	// composite range scan when the search is empty.
+	q := ""
+	if req.Query != nil {
+		q = *req.Query
+	}
+	qLike := "%" + q + "%"
+
+	where := "WHERE (? = '' OR b.name LIKE ? OR COALESCE(b.address,'') LIKE ? OR COALESCE(b.phone,'') LIKE ?)"
+	args := []any{q, qLike, qLike, qLike}
+	if cursorID != nil {
+		where += " AND b.id > ?"
+		args = append(args, *cursorID)
+	}
+	args = append(args, limit+1)
+
 	rows, err := h.DB.Query(`
 		SELECT b.id, b.name, COALESCE(b.address,''), COALESCE(b.city,''),
 		       COALESCE(b.phone,''), b.company_id, b.manager_id, b.is_active,
@@ -37,8 +91,10 @@ func (h *handler) ListBranches(c *gin.Context) {
 		       END) AS zatca_status
 		FROM branches b
 		LEFT JOIN branch_zatca_config bzc ON bzc.branch_id = b.id
+		`+where+`
 		ORDER BY b.id
-	`)
+		LIMIT ?
+	`, args...)
 	if err != nil {
 		log.Printf("ERROR ListBranches: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to fetch branches"})
@@ -72,10 +128,16 @@ func (h *handler) ListBranches(c *gin.Context) {
 		branches = append(branches, b)
 	}
 
-	if branches == nil {
-		branches = []branchRow{}
-	}
-	c.JSON(http.StatusOK, gin.H{"data": branches})
+	// Sort over the current page is FE-driven; BE returns rows in
+	// the canonical keyset order only.
+
+	envelope := pagination.BuildEnvelope(
+		branches,
+		limit,
+		branchListSort,
+		func(b branchRow) []any { return []any{int64(b.ID)} },
+	)
+	c.JSON(http.StatusOK, envelope)
 }
 
 // ── GET /api/v2/branch/:id ──────────────────────────────────────────────────

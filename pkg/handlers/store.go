@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -62,8 +64,76 @@ func (h *handler) getStoreIds(c *gin.Context) []int32 {
 	return ids
 }
 
+// GetStores returns the calling user's accessible stores wrapped in
+// the standard cursor-pagination envelope. Stores per company are
+// bounded (typically <10), so we return the full set in one page —
+// no real seek; HasMore is always false. Keeping the envelope shape
+// keeps the wire contract uniform across all list endpoints.
+//
+// Search (FE §1): a free-text `query` is matched case-insensitively
+// against `name`. Filter is applied in-memory because the row count
+// is bounded and pushing it to SQL would mean teaching the legacy
+// `getStores` query about a new arg path.
+// storesListRequest is the wire shape for GetStores. POST clients
+// send it as a JSON body; GET clients send the same fields via the
+// query string and we overlay them in applyStoresQueryStringOverlay.
+type storesListRequest struct {
+	Query *string `json:"query"`
+	Sort  string  `json:"sort"`
+	Dir   string  `json:"dir"`
+}
+
+// applyStoresQueryStringOverlay copies non-empty `?query=&sort=&dir=`
+// query-string params on top of the JSON body so GET and POST share
+// one code path. Query-string wins when both are present.
+func applyStoresQueryStringOverlay(c *gin.Context, req *storesListRequest) {
+	if q := c.Query("query"); q != "" {
+		v := q
+		req.Query = &v
+	}
+	if s := c.Query("sort"); s != "" {
+		req.Sort = s
+	}
+	if d := c.Query("dir"); d != "" {
+		req.Dir = d
+	}
+}
+
+// filterStoresByQuery does a case-insensitive substring match on
+// Store.Name. Bounded slice → in-memory is the right tool here.
+func filterStoresByQuery(stores []Store, query *string) []Store {
+	if query == nil || *query == "" {
+		return stores
+	}
+	needle := strings.ToLower(*query)
+	out := make([]Store, 0, len(stores))
+	for _, s := range stores {
+		name := ""
+		if s.Name != nil {
+			name = strings.ToLower(*s.Name)
+		}
+		if strings.Contains(name, needle) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// storeSortCmp removed: sort over the current page is now FE-driven.
+
 func (h *handler) GetStores(c *gin.Context) {
-	c.JSON(http.StatusOK, h.getStores(GetSessionInfo(c)))
+	var req storesListRequest
+	// Best-effort JSON bind (POST clients). GET callers send no body.
+	_ = c.ShouldBindJSON(&req)
+	applyStoresQueryStringOverlay(c, &req)
+
+	stores := h.getStores(GetSessionInfo(c))
+	if stores == nil {
+		stores = []Store{}
+	}
+	stores = filterStoresByQuery(stores, req.Query)
+
+	c.JSON(http.StatusOK, pagination.Envelope[Store]{Items: stores})
 }
 
 // ── GET /api/v2/store/:id ───────────────────────────────────────────────────

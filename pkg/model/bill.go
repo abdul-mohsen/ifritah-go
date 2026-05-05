@@ -28,9 +28,20 @@ type BillRequestFilter struct {
 	StoreIds  []int      `json:"store_ids"`
 	StartDate *time.Time `json:"start_date"`
 	EndDate   *time.Time `json:"end_date"`
-	Page      int        `json:"page_number"`
-	PageSize  int        `json:"page_size"`
-	Query     *string    `json:"query"`
+	// Cursor pagination (preferred). Empty Cursor + zero Limit falls
+	// back to the legacy Page/PageSize keys for one release.
+	Limit  int    `json:"limit"`
+	Cursor string `json:"cursor"`
+	Sort   string `json:"sort"`
+	Dir    string `json:"dir"`
+	// Legacy offset paging — accepted but ignored once Cursor is set.
+	Page     int     `json:"page_number"`
+	PageSize int     `json:"page_size"`
+	Query    *string `json:"query"`
+	// State filter (FE §3). nil/absent or -1 = "any non-deleted" (server
+	// already excludes soft-deleted state<0). Otherwise an exact match
+	// on bill.state / purchase_bill.state.
+	State *int32 `json:"state"`
 }
 
 type AddBillRequest struct {

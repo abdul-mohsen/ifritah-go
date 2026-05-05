@@ -2,9 +2,10 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/pagination"
 	"log"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -40,10 +41,21 @@ import (
 // --- Request / Response types (local to this file) ---
 
 type cashVoucherListRequest struct {
-	PageNumber  int    `json:"page_number"`
-	PageSize    int    `json:"page_size"`
+	// New cursor pagination keys.
+	Limit  int    `json:"limit"`
+	Cursor string `json:"cursor"`
+	Sort   string `json:"sort"`
+	Dir    string `json:"dir"`
+	// Legacy keys — accepted for backwards compat, ignored once Cursor != "".
+	PageNumber int `json:"page_number"`
+	PageSize   int `json:"page_size"`
+
 	Query       string `json:"query"`
 	VoucherType string `json:"voucher_type"` // "disbursement", "receipt", or "" for all
+	// State filter (FE §3). nil/absent = "any state" for cash vouchers
+	// (workflow: 0=draft, 1=approved, 2=posted). Negative values are
+	// treated as "any" so the FE can send -1 as the sentinel.
+	State *int `json:"state"`
 }
 
 type cashVoucherCreateRequest struct {
@@ -115,57 +127,105 @@ type cashVoucherDetail struct {
 
 // ── List ────────────────────────────────────────────────────────────────────
 
-// ListCashVouchers returns paginated cash vouchers for the merchant.
-// POST /api/v2/cash_voucher/all
-func (h *handler) ListCashVouchers(c *gin.Context) {
-	var req cashVoucherListRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		// Allow empty body — defaults will be used
-		req = cashVoucherListRequest{}
-	}
+const cashVoucherListSort = "-effective_date"
 
-	// Defaults
-	if req.PageSize <= 0 {
-		req.PageSize = 10
-	}
-	if req.PageSize > 100 {
-		req.PageSize = 100
-	}
+// validVoucherTypes is the closed set of voucher_type values that
+// the FE filter accepts. Anything else gets a 400 — silently
+// degrading to "no filter" would mask a typo at the client.
+var validVoucherTypes = map[string]struct{}{
+	"disbursement": {},
+	"receipt":      {},
+	"cash_box":     {},
+}
 
-	merchantID := getMerchantID(c)
-	offset := req.PageNumber * req.PageSize
+// cashVoucherSortCmp removed: sort over the current page is now
+// FE-driven (BE returns rows in canonical keyset order only).
 
-	// Build WHERE clause dynamically
+// buildCashVoucherWhere assembles the dynamic WHERE clause + bound
+// args for the cash_voucher list. Returned err is non-nil only when
+// the caller supplied an invalid filter value (mapped to 400).
+func buildCashVoucherWhere(req cashVoucherListRequest, merchantID int64, cursorDate *time.Time, cursorID *uint64) (string, []any, error) {
 	where := "WHERE merchant_id = ?"
-	args := []interface{}{merchantID}
+	args := []any{merchantID}
 
-	// Filter by voucher_type
 	if req.VoucherType != "" {
-		if req.VoucherType != "disbursement" && req.VoucherType != "receipt" && req.VoucherType != "cash_box" {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "نوع السند غير صالح"})
-			return
+		if _, ok := validVoucherTypes[req.VoucherType]; !ok {
+			return "", nil, errInvalidVoucherType
 		}
 		where += " AND voucher_type = ?"
 		args = append(args, req.VoucherType)
 	}
 
-	// Search query
+	// State filter (FE §3). Skip when nil or negative ("any state").
+	if req.State != nil && *req.State >= 0 {
+		where += " AND state = ?"
+		args = append(args, *req.State)
+	}
+
 	if req.Query != "" {
 		where += " AND (recipient_name LIKE ? OR description LIKE ? OR note LIKE ?)"
 		q := "%" + req.Query + "%"
 		args = append(args, q, q, q)
 	}
 
-	// Count total for pagination
-	var total int
-	countSQL := "SELECT COUNT(*) FROM cash_voucher " + where
-	if err := h.DB.QueryRow(countSQL, args...).Scan(&total); err != nil {
-		log.Printf("ERROR ListCashVouchers count: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "خطأ في قراءة البيانات"})
+	// Seek predicate (skip on first page).
+	if cursorDate != nil && cursorID != nil {
+		where += " AND (effective_date < ? OR (effective_date = ? AND id < ?))"
+		args = append(args, *cursorDate, *cursorDate, *cursorID)
+	}
+
+	return where, args, nil
+}
+
+// errInvalidVoucherType is returned by buildCashVoucherWhere when
+// the FE supplies a voucher_type outside validVoucherTypes. It's a
+// sentinel — handlers map it to a 400 with the localised message.
+var errInvalidVoucherType = errors.New("invalid voucher type")
+
+// ListCashVouchers returns a cursor-paginated page of cash vouchers
+// scoped to the calling merchant. Sort key: (effective_date DESC, id
+// DESC), backed by idx_cv_keyset (migration 0003).
+// POST /api/v2/cash_voucher/all
+func (h *handler) ListCashVouchers(c *gin.Context) {
+	var req cashVoucherListRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req = cashVoucherListRequest{}
+	}
+
+	listReq := pagination.ListRequest{
+		Limit:      req.Limit,
+		Cursor:     req.Cursor,
+		Sort:       req.Sort,
+		Dir:        req.Dir,
+		PageNumber: req.PageNumber,
+		PageSize:   req.PageSize,
+	}
+	if err := listReq.Validate(cashVoucherListSort); err != nil {
+		log.Printf("ListCashVouchers: %v", err)
+		c.Status(http.StatusBadRequest)
 		return
 	}
 
-	// Query page
+	cur, _ := listReq.DecodedCursor()
+	cursorDate, cursorID, ok := cursorDateAndID(cur)
+	if !ok {
+		log.Printf("ListCashVouchers: malformed cursor")
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	limit := listReq.EffectiveLimit()
+	merchantID := getMerchantID(c)
+
+	where, args, err := buildCashVoucherWhere(req, merchantID, cursorDate, cursorID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "نوع السند غير صالح"})
+		return
+	}
+
+	// +1 row trick for has_more.
+	args = append(args, limit+1)
+
 	dataSQL := `
 		SELECT id, voucher_number, voucher_type, effective_date, amount,
 		       payment_method, state, reference_type, reference_id,
@@ -173,9 +233,8 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 		       description, store_id, merchant_id, created_by, created_at
 		FROM cash_voucher ` + where + `
 		ORDER BY effective_date DESC, id DESC
-		LIMIT ? OFFSET ?
+		LIMIT ?
 	`
-	args = append(args, req.PageSize, offset)
 
 	rows, err := h.DB.Query(dataSQL, args...)
 	if err != nil {
@@ -201,15 +260,15 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 		items = append(items, v)
 	}
 
-	totalPages := int(math.Ceil(float64(total) / float64(req.PageSize)))
-
-	c.JSON(http.StatusOK, gin.H{
-		"data":        items,
-		"total":       total,
-		"total_pages": totalPages,
-		"page":        req.PageNumber,
-		"page_size":   req.PageSize,
-	})
+	envelope := pagination.BuildEnvelope(
+		items,
+		limit,
+		cashVoucherListSort,
+		func(v cashVoucherListItem) []any {
+			return []any{v.EffectiveDate.UTC().Format(time.RFC3339Nano), int64(v.ID)}
+		},
+	)
+	c.JSON(http.StatusOK, envelope)
 }
 
 // ── Detail ──────────────────────────────────────────────────────────────────

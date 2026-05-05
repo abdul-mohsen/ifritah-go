@@ -3,19 +3,120 @@
   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetAllBill :many
-SELECT * from(
-			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, discount, sequence_number, bill.user_phone_number, client.id is not null as bill_type, cn.state as credit_state, total, total_vat, total_before_vat
-			FROM bill
-			JOIN credit_note  cn on cn.bill_id = bill.id
-			LEFT JOIN client  on client.id = bill.client_id
-			WHERE bill.state >= 0
-			and (sqlc.narg('phonenumber') is null or bill.user_phone_number like sqlc.narg('phonenumber'))
-			UNION
-			SELECT bill.id as id, effective_date, payment_due_date, bill.state as state, discount, sequence_number, user_phone_number, client.id is not null as bill_type, 0 as credit_state, total, total_vat, total_before_vat from bill
-			LEFT JOIN client  on client.id = bill.client_id
-			WHERE bill. state >= 0
-			and (sqlc.narg('phonenumber') is null or bill.user_phone_number like sqlc.narg('phonenumber'))
-		) AS T ORDER BY id DESC LIMIT ? OFFSET ?;
+-- Keyset / cursor pagination. Sort key: (effective_date DESC, id DESC, is_credit DESC).
+--
+-- Why three keys, not two: a bill that has a credit_note is shown as
+-- TWO list items — the original invoice and its credit note are
+-- different documents in the user's view. The UNION ALL below emits
+-- both with identical (effective_date, id) but different `is_credit`,
+-- so we need that third column as a deterministic tiebreaker for the
+-- seek predicate.
+--
+-- The (cursor_date, cursor_id, cursor_is_credit) sentinels are all
+-- NULL on the first page and all non-NULL on subsequent pages. The
+-- OR-tree is the canonical lex-compare seek predicate
+-- (Markus Winand, use-the-index-luke.com/no-offset).
+--
+-- Search (query_like / query_seq_exact):
+--   - query_like: pre-wrapped %term% used against userName,
+--     user_phone_number, and client.name (LEFT JOIN already in place).
+--   - query_seq_exact: integer value of q when q is all-digits (exact
+--     match on sequence_number). NULL otherwise.
+-- All-NULL on the search args = "no search".
+--
+-- NOTE: total exact-match was scoped here but pulled to a follow-up
+-- (sqlc v1.31 emits a non-nullable decimal.Decimal narg for params
+-- bound against a NOT-NULL decimal column even with CAST AS CHAR /
+-- CONCAT). userName/phone/sequence/client.name covers the dominant
+-- search intents in our usage data.
+--
+-- state_filter (sqlc.narg('state_filter')):
+--   - NULL = "any non-deleted" (state >= 0). Default.
+--   - any int >= 0 = exact match (caller supplies 0/1/2/3).
+--   - We never accept negative values here; the request layer maps
+--     a missing/sentinel filter to NULL before binding.
+--
+-- Caller fetches `limit + 1` to detect has_more without a COUNT(*).
+--
+-- Each sqlc.narg() literal is referenced at most once per UNION
+-- branch, via the `p` / `q` derived tables, so the file stays under
+-- plsql:S1192's repeated-literal threshold.
+SELECT bill.id AS id,
+       bill.effective_date AS effective_date,
+       payment_due_date,
+       bill.state AS state,
+       discount,
+       sequence_number,
+       bill.user_phone_number,
+       client.id IS NOT NULL AS bill_type,
+       cn.state AS credit_state,
+       total,
+       total_vat,
+       total_before_vat,
+       1 AS is_credit
+FROM bill
+JOIN credit_note cn ON cn.bill_id = bill.id
+LEFT JOIN client  ON client.id = bill.client_id
+CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')      AS SIGNED)       AS sf,
+                   CAST(sqlc.narg('query_like')        AS CHAR(255))    AS q,
+                   CAST(sqlc.narg('query_seq_exact')   AS UNSIGNED)     AS qe,
+                   CAST(sqlc.narg('cursor_date')       AS DATETIME(6))  AS cd,
+                   CAST(sqlc.narg('cursor_id')         AS UNSIGNED)     AS ci,
+                   CAST(sqlc.narg('cursor_is_credit')  AS UNSIGNED)     AS cic) p
+WHERE bill.state >= 0
+  AND (p.sf IS NULL OR bill.state = p.sf)
+  AND (
+        (p.q IS NULL AND p.qe IS NULL)
+     OR bill.user_phone_number LIKE p.q
+     OR bill.userName           LIKE p.q
+     OR client.name             LIKE p.q
+     OR CAST(bill.sequence_number AS CHAR) = CAST(p.qe AS CHAR)
+  )
+  AND (
+        p.cd IS NULL
+     OR bill.effective_date < p.cd
+     OR (bill.effective_date = p.cd AND bill.id < p.ci)
+     OR (bill.effective_date = p.cd AND bill.id = p.ci AND 1 < p.cic)
+  )
+UNION ALL
+SELECT bill.id AS id,
+       bill.effective_date AS effective_date,
+       payment_due_date,
+       bill.state AS state,
+       discount,
+       sequence_number,
+       bill.user_phone_number,
+       client.id IS NOT NULL AS bill_type,
+       0 AS credit_state,
+       total,
+       total_vat,
+       total_before_vat,
+       0 AS is_credit
+FROM bill
+LEFT JOIN client ON client.id = bill.client_id
+CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')      AS SIGNED)       AS sf,
+                   CAST(sqlc.narg('query_like')        AS CHAR(255))    AS q,
+                   CAST(sqlc.narg('query_seq_exact')   AS UNSIGNED)     AS qe,
+                   CAST(sqlc.narg('cursor_date')       AS DATETIME(6))  AS cd,
+                   CAST(sqlc.narg('cursor_id')         AS UNSIGNED)     AS ci,
+                   CAST(sqlc.narg('cursor_is_credit')  AS UNSIGNED)     AS cic) q
+WHERE bill.state >= 0
+  AND (q.sf IS NULL OR bill.state = q.sf)
+  AND (
+        (q.q IS NULL AND q.qe IS NULL)
+     OR bill.user_phone_number LIKE q.q
+     OR bill.userName           LIKE q.q
+     OR client.name             LIKE q.q
+     OR CAST(bill.sequence_number AS CHAR) = CAST(q.qe AS CHAR)
+  )
+  AND (
+        q.cd IS NULL
+     OR bill.effective_date < q.cd
+     OR (bill.effective_date = q.cd AND bill.id < q.ci)
+     OR (bill.effective_date = q.cd AND bill.id = q.ci AND 0 < q.cic)
+  )
+ORDER BY effective_date DESC, id DESC, is_credit DESC
+LIMIT ?;
 
 
 -- name: GetBillByID :one
@@ -113,4 +214,14 @@ SELECT bp.id, bp.product_id, bp.quantity, b.store_id, b.sequence_number
 		 WHERE bp.bill_id = ? AND bp.product_id IS NOT NULL;
 
 -- name: GetMaxSequenceNumber :one
-select CAST(COALESCE(max(sequence_number), 1) AS UNSIGNED) from bill
+select CAST(COALESCE(max(sequence_number), 1) AS UNSIGNED) from bill;
+
+-- name: GetBillProductsWithArticle :many
+SELECT bp.product_id, bp.price, bp.quantity,
+       a.id AS article_id, a.articleNumber, a.genericArticleDescription
+FROM bill_product bp
+LEFT JOIN articles a ON a.id = bp.product_id
+WHERE bp.bill_id = ?;
+
+-- name: SoftDeleteBill :execresult
+UPDATE bill SET state = -1 WHERE id = ?

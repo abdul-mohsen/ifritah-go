@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/invoice"
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/models"
@@ -98,7 +99,17 @@ func (h *handler) CreditBill(c *gin.Context) {
 
 func (h *handler) GetCreditBillPDF(c *gin.Context) {
 
-	var id string = c.Param("id")
+	// Validate id is a positive integer before composing a path with it.
+	// Path-traversal hardening (Sonar gosecurity:S2083): the param feeds
+	// filepath.Join below, so any value containing path separators or
+	// `..` segments could escape the downloads directory.
+	rawID := c.Param("id")
+	creditID, err := strconv.ParseUint(rawID, 10, 64)
+	if err != nil || creditID == 0 {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	id := strconv.FormatUint(creditID, 10)
 
 	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
 	if true {

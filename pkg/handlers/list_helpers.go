@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"ifritah/web-service-gin/pkg/model"
 	"ifritah/web-service-gin/pkg/pagination"
 	"slices"
@@ -11,6 +12,52 @@ import (
 
 	"github.com/shopspring/decimal"
 )
+
+// nullInt64FromInt32Ptr wraps a nullable int32 sentinel into the
+// sql.NullInt64 shape that sqlc emits for narg() params wrapped in
+// `CAST(... AS SIGNED)`. nil → invalid, otherwise widened.
+func nullInt64FromInt32Ptr(v *int32) sql.NullInt64 {
+	if v == nil {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(*v), Valid: true}
+}
+
+// nullInt64FromUint64Ptr wraps a nullable uint64 sentinel into
+// sql.NullInt64. The values we pass here (cursor ids, sequence
+// numbers) are real-world bounded well below int64 max, so the
+// reinterpret-cast is safe.
+func nullInt64FromUint64Ptr(v *uint64) sql.NullInt64 {
+	if v == nil {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(*v), Valid: true}
+}
+
+// nullInt64FromAny accepts the cursor's raw decoded value (which can
+// arrive as float64, int64, json.Number or untyped nil) and produces
+// the sql.NullInt64 the generated bill query expects for
+// `cursor_is_credit`. Any decode failure becomes an invalid Null,
+// which the SQL treats as "no cursor".
+func nullInt64FromAny(v any) sql.NullInt64 {
+	if v == nil {
+		return sql.NullInt64{}
+	}
+	switch t := v.(type) {
+	case int64:
+		return sql.NullInt64{Int64: t, Valid: true}
+	case float64:
+		return sql.NullInt64{Int64: int64(t), Valid: true}
+	case int:
+		return sql.NullInt64{Int64: int64(t), Valid: true}
+	case int32:
+		return sql.NullInt64{Int64: int64(t), Valid: true}
+	}
+	if p := decodeCursorUint64(v); p != nil {
+		return sql.NullInt64{Int64: int64(*p), Valid: true}
+	}
+	return sql.NullInt64{}
+}
 
 // listRequestFromPagination adapts the existing model.PaginationRequest
 // into the shared pagination.ListRequest. Used by handlers that don't

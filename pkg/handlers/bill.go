@@ -155,13 +155,16 @@ func (h *handler) GetBills(c *gin.Context) {
 
 	limit := listReq.EffectiveLimit()
 
+	// Adapt the *T sentinel pointers to sql.NullInt64 for the
+	// generated params: the CAST(... AS UNSIGNED/SIGNED) wrapper in
+	// bill.sql forces sqlc to emit Null* types for the keyset cols.
 	args := db.GetAllBillParams{
-		StateFilter:    stateFilter,
+		StateFilter:    nullInt64FromInt32Ptr(stateFilter),
 		QueryLike:      queryLike,
-		QuerySeqExact:  querySeqExact,
+		QuerySeqExact:  nullInt64FromUint64Ptr(querySeqExact),
 		CursorDate:     cursorDate,
-		CursorID:       cursorID,
-		CursorIsCredit: cursorIsCredit,
+		CursorID:       nullInt64FromUint64Ptr(cursorID),
+		CursorIsCredit: nullInt64FromAny(cursorIsCredit),
 		// +1 row signals has_more without a COUNT(*).
 		Limit: int32(limit + 1),
 	}

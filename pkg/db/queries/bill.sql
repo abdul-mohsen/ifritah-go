@@ -37,6 +37,10 @@
 --     a missing/sentinel filter to NULL before binding.
 --
 -- Caller fetches `limit + 1` to detect has_more without a COUNT(*).
+--
+-- Each sqlc.narg() literal is referenced at most once per UNION
+-- branch, via the `p` / `q` derived tables, so the file stays under
+-- plsql:S1192's repeated-literal threshold.
 SELECT bill.id AS id,
        bill.effective_date AS effective_date,
        payment_due_date,
@@ -53,21 +57,26 @@ SELECT bill.id AS id,
 FROM bill
 JOIN credit_note cn ON cn.bill_id = bill.id
 LEFT JOIN client  ON client.id = bill.client_id
+CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')      AS SIGNED)       AS sf,
+                   CAST(sqlc.narg('query_like')        AS CHAR(255))    AS q,
+                   CAST(sqlc.narg('query_seq_exact')   AS UNSIGNED)     AS qe,
+                   CAST(sqlc.narg('cursor_date')       AS DATETIME(6))  AS cd,
+                   CAST(sqlc.narg('cursor_id')         AS UNSIGNED)     AS ci,
+                   CAST(sqlc.narg('cursor_is_credit')  AS UNSIGNED)     AS cic) p
 WHERE bill.state >= 0
-  AND (sqlc.narg('state_filter') IS NULL OR bill.state = sqlc.narg('state_filter'))
+  AND (p.sf IS NULL OR bill.state = p.sf)
   AND (
-        (sqlc.narg('query_like') IS NULL
-         AND sqlc.narg('query_seq_exact') IS NULL)
-     OR bill.user_phone_number LIKE sqlc.narg('query_like')
-     OR bill.userName LIKE sqlc.narg('query_like')
-     OR client.name LIKE sqlc.narg('query_like')
-     OR CAST(bill.sequence_number AS CHAR) = sqlc.narg('query_seq_exact')
+        (p.q IS NULL AND p.qe IS NULL)
+     OR bill.user_phone_number LIKE p.q
+     OR bill.userName           LIKE p.q
+     OR client.name             LIKE p.q
+     OR CAST(bill.sequence_number AS CHAR) = CAST(p.qe AS CHAR)
   )
   AND (
-        sqlc.narg('cursor_date') IS NULL
-     OR bill.effective_date < sqlc.narg('cursor_date')
-     OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id < sqlc.narg('cursor_id'))
-     OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id = sqlc.narg('cursor_id') AND 1 < sqlc.narg('cursor_is_credit'))
+        p.cd IS NULL
+     OR bill.effective_date < p.cd
+     OR (bill.effective_date = p.cd AND bill.id < p.ci)
+     OR (bill.effective_date = p.cd AND bill.id = p.ci AND 1 < p.cic)
   )
 UNION ALL
 SELECT bill.id AS id,
@@ -85,21 +94,26 @@ SELECT bill.id AS id,
        0 AS is_credit
 FROM bill
 LEFT JOIN client ON client.id = bill.client_id
+CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')      AS SIGNED)       AS sf,
+                   CAST(sqlc.narg('query_like')        AS CHAR(255))    AS q,
+                   CAST(sqlc.narg('query_seq_exact')   AS UNSIGNED)     AS qe,
+                   CAST(sqlc.narg('cursor_date')       AS DATETIME(6))  AS cd,
+                   CAST(sqlc.narg('cursor_id')         AS UNSIGNED)     AS ci,
+                   CAST(sqlc.narg('cursor_is_credit')  AS UNSIGNED)     AS cic) q
 WHERE bill.state >= 0
-  AND (sqlc.narg('state_filter') IS NULL OR bill.state = sqlc.narg('state_filter'))
+  AND (q.sf IS NULL OR bill.state = q.sf)
   AND (
-        (sqlc.narg('query_like') IS NULL
-         AND sqlc.narg('query_seq_exact') IS NULL)
-     OR bill.user_phone_number LIKE sqlc.narg('query_like')
-     OR bill.userName LIKE sqlc.narg('query_like')
-     OR client.name LIKE sqlc.narg('query_like')
-     OR CAST(bill.sequence_number AS CHAR) = sqlc.narg('query_seq_exact')
+        (q.q IS NULL AND q.qe IS NULL)
+     OR bill.user_phone_number LIKE q.q
+     OR bill.userName           LIKE q.q
+     OR client.name             LIKE q.q
+     OR CAST(bill.sequence_number AS CHAR) = CAST(q.qe AS CHAR)
   )
   AND (
-        sqlc.narg('cursor_date') IS NULL
-     OR bill.effective_date < sqlc.narg('cursor_date')
-     OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id < sqlc.narg('cursor_id'))
-     OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id = sqlc.narg('cursor_id') AND 0 < sqlc.narg('cursor_is_credit'))
+        q.cd IS NULL
+     OR bill.effective_date < q.cd
+     OR (bill.effective_date = q.cd AND bill.id < q.ci)
+     OR (bill.effective_date = q.cd AND bill.id = q.ci AND 0 < q.cic)
   )
 ORDER BY effective_date DESC, id DESC, is_credit DESC
 LIMIT ?;

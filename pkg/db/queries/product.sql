@@ -9,16 +9,22 @@ select p.* from product p where p.id = ? and p.is_deleted = False;
 -- shelf_number; query_id_match is set to the integer value of q
 -- when q is all-digits (exact id match), 0 otherwise. NULL on both
 -- means "no search".
+--
+-- Each sqlc.narg() is referenced once (in the `prm` derived table) so
+-- the file stays under plsql:S1192's repeated-literal threshold.
 select p.*
 from user
 join store s on s.company_id = user.company_id
 join product p on p.store_id = s.id
+CROSS JOIN (SELECT CAST(sqlc.narg('query_like')     AS CHAR(255)) AS q,
+                   CAST(sqlc.narg('query_id_match') AS UNSIGNED)  AS qid,
+                   CAST(sqlc.narg('cursor_id')      AS UNSIGNED)  AS ci) prm
 where user.id = ? and p.is_deleted = False
-  and (sqlc.narg('query_like') is null
-       or p.name like sqlc.narg('query_like')
-       or coalesce(p.shelf_number,'') like sqlc.narg('query_like')
-       or p.id = sqlc.narg('query_id_match'))
-  and (sqlc.narg('cursor_id') is null or p.id < sqlc.narg('cursor_id'))
+  and (prm.q IS NULL
+       OR p.name LIKE prm.q
+       OR COALESCE(p.shelf_number,'') LIKE prm.q
+       OR p.id = prm.qid)
+  and (prm.ci IS NULL OR p.id < prm.ci)
 ORDER BY p.id DESC
 LIMIT ?;
 

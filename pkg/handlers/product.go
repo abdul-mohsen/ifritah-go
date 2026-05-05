@@ -206,8 +206,8 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 	args := db.GetAllProductParams{
 		ID:           int32(user.id),
 		QueryLike:    queryLike,
-		QueryIDMatch: queryIDMatch,
-		CursorID:     cursorID,
+		QueryIDMatch: nullInt64FromUint64Ptr(queryIDMatch),
+		CursorID:     nullInt64FromUint64Ptr(cursorID),
 		Limit:        int32(limit + 1),
 	}
 

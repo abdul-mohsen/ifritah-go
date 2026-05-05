@@ -412,11 +412,11 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 
 	bill := h.getPurchaseBills(c, db.GetAllPurchaseBillParams{
 		ID:            int32(userSession.id),
-		StateFilter:   stateFilter,
+		StateFilter:   nullInt64FromInt32Ptr(stateFilter),
 		QueryLike:     queryLike,
-		QuerySeqExact: querySeqExact,
+		QuerySeqExact: nullInt64FromUint64Ptr(querySeqExact),
 		CursorDate:    cursorDate,
-		CursorID:      cursorID,
+		CursorID:      nullInt64FromUint64Ptr(cursorID),
 		Limit:         int32(limit + 1),
 	})
 

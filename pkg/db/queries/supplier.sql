@@ -9,14 +9,19 @@ SELECT * From supplier where is_deleted = FALSE and id = ?;
 -- query_like is the canonical sentinel-filter for search: NULL means
 -- "no search", otherwise it is the pre-wrapped %term% string. Keeping
 -- the SQL static avoids Sonar S2077 (dynamic SQL).
-SELECT * From supplier
-WHERE is_deleted = FALSE
-  AND (sqlc.narg('query_like') IS NULL
-       OR name LIKE sqlc.narg('query_like')
-       OR phone_number LIKE sqlc.narg('query_like')
-       OR vat_number LIKE sqlc.narg('query_like'))
-  AND (sqlc.narg('cursor_id') IS NULL OR id < sqlc.narg('cursor_id'))
-ORDER BY id DESC
+--
+-- Each sqlc.narg() is referenced once (in the `p` derived table) so
+-- the file stays under plsql:S1192's repeated-literal threshold.
+SELECT s.* From supplier s
+CROSS JOIN (SELECT CAST(sqlc.narg('query_like') AS CHAR(255)) AS q,
+                   CAST(sqlc.narg('cursor_id')  AS UNSIGNED)  AS ci) p
+WHERE s.is_deleted = FALSE
+  AND (p.q IS NULL
+       OR s.name         LIKE p.q
+       OR s.phone_number LIKE p.q
+       OR s.vat_number   LIKE p.q)
+  AND (p.ci IS NULL OR s.id < p.ci)
+ORDER BY s.id DESC
 LIMIT ?;
 
 -- name: AddSupplier :execresult

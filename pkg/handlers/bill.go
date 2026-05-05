@@ -695,7 +695,17 @@ func (h *handler) GetBillDetail(c *gin.Context) {
 
 func (h *handler) GetBillPDF(c *gin.Context) {
 
-	var id string = c.Param("id")
+	// Validate id is a positive integer before composing a path with it.
+	// Path-traversal hardening (Sonar gosecurity:S2083): the param feeds
+	// filepath.Join below, so any value containing path separators or
+	// `..` segments could escape the downloads directory.
+	rawID := c.Param("id")
+	billID, err := strconv.ParseUint(rawID, 10, 64)
+	if err != nil || billID == 0 {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	id := strconv.FormatUint(billID, 10)
 
 	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
 	if true {

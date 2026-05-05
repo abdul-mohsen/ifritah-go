@@ -45,6 +45,15 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
+	// Route-id template strings reused across REST verbs (Sonar S1192).
+	const (
+		routeSupplierByID     = "supplier/:id"
+		routeBillByID         = "bill/:id"
+		routePurchaseBillByID = "purchase_bill/:id"
+		routeProductByID      = "product/:id"
+		routeClientByID       = "client/:id"
+	)
+
 	authorized := router.Group(baseUrl)
 	authorized.Use(handlers.JWTVerifyMiddleware)
 	{
@@ -54,10 +63,10 @@ func main() {
 
 		// ── Suppliers (employees can read/create, manager+ can edit/delete) ──
 		authorized.POST("supplier/all", h.GetAllSupplier)
-		authorized.GET("supplier/:id", h.GetSupplier)
+		authorized.GET(routeSupplierByID, h.GetSupplier)
 		authorized.POST("supplier", h.AddSupplier)
-		authorized.PUT("supplier/:id", mgr, h.EditSupplier)
-		authorized.DELETE("supplier/:id", mgr, h.DeleteSupplier)
+		authorized.PUT(routeSupplierByID, mgr, h.EditSupplier)
+		authorized.DELETE(routeSupplierByID, mgr, h.DeleteSupplier)
 
 		// ── Companies (read for everyone, edit admin-only) ─────────────
 		authorized.GET("company/all", h.GetAllCompanies)
@@ -76,36 +85,36 @@ func main() {
 		authorized.GET("car_part/:id", h.GetAllCachedVin)
 
 		// ── Bills (delete is manager+) ─────────────────────────────────
-		authorized.GET("bill/:id", h.GetBillDetail)
+		authorized.GET(routeBillByID, h.GetBillDetail)
 		authorized.POST("bill/all", h.GetBills)
 		authorized.POST("bill", h.AddBill)
-		authorized.PUT("bill/:id", h.SubmitDraftBill)
-		authorized.DELETE("bill/:id", mgr, h.DeleteBillDetail)
+		authorized.PUT(routeBillByID, h.SubmitDraftBill)
+		authorized.DELETE(routeBillByID, mgr, h.DeleteBillDetail)
 
 		authorized.GET("credit_bill/:id", h.GetBillCreditDetail)
 		authorized.POST("bill/credit", h.CreditBill)
 
 		// ── Purchase Bills (delete & receipt-tracking are manager+) ────
-		authorized.GET("purchase_bill/:id", h.GetPurchaseBillDetail)
+		authorized.GET(routePurchaseBillByID, h.GetPurchaseBillDetail)
 		authorized.POST("purchase_bill", h.AddPurchaseBill)
 		authorized.POST("purchase_bill/all", h.GetAllPurchaseBill)
-		authorized.PUT("purchase_bill/:id", h.UpdatePurchaseBill)
-		authorized.DELETE("purchase_bill/:id", mgr, h.DeletePurchaseBillDetail)
+		authorized.PUT(routePurchaseBillByID, h.UpdatePurchaseBill)
+		authorized.DELETE(routePurchaseBillByID, mgr, h.DeletePurchaseBillDetail)
 
 		// ── Products (delete is manager+) ──────────────────────────────
 		authorized.POST("product/search", h.SearchProducts)
-		authorized.GET("product/:id", h.GetProduct)
+		authorized.GET(routeProductByID, h.GetProduct)
 		authorized.POST("product/all", h.GetAllProducts)
 		authorized.POST("product", h.AddQuantity)
-		authorized.PUT("product/:id", h.UpdateProduct)
-		authorized.DELETE("product/:id", mgr, h.DeleteProduct)
+		authorized.PUT(routeProductByID, h.UpdateProduct)
+		authorized.DELETE(routeProductByID, mgr, h.DeleteProduct)
 
 		// ── Clients (delete is manager+) ───────────────────────────────
-		authorized.GET("client/:id", h.GetClient)
+		authorized.GET(routeClientByID, h.GetClient)
 		authorized.POST("client/all", h.GetAllClient)
 		authorized.POST("client", h.CreateClient)
-		authorized.PUT("client/:id", h.UpdateClient)
-		authorized.DELETE("client/:id", mgr, h.DeleteClient)
+		authorized.PUT(routeClientByID, h.UpdateClient)
+		authorized.DELETE(routeClientByID, mgr, h.DeleteClient)
 
 		// ── Branches (write is admin-only) ─────────────────────────────
 		authorized.POST("branch/all", h.ListBranches)

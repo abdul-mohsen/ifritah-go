@@ -9,9 +9,7 @@ import (
 	"time"
 )
 
-// nullInt64FromInt32Ptr wraps a nullable int32 sentinel into the
-// sql.NullInt64 shape that sqlc emits for narg() params wrapped in
-// `CAST(... AS SIGNED)`. nil → invalid, otherwise widened.
+// nullInt64FromInt32Ptr wraps int32 → sql.NullInt64 for sqlc narg() params.
 func nullInt64FromInt32Ptr(v *int32) sql.NullInt64 {
 	if v == nil {
 		return sql.NullInt64{}
@@ -19,10 +17,7 @@ func nullInt64FromInt32Ptr(v *int32) sql.NullInt64 {
 	return sql.NullInt64{Int64: int64(*v), Valid: true}
 }
 
-// nullInt64FromUint64Ptr wraps a nullable uint64 sentinel into
-// sql.NullInt64. The values we pass here (cursor ids, sequence
-// numbers) are real-world bounded well below int64 max, so the
-// reinterpret-cast is safe.
+// nullInt64FromUint64Ptr wraps uint64 → sql.NullInt64 for sqlc narg() params.
 func nullInt64FromUint64Ptr(v *uint64) sql.NullInt64 {
 	if v == nil {
 		return sql.NullInt64{}
@@ -30,11 +25,7 @@ func nullInt64FromUint64Ptr(v *uint64) sql.NullInt64 {
 	return sql.NullInt64{Int64: int64(*v), Valid: true}
 }
 
-// nullInt64FromAny accepts the cursor's raw decoded value (which can
-// arrive as float64, int64, json.Number or untyped nil) and produces
-// the sql.NullInt64 the generated bill query expects for
-// `cursor_is_credit`. Any decode failure becomes an invalid Null,
-// which the SQL treats as "no cursor".
+// nullInt64FromAny converts cursor values to sql.NullInt64.
 func nullInt64FromAny(v any) sql.NullInt64 {
 	if v == nil {
 		return sql.NullInt64{}
@@ -55,9 +46,7 @@ func nullInt64FromAny(v any) sql.NullInt64 {
 	return sql.NullInt64{}
 }
 
-// listRequestFromPagination adapts the existing model.PaginationRequest
-// into the shared pagination.ListRequest. Used by handlers that don't
-// need extra resource-specific filters (client/supplier/product etc.).
+// listRequestFromPagination converts model.PaginationRequest → pagination.ListRequest.
 func listRequestFromPagination(p model.PaginationRequest) pagination.ListRequest {
 	page := p.Page
 	if page == 0 {
@@ -74,9 +63,7 @@ func listRequestFromPagination(p model.PaginationRequest) pagination.ListRequest
 	}
 }
 
-// cursorIDOnly decodes the trailing id from a cursor for resources
-// whose sort key is just `id DESC`. Returns nil when the cursor is
-// empty (first page) or when the id cannot be parsed.
+// cursorIDOnly extracts the ID from a single-column cursor; returns nil if empty/invalid.
 func cursorIDOnly(c pagination.Cursor) *uint64 {
 	if len(c.K) == 0 {
 		return nil
@@ -89,10 +76,7 @@ func cursorIDOnly(c pagination.Cursor) *uint64 {
 	return &u
 }
 
-// cursorDateAndID decodes a (date, id) keyset cursor. Returns (nil,nil)
-// for first-page cursors and (nonnil, nonnil) for subsequent pages.
-// Returns (nil, nil, false) when the cursor is malformed and the caller
-// should respond 400.
+// cursorDateAndID extracts (date, id) from a two-column keyset cursor.
 func cursorDateAndID(c pagination.Cursor) (*time.Time, *uint64, bool) {
 	if len(c.K) == 0 {
 		return nil, nil, true
@@ -116,22 +100,9 @@ func cursorDateAndID(c pagination.Cursor) (*time.Time, *uint64, bool) {
 	return t, &u, true
 }
 
-// applyListSort and the per-type comparator helpers were removed:
-// sort over the current page is now handled by the frontend. The
-// backend returns rows in the canonical keyset order only.
+// Shared filter / cursor helpers for list endpoints.
 
-// ── Shared filter / cursor helpers ──────────────────────────────────────────
-//
-// These factor out small repetitive blocks from list handlers so the
-// per-handler cognitive complexity stays under Sonar's S3776 ceiling
-// without changing observable behaviour.
-
-// buildLikeAndDigitsExact splits a free-text query into the two
-// sentinels every list endpoint that supports digits-exact search
-// uses: a `%term%` LIKE wrapper and an integer value when the query
-// is all digits. Returns (nil, nil) when the query is absent or
-// empty. The integer is non-zero — a leading-zero / negative input
-// degrades to a LIKE-only search.
+// buildLikeAndDigitsExact returns (like, digits) from query: LIKE %term% and parsed int.
 func buildLikeAndDigitsExact(query *string) (like *string, digits *uint64) {
 	if query == nil || *query == "" {
 		return nil, nil
@@ -144,9 +115,7 @@ func buildLikeAndDigitsExact(query *string) (like *string, digits *uint64) {
 	return like, digits
 }
 
-// nonNegativeStateFilter normalises the FE-supplied `state` filter:
-// nil or negative → return nil ("any state, soft-deletes excluded
-// by the SQL"); >= 0 → return a non-aliased pointer to the value.
+// nonNegativeStateFilter returns nil for negative state; otherwise returns the value.
 func nonNegativeStateFilter(state *int32) *int32 {
 	if state == nil || *state < 0 {
 		return nil
@@ -155,9 +124,7 @@ func nonNegativeStateFilter(state *int32) *int32 {
 	return &v
 }
 
-// allStoresAllowed returns true iff every requested store id is in
-// the caller's accessible set. Used by bill / purchase_bill list to
-// gate scope-jumping requests with a 400.
+// allStoresAllowed checks if all requested store IDs are in the allowed set.
 func allStoresAllowed(reqIDs, allowed []int) bool {
 	for _, id := range reqIDs {
 		if !slices.Contains(allowed, id) {
@@ -167,10 +134,7 @@ func allStoresAllowed(reqIDs, allowed []int) bool {
 	return true
 }
 
-// decodeCursorUint64 unwraps an opaque cursor key that was JSON-encoded
-// as a number (typed as float64 / int64 / json.Number after the
-// round trip). Returns nil on any zero / invalid value so the caller
-// can treat it as "no cursor set".
+// decodeCursorUint64 unwraps a JSON-encoded cursor key (>0 uint64); returns nil if invalid.
 func decodeCursorUint64(v any) *uint64 {
 	if v == nil {
 		return nil
@@ -197,10 +161,7 @@ func decodeCursorUint64(v any) *uint64 {
 	return nil
 }
 
-// decodeCursorInt32 mirrors decodeCursorUint64 for signed-int32
-// cursor keys (e.g. bill.is_credit). Returns nil when the input is
-// nil; otherwise always returns a value (zero is a legitimate key
-// for boolean-shaped columns).
+// decodeCursorInt32 unwraps a JSON-encoded int32 cursor key; returns nil if invalid.
 func decodeCursorInt32(v any) *int32 {
 	if v == nil {
 		return nil
@@ -223,9 +184,7 @@ func decodeCursorInt32(v any) *int32 {
 	return nil
 }
 
-// parseRFC3339Cursor decodes the leading time-keyed cursor key. The
-// FE round-trips the date as a string so we accept both Nano and
-// non-Nano forms (some legacy paths drop the fractional seconds).
+// parseRFC3339Cursor decodes a time-keyed cursor (RFC3339 format).
 func parseRFC3339Cursor(v any) *time.Time {
 	dStr, ok := v.(string)
 	if !ok || dStr == "" {
@@ -240,9 +199,7 @@ func parseRFC3339Cursor(v any) *time.Time {
 	return nil
 }
 
-// decodeBillCursor decodes the (effective_date, id, is_credit) triple.
-// Returns ok=false on a half-decoded cursor so the caller can map it
-// to a 400. ok=true with all-nil out-params is the first-page case.
+// decodeBillCursor decodes the (date, id, is_credit) keyset cursor.
 func decodeBillCursor(c pagination.Cursor) (date *time.Time, id *uint64, isCredit any, ok bool) {
 	if len(c.K) < 3 {
 		return nil, nil, nil, true

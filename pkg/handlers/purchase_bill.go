@@ -517,7 +517,7 @@ func (h *handler) DeletePurchaseBillDetail(c *gin.Context) {
 	}
 
 	// Soft-delete the purchase bill
-	res, err := tx.Exec("UPDATE purchase_bill SET state = -1 WHERE id = ?", pbID)
+	res, err := qtx.SoftDeletePurchaseBill(c.Request.Context(), pbID)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return

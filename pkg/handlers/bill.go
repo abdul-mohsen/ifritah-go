@@ -14,6 +14,7 @@ package handlers
 // ============================================================================
 
 import (
+	"context"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
@@ -732,27 +733,31 @@ func b2bInvoice(arabic bool, paper models.PaperSize, bill model.Bill, products [
 }
 
 func (h *handler) getProducts(billId uint64) []model.ProductDetails {
-	query := `
-	select product_id, price, quantity , articles.id, articles.articleNumber, articles.genericArticleDescription from bill_product
-	left join articles on articles.id = product_id where bill_id = ?
-	`
-	rows, err := h.DB.Query(query, billId)
+	rows, err := h.queries.GetBillProductsWithArticle(context.Background(), billId)
 	if err != nil {
-		log.Printf("getBillProducts query: %v", err)
+		log.Printf("getBillProducts: %v", err)
 		return nil
 	}
-	var products []model.ProductDetails
-	for rows.Next() {
-		var product model.ProductDetails
-
-		if err := rows.Scan(&product.Id, &product.Price, &product.Quantity, &product.ArticleId, &product.ArticleNumber, &product.Description); err != nil {
-			log.Printf("getBillProducts scan: %v", err)
-			return nil
+	products := make([]model.ProductDetails, 0, len(rows))
+	for _, r := range rows {
+		p := model.ProductDetails{
+			Price:    r.Price.String(),
+			Quantity: r.Quantity.IntPart(),
 		}
-
-		products = append(products, product)
+		if r.ProductID != nil {
+			p.Id = int(*r.ProductID)
+		}
+		if r.ArticleID.Valid {
+			p.ArticleId = int(r.ArticleID.Int64)
+		}
+		if r.Articlenumber != nil {
+			p.ArticleNumber = *r.Articlenumber
+		}
+		if r.Genericarticledescription != nil {
+			p.Description = *r.Genericarticledescription
+		}
+		products = append(products, p)
 	}
-
 	return products
 }
 
@@ -787,7 +792,7 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	}
 
 	// Soft-delete the bill
-	res, err := tx.Exec("UPDATE bill SET state = -1 WHERE id = ?", billID)
+	res, err := qtx.SoftDeleteBill(c.Request.Context(), billID)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return

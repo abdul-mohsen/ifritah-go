@@ -78,3 +78,6 @@ insert into purchase_bill_product  (product_id, name, price, quantity, bill_id) 
 
 -- name: AddAttachmentsPurchaseBill :exec
 insert into purchase_bill_attachments  (purchase_bill_id, file_key) values (?, ?);
+
+-- name: SoftDeletePurchaseBill :execresult
+UPDATE purchase_bill SET state = -1 WHERE id = ?;

@@ -1,45 +1,11 @@
 package handlers
 
-// ============================================================================
-// Order CRUD — Full CRUD with order items support
-// ============================================================================
-// Copy to: pkg/handlers/handler_order.go
-//
-// Endpoints:
-//   POST   /api/v2/order/all          → GetOrders (list with pagination + search)
-//   GET    /api/v2/order/:id          → GetOrder (single detail with items)
-//   POST   /api/v2/order              → CreateOrder (new order + items)
-//   PUT    /api/v2/order/:id          → UpdateOrder (modify order + items)
-//   DELETE /api/v2/order/:id          → DeleteOrder (cascade deletes items)
-//
-// DATABASE TABLES:
-//   - `orders` table:
-//       id, sequence_number, client_id, customer_name, store_id,
-//       status (ENUM: pending/processing/completed/cancelled),
-//       total (DECIMAL 12,2), note, created_by, created_at, updated_at
-//   - `order_items` table:
-//       id, order_id, part_id, part_name, quantity, unit_price, line_total,
-//       created_at
-//   - FK: orders.client_id  → clients(id)
-//   - FK: orders.store_id   → stores(id)
-//   - FK: orders.created_by → users(id)
-//   - FK: order_items.order_id → orders(id) ON DELETE CASCADE
-//   - FK: order_items.part_id  → parts(id)  ON DELETE SET NULL
-//
-// SCHEMA:
-//   client_id may be NULL (walk-in customer) — customer_name stores the name
-//   sequence_number is UNIQUE (e.g. ORD-001)
-//   total is auto-computed from SUM(order_items.line_total) on create/update
-//
-// Follows same patterns as handler_store.go:
-//   - (h *handler) method receiver
-//   - h.DB for database access
-//   - GetSessionInfo(c) for current user session
-// ============================================================================
-
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/model"
 	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
@@ -48,39 +14,26 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 const orderListSort = "-created_at"
 
-// ── POST /api/v2/order/all ──────────────────────────────────────────────────
-// Cursor-paginated list of orders for the calling user's company. The
-// seek key is (created_at DESC, id DESC), backed by idx_orders_keyset
-// (migration 0003) so the optimizer serves it as a single range scan.
+var validOrderStatus = map[string]db.OrdersStatus{
+	"pending":    db.OrdersStatusPending,
+	"processing": db.OrdersStatusProcessing,
+	"completed":  db.OrdersStatusCompleted,
+	"cancelled":  db.OrdersStatusCancelled,
+}
 
+// GetOrders lists orders for the calling user's company (POST /api/v2/order/all).
 func (h *handler) GetOrders(c *gin.Context) {
 	companyID := h.getUserCompany(c)
 
-	var req struct {
-		// New cursor-pagination keys.
-		Limit  int    `json:"limit"`
-		Cursor string `json:"cursor"`
-		Sort   string `json:"sort"`
-		Dir    string `json:"dir"`
-		Query  string `json:"query"`
-		// Legacy offset keys — accepted but ignored once Cursor != "".
-		PageNumber int `json:"page_number"`
-		PageSize   int `json:"page_size"`
-	}
+	var req model.OrderListRequest
 	c.ShouldBindJSON(&req)
 
-	listReq := pagination.ListRequest{
-		Limit:      req.Limit,
-		Cursor:     req.Cursor,
-		Sort:       req.Sort,
-		Dir:        req.Dir,
-		PageNumber: req.PageNumber,
-		PageSize:   req.PageSize,
-	}
+	listReq := listRequestFromPagination(req.PaginationRequest)
 	if err := listReq.Validate(orderListSort); err != nil {
 		log.Printf("GetOrders: %v", err)
 		c.Status(http.StatusBadRequest)
@@ -96,91 +49,33 @@ func (h *handler) GetOrders(c *gin.Context) {
 	}
 
 	limit := listReq.EffectiveLimit()
+	queryLike, _ := buildLikeAndDigitsExact(req.Query)
 
-	where := "WHERE o.store_id IN (SELECT id FROM store WHERE company_id = ?)"
-	args := []any{companyID}
-
-	if req.Query != "" {
-		where += " AND (o.sequence_number LIKE ? OR o.customer_name LIKE ?)"
-		like := "%" + req.Query + "%"
-		args = append(args, like, like)
-	}
-
-	// Seek predicate (canonical OR-tree form). Skip when no cursor —
-	// that's the first page.
-	if cursorCreatedAt != nil && cursorID != nil {
-		where += " AND (o.created_at < ? OR (o.created_at = ? AND o.id < ?))"
-		args = append(args, *cursorCreatedAt, *cursorCreatedAt, *cursorID)
-	}
-
-	// +1 row trick.
-	args = append(args, limit+1)
-
-	rows, err := h.DB.Query(`
-		SELECT o.id, o.sequence_number, o.client_id, COALESCE(o.customer_name,''),
-		       o.store_id, o.status, o.total, COALESCE(o.note,''),
-		       o.created_by, o.created_at, o.updated_at,
-		       COALESCE(c.name, o.customer_name, '') AS client_name
-		FROM orders o
-		LEFT JOIN client c ON c.id = o.client_id
-		`+where+`
-		ORDER BY o.created_at DESC, o.id DESC
-		LIMIT ?
-	`, args...)
+	rows, err := h.queries.GetOrders(c.Request.Context(), db.GetOrdersParams{
+		CompanyID:       sql.NullInt64{Int64: int64(companyID), Valid: true},
+		QueryLike:       queryLike,
+		CursorCreatedAt: cursorCreatedAt,
+		CursorID:        nullInt64FromUint64Ptr(cursorID),
+		Limit:           int32(limit + 1),
+	})
 	if err != nil {
-		log.Printf("ERROR GetOrders: %v", err)
+		log.Printf("GetOrders: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to fetch orders"})
 		return
 	}
-	defer rows.Close()
-
-	type orderRow struct {
-		ID             int       `json:"id"`
-		SequenceNumber string    `json:"sequence_number"`
-		ClientID       *int      `json:"client_id"`
-		CustomerName   string    `json:"customer_name"`
-		StoreID        *int      `json:"store_id"`
-		Status         string    `json:"status"`
-		Total          float64   `json:"total"`
-		Note           string    `json:"note"`
-		CreatedBy      int       `json:"created_by"`
-		CreatedAt      time.Time `json:"created_at"`
-		UpdatedAt      time.Time `json:"updated_at"`
-		ClientName     string    `json:"client_name"`
-	}
-
-	var orders []orderRow
-	for rows.Next() {
-		var o orderRow
-		if err := rows.Scan(&o.ID, &o.SequenceNumber, &o.ClientID, &o.CustomerName,
-			&o.StoreID, &o.Status, &o.Total, &o.Note,
-			&o.CreatedBy, &o.CreatedAt, &o.UpdatedAt, &o.ClientName); err != nil {
-			log.Printf("ERROR GetOrders scan: %v", err)
-			continue
-		}
-		orders = append(orders, o)
-	}
-	if orders == nil {
-		orders = []orderRow{}
-	}
-
-	// Sort over the current page is FE-driven; BE returns rows in
-	// the canonical keyset order only.
 
 	envelope := pagination.BuildEnvelope(
-		orders,
+		rows,
 		limit,
 		orderListSort,
-		func(o orderRow) []any {
+		func(o db.GetOrdersRow) []any {
 			return []any{o.CreatedAt.UTC().Format(time.RFC3339Nano), int64(o.ID)}
 		},
 	)
 	c.JSON(http.StatusOK, envelope)
 }
 
-// ── GET /api/v2/order/:id ───────────────────────────────────────────────────
-// Returns a single order with its line items.
-
+// GetOrder returns a single order with its items (GET /api/v2/order/:id).
 func (h *handler) GetOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -188,72 +83,16 @@ func (h *handler) GetOrder(c *gin.Context) {
 		return
 	}
 
-	var o struct {
-		ID             int     `json:"id"`
-		SequenceNumber string  `json:"sequence_number"`
-		ClientID       *int    `json:"client_id"`
-		CustomerName   string  `json:"customer_name"`
-		StoreID        *int    `json:"store_id"`
-		Status         string  `json:"status"`
-		Total          float64 `json:"total"`
-		Note           string  `json:"note"`
-		CreatedBy      int     `json:"created_by"`
-		CreatedAt      string  `json:"created_at"`
-		UpdatedAt      string  `json:"updated_at"`
-		ClientName     string  `json:"client_name"`
-		StoreName      string  `json:"store_name"`
-	}
-
-	err = h.DB.QueryRow(`
-		SELECT o.id, o.sequence_number, o.client_id, COALESCE(o.customer_name,''),
-		       o.store_id, o.status, o.total, COALESCE(o.note,''),
-		       o.created_by,
-		       DATE_FORMAT(o.created_at, '%Y-%m-%dT%H:%i:%s'),
-		       DATE_FORMAT(o.updated_at, '%Y-%m-%dT%H:%i:%s'),
-		       COALESCE(c.name, o.customer_name, '') AS client_name,
-		       COALESCE(s.name, '') AS store_name
-		FROM orders o
-		LEFT JOIN client c ON c.id = o.client_id
-		LEFT JOIN store s ON s.id = o.store_id
-		WHERE o.id = ?
-	`, id).Scan(&o.ID, &o.SequenceNumber, &o.ClientID, &o.CustomerName,
-		&o.StoreID, &o.Status, &o.Total, &o.Note,
-		&o.CreatedBy, &o.CreatedAt, &o.UpdatedAt,
-		&o.ClientName, &o.StoreName)
+	ctx := c.Request.Context()
+	o, err := h.queries.GetOrderByID(ctx, uint32(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "order not found"})
 		return
 	}
 
-	// Fetch order items
-	type orderItem struct {
-		ID        int     `json:"id"`
-		PartID    *int    `json:"part_id"`
-		PartName  string  `json:"part_name"`
-		Quantity  int     `json:"quantity"`
-		UnitPrice float64 `json:"unit_price"`
-		LineTotal float64 `json:"line_total"`
-	}
-
-	var items []orderItem
-	itemRows, err := h.DB.Query(`
-		SELECT id, part_id, part_name, quantity, unit_price, line_total
-		FROM order_items
-		WHERE order_id = ?
-		ORDER BY id ASC
-	`, id)
-	if err == nil {
-		defer itemRows.Close()
-		for itemRows.Next() {
-			var it orderItem
-			if itemRows.Scan(&it.ID, &it.PartID, &it.PartName, &it.Quantity,
-				&it.UnitPrice, &it.LineTotal) == nil {
-				items = append(items, it)
-			}
-		}
-	}
-	if items == nil {
-		items = []orderItem{}
+	items, err := h.queries.GetOrderItemsByOrderID(ctx, uint32(id))
+	if err != nil || items == nil {
+		items = []db.GetOrderItemsByOrderIDRow{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -263,8 +102,8 @@ func (h *handler) GetOrder(c *gin.Context) {
 			"client_id":       o.ClientID,
 			"customer_name":   o.CustomerName,
 			"store_id":        o.StoreID,
-			"status":          o.Status,
-			"total":           fmt.Sprintf("%.2f", o.Total),
+			"status":          string(o.Status),
+			"total":           o.Total.StringFixed(2),
 			"note":            o.Note,
 			"created_by":      o.CreatedBy,
 			"created_at":      o.CreatedAt,
@@ -276,158 +115,93 @@ func (h *handler) GetOrder(c *gin.Context) {
 	})
 }
 
-// ── POST /api/v2/order ──────────────────────────────────────────────────────
-// Creates a new order with optional line items.
-// Request body (JSON):
-//   {
-//     "sequence_number": "ORD-006",
-//     "client_id": 1,            // optional — NULL for walk-in
-//     "customer_name": "اسم",     // required if no client_id
-//     "store_id": 1,
-//     "status": "pending",
-//     "note": "ملاحظات",
-//     "items": [
-//       { "part_id": 10, "part_name": "فلتر زيت", "quantity": 2, "unit_price": 45.00 },
-//       { "part_name": "شمعات", "quantity": 4, "unit_price": 25.00 }
-//     ]
-//   }
-
+// CreateOrder inserts a new order with optional line items (POST /api/v2/order).
 func (h *handler) CreateOrder(c *gin.Context) {
 	session := GetSessionInfo(c)
 	companyID := h.getUserCompany(c)
 
-	type itemReq struct {
-		PartID    *int    `json:"part_id"`
-		PartName  string  `json:"part_name" binding:"required"`
-		Quantity  int     `json:"quantity" binding:"required,gte=1"`
-		UnitPrice float64 `json:"unit_price" binding:"gte=0"`
-	}
-
-	var req struct {
-		SequenceNumber string    `json:"sequence_number" binding:"required"`
-		ClientID       *int      `json:"client_id"`
-		CustomerName   string    `json:"customer_name"`
-		StoreID        *int      `json:"store_id"`
-		Status         string    `json:"status"`
-		Note           string    `json:"note"`
-		Items          []itemReq `json:"items"`
-	}
+	var req model.CreateOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "رقم الطلب مطلوب"})
 		return
 	}
-
-	// Validate: must have client_id or customer_name
 	if req.ClientID == nil && strings.TrimSpace(req.CustomerName) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "يجب تحديد العميل أو إدخال اسم العميل"})
 		return
 	}
 
-	// Validate client_id if provided
+	ctx := c.Request.Context()
+
 	if req.ClientID != nil {
-		var exists int
-		h.DB.QueryRow("SELECT COUNT(*) FROM client WHERE id = ? AND is_deleted = 0",
-			*req.ClientID).Scan(&exists)
-		if exists == 0 {
+		count, _ := h.queries.CountClientForOrder(ctx, *req.ClientID)
+		if count == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"detail": "العميل غير موجود"})
 			return
 		}
-		// Fetch client name if customer_name not provided
 		if req.CustomerName == "" {
-			h.DB.QueryRow("SELECT COALESCE(name,'') FROM client WHERE id = ?",
-				*req.ClientID).Scan(&req.CustomerName)
+			name, _ := h.queries.GetClientNameForOrder(ctx, *req.ClientID)
+			req.CustomerName = name
 		}
 	}
 
-	// Validate store_id if provided
 	if req.StoreID != nil {
-		var exists int
-		h.DB.QueryRow("SELECT COUNT(*) FROM store WHERE id = ? AND company_id = ?",
-			*req.StoreID, companyID).Scan(&exists)
-		if exists == 0 {
+		count, _ := h.queries.CountStoreForOrder(ctx, db.CountStoreForOrderParams{
+			ID: *req.StoreID, CompanyID: int32(companyID),
+		})
+		if count == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"detail": "المستودع غير موجود"})
 			return
 		}
 	}
 
-	// Default status
-	if req.Status == "" {
-		req.Status = "pending"
-	}
-	validStatuses := map[string]bool{"pending": true, "processing": true, "completed": true, "cancelled": true}
-	if !validStatuses[req.Status] {
+	status, ok := resolveOrderStatus(req.Status)
+	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "حالة الطلب غير صالحة"})
 		return
 	}
 
-	// Check unique sequence_number
-	var dupCount int
-	h.DB.QueryRow("SELECT COUNT(*) FROM orders WHERE sequence_number = ?",
-		req.SequenceNumber).Scan(&dupCount)
+	dupCount, _ := h.queries.CountOrderBySequence(ctx, req.SequenceNumber)
 	if dupCount > 0 {
 		c.JSON(http.StatusConflict, gin.H{"detail": "رقم الطلب مستخدم مسبقاً"})
 		return
 	}
 
-	// Calculate total from items
-	total := 0.0
-	for i := range req.Items {
-		lineTotal := float64(req.Items[i].Quantity) * req.Items[i].UnitPrice
-		req.Items[i].UnitPrice = req.Items[i].UnitPrice // keep as-is
-		total += lineTotal
-	}
+	total := computeOrderTotal(req.Items)
 
-	// Start transaction
 	tx, err := h.DB.Begin()
 	if err != nil {
-		log.Printf("ERROR CreateOrder begin tx: %v", err)
+		log.Printf("CreateOrder: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "internal error"})
 		return
 	}
 	defer tx.Rollback()
+	qtx := h.queries.WithTx(tx)
 
-	// Insert order
-	result, err := tx.Exec(`
-		INSERT INTO orders (sequence_number, client_id, customer_name, store_id,
-		                     status, total, note, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, req.SequenceNumber, req.ClientID, req.CustomerName, req.StoreID,
-		req.Status, total, req.Note, session.id)
+	res, err := qtx.CreateOrder(ctx, db.CreateOrderParams{
+		SequenceNumber: req.SequenceNumber,
+		ClientID:       req.ClientID,
+		CustomerName:   optionalString(req.CustomerName),
+		StoreID:        req.StoreID,
+		Status:         status,
+		Total:          total,
+		Note:           optionalString(req.Note),
+		CreatedBy:      int32(session.id),
+	})
 	if err != nil {
-		log.Printf("ERROR CreateOrder insert: %v", err)
+		log.Printf("CreateOrder: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل إنشاء الطلب"})
 		return
 	}
+	orderID, _ := res.LastInsertId()
 
-	orderID, _ := result.LastInsertId()
-
-	// Insert order items
-	if len(req.Items) > 0 {
-		stmt, err := tx.Prepare(`
-			INSERT INTO order_items (order_id, part_id, part_name, quantity, unit_price, line_total)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`)
-		if err != nil {
-			log.Printf("ERROR CreateOrder prepare items: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"detail": "internal error"})
-			return
-		}
-		defer stmt.Close()
-
-		for _, item := range req.Items {
-			lineTotal := float64(item.Quantity) * item.UnitPrice
-			_, err := stmt.Exec(orderID, item.PartID, item.PartName,
-				item.Quantity, item.UnitPrice, lineTotal)
-			if err != nil {
-				log.Printf("ERROR CreateOrder insert item: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل إضافة عنصر الطلب"})
-				return
-			}
-		}
+	if err := insertOrderItems(ctx, qtx, uint32(orderID), req.Items); err != nil {
+		log.Printf("CreateOrder: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل إضافة عنصر الطلب"})
+		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		log.Printf("ERROR CreateOrder commit: %v", err)
+		log.Printf("CreateOrder: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "internal error"})
 		return
 	}
@@ -436,148 +210,107 @@ func (h *handler) CreateOrder(c *gin.Context) {
 		"detail": gin.H{
 			"id":              orderID,
 			"sequence_number": req.SequenceNumber,
-			"total":           fmt.Sprintf("%.2f", total),
+			"total":           fmt.Sprintf("%s", total.StringFixed(2)),
 		},
 	})
 }
 
-// ── PUT /api/v2/order/:id ───────────────────────────────────────────────────
-// Updates an existing order and replaces its items.
-
+// UpdateOrder modifies an order and replaces its items (PUT /api/v2/order/:id).
 func (h *handler) UpdateOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid order ID"})
 		return
 	}
-
 	companyID := h.getUserCompany(c)
 
-	type itemReq struct {
-		PartID    *int    `json:"part_id"`
-		PartName  string  `json:"part_name" binding:"required"`
-		Quantity  int     `json:"quantity" binding:"required,gte=1"`
-		UnitPrice float64 `json:"unit_price" binding:"gte=0"`
-	}
-
-	var req struct {
-		SequenceNumber string    `json:"sequence_number" binding:"required"`
-		ClientID       *int      `json:"client_id"`
-		CustomerName   string    `json:"customer_name"`
-		StoreID        *int      `json:"store_id"`
-		Status         string    `json:"status"`
-		Note           string    `json:"note"`
-		Items          []itemReq `json:"items"`
-	}
+	var req model.UpdateOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request"})
 		return
 	}
 
-	// Verify order exists and belongs to user's company
-	var existingID int
-	err = h.DB.QueryRow(`
-		SELECT o.id FROM orders o
-		WHERE o.id = ? AND o.store_id IN (SELECT id FROM store WHERE company_id = ?)
-	`, id, companyID).Scan(&existingID)
-	if err != nil {
+	ctx := c.Request.Context()
+
+	if _, err := h.queries.GetOrderForCompany(ctx, db.GetOrderForCompanyParams{
+		ID: uint32(id), CompanyID: int32(companyID),
+	}); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "الطلب غير موجود"})
 		return
 	}
 
-	// Validate client_id
 	if req.ClientID != nil {
-		var exists int
-		h.DB.QueryRow("SELECT COUNT(*) FROM client WHERE id = ? AND is_deleted = 0",
-			*req.ClientID).Scan(&exists)
-		if exists == 0 {
+		count, _ := h.queries.CountClientForOrder(ctx, *req.ClientID)
+		if count == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"detail": "العميل غير موجود"})
 			return
 		}
 	}
 
-	// Validate store_id
 	if req.StoreID != nil {
-		var exists int
-		h.DB.QueryRow("SELECT COUNT(*) FROM store WHERE id = ? AND company_id = ?",
-			*req.StoreID, companyID).Scan(&exists)
-		if exists == 0 {
+		count, _ := h.queries.CountStoreForOrder(ctx, db.CountStoreForOrderParams{
+			ID: *req.StoreID, CompanyID: int32(companyID),
+		})
+		if count == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"detail": "المستودع غير موجود"})
 			return
 		}
 	}
 
-	validStatuses := map[string]bool{"pending": true, "processing": true, "completed": true, "cancelled": true}
-	if req.Status != "" && !validStatuses[req.Status] {
+	status, ok := resolveOrderStatus(req.Status)
+	if req.Status != "" && !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "حالة الطلب غير صالحة"})
 		return
 	}
 
-	// Check sequence_number uniqueness (excluding self)
-	var dupCount int
-	h.DB.QueryRow("SELECT COUNT(*) FROM orders WHERE sequence_number = ? AND id != ?",
-		req.SequenceNumber, id).Scan(&dupCount)
+	dupCount, _ := h.queries.CountOrderBySequenceExcludingID(ctx, db.CountOrderBySequenceExcludingIDParams{
+		SequenceNumber: req.SequenceNumber, ID: uint32(id),
+	})
 	if dupCount > 0 {
 		c.JSON(http.StatusConflict, gin.H{"detail": "رقم الطلب مستخدم مسبقاً"})
 		return
 	}
 
-	// Calculate total
-	total := 0.0
-	for _, item := range req.Items {
-		total += float64(item.Quantity) * item.UnitPrice
-	}
+	total := computeOrderTotal(req.Items)
 
-	// Transaction: update order + replace items
 	tx, err := h.DB.Begin()
 	if err != nil {
-		log.Printf("ERROR UpdateOrder begin tx: %v", err)
+		log.Printf("UpdateOrder: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "internal error"})
 		return
 	}
 	defer tx.Rollback()
+	qtx := h.queries.WithTx(tx)
 
-	_, err = tx.Exec(`
-		UPDATE orders SET sequence_number=?, client_id=?, customer_name=?,
-		       store_id=?, status=?, total=?, note=?
-		WHERE id=?
-	`, req.SequenceNumber, req.ClientID, req.CustomerName,
-		req.StoreID, req.Status, total, req.Note, id)
-	if err != nil {
-		log.Printf("ERROR UpdateOrder: %v", err)
+	if err := qtx.UpdateOrder(ctx, db.UpdateOrderParams{
+		SequenceNumber: req.SequenceNumber,
+		ClientID:       req.ClientID,
+		CustomerName:   optionalString(req.CustomerName),
+		StoreID:        req.StoreID,
+		Status:         status,
+		Total:          total,
+		Note:           optionalString(req.Note),
+		ID:             uint32(id),
+	}); err != nil {
+		log.Printf("UpdateOrder: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل تحديث الطلب"})
 		return
 	}
 
-	// Delete old items, insert new ones
-	tx.Exec("DELETE FROM order_items WHERE order_id = ?", id)
+	if err := qtx.DeleteOrderItemsByOrderID(ctx, uint32(id)); err != nil {
+		log.Printf("UpdateOrder: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "internal error"})
+		return
+	}
 
-	if len(req.Items) > 0 {
-		stmt, err := tx.Prepare(`
-			INSERT INTO order_items (order_id, part_id, part_name, quantity, unit_price, line_total)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`)
-		if err != nil {
-			log.Printf("ERROR UpdateOrder prepare items: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"detail": "internal error"})
-			return
-		}
-		defer stmt.Close()
-
-		for _, item := range req.Items {
-			lineTotal := float64(item.Quantity) * item.UnitPrice
-			_, err := stmt.Exec(id, item.PartID, item.PartName,
-				item.Quantity, item.UnitPrice, lineTotal)
-			if err != nil {
-				log.Printf("ERROR UpdateOrder insert item: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل تحديث عناصر الطلب"})
-				return
-			}
-		}
+	if err := insertOrderItems(ctx, qtx, uint32(id), req.Items); err != nil {
+		log.Printf("UpdateOrder: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل تحديث عناصر الطلب"})
+		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		log.Printf("ERROR UpdateOrder commit: %v", err)
+		log.Printf("UpdateOrder: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "internal error"})
 		return
 	}
@@ -585,42 +318,75 @@ func (h *handler) UpdateOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"detail": "success"})
 }
 
-// ── DELETE /api/v2/order/:id ────────────────────────────────────────────────
-// Deletes an order. order_items are cascade-deleted by FK.
-
+// DeleteOrder removes an order; order_items cascade via FK (DELETE /api/v2/order/:id).
 func (h *handler) DeleteOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid order ID"})
 		return
 	}
-
 	companyID := h.getUserCompany(c)
+	ctx := c.Request.Context()
 
-	// Verify ownership via store → company
-	var existingID int
-	err = h.DB.QueryRow(`
-		SELECT o.id FROM orders o
-		WHERE o.id = ? AND o.store_id IN (SELECT id FROM store WHERE company_id = ?)
-	`, id, companyID).Scan(&existingID)
-	if err == sql.ErrNoRows {
+	if _, err := h.queries.GetOrderForCompany(ctx, db.GetOrderForCompanyParams{
+		ID: uint32(id), CompanyID: int32(companyID),
+	}); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "الطلب غير موجود"})
 		return
 	}
 
-	// order_items cascade-deleted by FK constraint
-	res, err := h.DB.Exec("DELETE FROM orders WHERE id = ?", id)
+	res, err := h.queries.DeleteOrderByID(ctx, uint32(id))
 	if err != nil {
-		log.Printf("ERROR DeleteOrder: %v", err)
+		log.Printf("DeleteOrder: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل حذف الطلب"})
 		return
 	}
-
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
+	if affected, _ := res.RowsAffected(); affected == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "الطلب غير موجود"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"detail": "success"})
+}
+
+func resolveOrderStatus(s string) (db.OrdersStatus, bool) {
+	if s == "" {
+		return db.OrdersStatusPending, true
+	}
+	v, ok := validOrderStatus[s]
+	return v, ok
+}
+
+func computeOrderTotal(items []model.OrderItemRequest) decimal.Decimal {
+	total := decimal.Zero
+	for _, it := range items {
+		line := decimal.NewFromInt(int64(it.Quantity)).Mul(decimal.NewFromFloat(it.UnitPrice))
+		total = total.Add(line)
+	}
+	return total
+}
+
+func insertOrderItems(ctx context.Context, qtx *db.Queries, orderID uint32, items []model.OrderItemRequest) error {
+	for _, it := range items {
+		qty := decimal.NewFromInt(int64(it.Quantity))
+		unit := decimal.NewFromFloat(it.UnitPrice)
+		if err := qtx.CreateOrderItem(ctx, db.CreateOrderItemParams{
+			OrderID:   orderID,
+			PartID:    it.PartID,
+			PartName:  it.PartName,
+			Quantity:  qty,
+			UnitPrice: unit,
+			LineTotal: qty.Mul(unit),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func optionalString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

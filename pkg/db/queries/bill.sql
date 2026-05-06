@@ -17,18 +17,23 @@
 -- OR-tree is the canonical lex-compare seek predicate
 -- (Markus Winand, use-the-index-luke.com/no-offset).
 --
--- Search (query_like / query_seq_exact):
---   - query_like: pre-wrapped %term% used against userName,
---     user_phone_number, and client.name (LEFT JOIN already in place).
---   - query_seq_exact: integer value of q when q is all-digits (exact
---     match on sequence_number). NULL otherwise.
+-- Search (query_name_like / query_phone_digits):
+--   - query_name_like:    pre-wrapped %term% used against userName
+--     and client.name (LEFT JOIN already in place).
+--   - query_phone_digits: pre-wrapped %digits% (Arabic-Indic folded,
+--     non-digits stripped) compared against the digits-only form of
+--     bill.user_phone_number and client.phone via REGEXP_REPLACE.
+--     This makes "+966 51-234-5678", "00966512345678", "0512345678",
+--     "٠٥١٢٣٤٥٦٧٨" all match the same customer.
 -- All-NULL on the search args = "no search".
 --
--- NOTE: total exact-match was scoped here but pulled to a follow-up
--- (sqlc v1.31 emits a non-nullable decimal.Decimal narg for params
--- bound against a NOT-NULL decimal column even with CAST AS CHAR /
--- CONCAT). userName/phone/sequence/client.name covers the dominant
--- search intents in our usage data.
+-- NOTE: sequence_number search was intentionally removed. Previously
+-- any all-digit query was silently coerced to an exact sequence_number
+-- match, which caused phone-shaped searches like "0512345678" to
+-- surface unrelated invoices whose sequence_number happened to equal
+-- 512345678 (leading zero dropped by ParseUint). If sequence-number
+-- search is reintroduced it must come from a dedicated request field,
+-- not a heuristic on the free-text query.
 --
 -- state_filter (sqlc.narg('state_filter')):
 --   - NULL = "any non-deleted" (state >= 0). Default.
@@ -57,20 +62,24 @@ SELECT bill.id AS id,
 FROM bill
 JOIN credit_note cn ON cn.bill_id = bill.id
 LEFT JOIN client  ON client.id = bill.client_id
-CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')      AS SIGNED)       AS sf,
-                   CAST(sqlc.narg('query_like')        AS CHAR(255))    AS q,
-                   CAST(sqlc.narg('query_seq_exact')   AS UNSIGNED)     AS qe,
-                   CAST(sqlc.narg('cursor_date')       AS DATETIME(6))  AS cd,
-                   CAST(sqlc.narg('cursor_id')         AS UNSIGNED)     AS ci,
-                   CAST(sqlc.narg('cursor_is_credit')  AS UNSIGNED)     AS cic) p
+CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')        AS SIGNED)       AS sf,
+                   CAST(sqlc.narg('query_name_like')    AS CHAR(255))    AS qn,
+                   CAST(sqlc.narg('query_phone_digits') AS CHAR(32))     AS qp,
+                   CAST(sqlc.narg('cursor_date')        AS DATETIME(6))  AS cd,
+                   CAST(sqlc.narg('cursor_id')          AS UNSIGNED)     AS ci,
+                   CAST(sqlc.narg('cursor_is_credit')   AS UNSIGNED)     AS cic) p
 WHERE bill.state >= 0
   AND (p.sf IS NULL OR bill.state = p.sf)
   AND (
-        (p.q IS NULL AND p.qe IS NULL)
-     OR bill.user_phone_number LIKE p.q COLLATE utf8mb4_unicode_ci
-     OR bill.userName           LIKE p.q COLLATE utf8mb4_unicode_ci
-     OR client.name             LIKE p.q COLLATE utf8mb4_unicode_ci
-     OR CAST(bill.sequence_number AS CHAR) = CAST(p.qe AS CHAR)
+        (p.qn IS NULL AND p.qp IS NULL)
+     OR (p.qp IS NOT NULL AND (
+            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE p.qp
+         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE p.qp
+        ))
+     OR (p.qn IS NOT NULL AND (
+            bill.userName LIKE p.qn COLLATE utf8mb4_unicode_ci
+         OR client.name   LIKE p.qn COLLATE utf8mb4_unicode_ci
+        ))
   )
   AND (
         p.cd IS NULL
@@ -94,20 +103,24 @@ SELECT bill.id AS id,
        0 AS is_credit
 FROM bill
 LEFT JOIN client ON client.id = bill.client_id
-CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')      AS SIGNED)       AS sf,
-                   CAST(sqlc.narg('query_like')        AS CHAR(255))    AS q,
-                   CAST(sqlc.narg('query_seq_exact')   AS UNSIGNED)     AS qe,
-                   CAST(sqlc.narg('cursor_date')       AS DATETIME(6))  AS cd,
-                   CAST(sqlc.narg('cursor_id')         AS UNSIGNED)     AS ci,
-                   CAST(sqlc.narg('cursor_is_credit')  AS UNSIGNED)     AS cic) q
+CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')        AS SIGNED)       AS sf,
+                   CAST(sqlc.narg('query_name_like')    AS CHAR(255))    AS qn,
+                   CAST(sqlc.narg('query_phone_digits') AS CHAR(32))     AS qp,
+                   CAST(sqlc.narg('cursor_date')        AS DATETIME(6))  AS cd,
+                   CAST(sqlc.narg('cursor_id')          AS UNSIGNED)     AS ci,
+                   CAST(sqlc.narg('cursor_is_credit')   AS UNSIGNED)     AS cic) q
 WHERE bill.state >= 0
   AND (q.sf IS NULL OR bill.state = q.sf)
   AND (
-        (q.q IS NULL AND q.qe IS NULL)
-     OR bill.user_phone_number LIKE q.q COLLATE utf8mb4_unicode_ci
-     OR bill.userName           LIKE q.q COLLATE utf8mb4_unicode_ci
-     OR client.name             LIKE q.q COLLATE utf8mb4_unicode_ci
-     OR CAST(bill.sequence_number AS CHAR) = CAST(q.qe AS CHAR)
+        (q.qn IS NULL AND q.qp IS NULL)
+     OR (q.qp IS NOT NULL AND (
+            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE q.qp
+         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE q.qp
+        ))
+     OR (q.qn IS NOT NULL AND (
+            bill.userName LIKE q.qn COLLATE utf8mb4_unicode_ci
+         OR client.name   LIKE q.qn COLLATE utf8mb4_unicode_ci
+        ))
   )
   AND (
         q.cd IS NULL

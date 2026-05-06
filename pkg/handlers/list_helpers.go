@@ -115,6 +115,85 @@ func buildLikeAndDigitsExact(query *string) (like *string, digits *uint64) {
 	return like, digits
 }
 
+// foldDigits maps Arabic-Indic (٠-٩) and Extended Arabic-Indic (۰-۹)
+// digits to ASCII 0-9. Other runes are passed through unchanged.
+func foldDigits(s string) string {
+	out := make([]rune, 0, len(s))
+	for _, r := range s {
+		switch {
+		case r >= '\u0660' && r <= '\u0669': // ٠-٩
+			out = append(out, '0'+(r-'\u0660'))
+		case r >= '\u06F0' && r <= '\u06F9': // ۰-۹
+			out = append(out, '0'+(r-'\u06F0'))
+		default:
+			out = append(out, r)
+		}
+	}
+	return string(out)
+}
+
+// digitsOnly returns only the ASCII digits in s after folding Arabic
+// digit forms. Used to normalize phone-number search input on the
+// query side; the SQL strips the same set on the column side via
+// REGEXP_REPLACE.
+func digitsOnly(s string) string {
+	folded := foldDigits(s)
+	out := make([]byte, 0, len(folded))
+	for i := 0; i < len(folded); i++ {
+		if folded[i] >= '0' && folded[i] <= '9' {
+			out = append(out, folded[i])
+		}
+	}
+	return string(out)
+}
+
+// minPhoneSearchDigits is the minimum digit count below which we do
+// not treat a query as a phone-number search. Below this threshold
+// the digit string would match too broadly (e.g. "12" appears in
+// thousands of phone numbers).
+const minPhoneSearchDigits = 4
+
+// buildBillSearchParams splits a free-text query into a name LIKE
+// and a digits-only phone fragment. Either may be nil.
+//
+//   - phoneDigits: %digits% wrapper, set when the query yields at
+//     least minPhoneSearchDigits digits after folding/stripping.
+//     Compared in SQL against REGEXP_REPLACE(phone, '[^0-9]+', '')
+//     so input format does not have to match storage format.
+//   - nameLike:    %query% wrapper, set when the query contains any
+//     non-digit (i.e. it could be a name) OR when no phoneDigits
+//     was produced (so a short numeric query still finds a name).
+//
+// The previous helper silently ParseUint'd the entire query into a
+// sequence_number match, which made phone-shaped searches like
+// "0512345678" return invoice #512345678. That heuristic is gone;
+// sequence-number search now requires a dedicated request field.
+func buildBillSearchParams(query *string) (nameLike *string, phoneDigits *string) {
+	if query == nil || *query == "" {
+		return nil, nil
+	}
+	q := *query
+	digits := digitsOnly(q)
+	if len(digits) >= minPhoneSearchDigits {
+		p := "%" + digits + "%"
+		phoneDigits = &p
+	}
+	hasNonDigit := false
+	for _, r := range foldDigits(q) {
+		if r < '0' || r > '9' {
+			if r != ' ' && r != '-' && r != '+' && r != '(' && r != ')' {
+				hasNonDigit = true
+				break
+			}
+		}
+	}
+	if hasNonDigit || phoneDigits == nil {
+		s := "%" + q + "%"
+		nameLike = &s
+	}
+	return nameLike, phoneDigits
+}
+
 // nonNegativeStateFilter returns nil for negative state; otherwise returns the value.
 func nonNegativeStateFilter(state *int32) *int32 {
 	if state == nil || *state < 0 {

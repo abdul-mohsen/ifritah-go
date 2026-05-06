@@ -123,7 +123,7 @@ func (h *handler) GetBills(c *gin.Context) {
 		return
 	}
 
-	queryLike, querySeqExact := buildLikeAndDigitsExact(request.Query)
+	queryNameLike, queryPhoneDigits := buildBillSearchParams(request.Query)
 	stateFilter := nonNegativeStateFilter(request.State)
 
 	cur, _ := listReq.DecodedCursor()
@@ -140,12 +140,12 @@ func (h *handler) GetBills(c *gin.Context) {
 	// generated params: the CAST(... AS UNSIGNED/SIGNED) wrapper in
 	// bill.sql forces sqlc to emit Null* types for the keyset cols.
 	args := db.GetAllBillParams{
-		StateFilter:    nullInt64FromInt32Ptr(stateFilter),
-		QueryLike:      queryLike,
-		QuerySeqExact:  nullInt64FromUint64Ptr(querySeqExact),
-		CursorDate:     cursorDate,
-		CursorID:       nullInt64FromUint64Ptr(cursorID),
-		CursorIsCredit: nullInt64FromAny(cursorIsCredit),
+		StateFilter:       nullInt64FromInt32Ptr(stateFilter),
+		QueryNameLike:     queryNameLike,
+		QueryPhoneDigits:  queryPhoneDigits,
+		CursorDate:        cursorDate,
+		CursorID:          nullInt64FromUint64Ptr(cursorID),
+		CursorIsCredit:    nullInt64FromAny(cursorIsCredit),
 		// +1 row signals has_more without a COUNT(*).
 		Limit: int32(limit + 1),
 	}

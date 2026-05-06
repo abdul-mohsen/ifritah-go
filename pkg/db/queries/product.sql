@@ -21,8 +21,8 @@ CROSS JOIN (SELECT CAST(sqlc.narg('query_like')     AS CHAR(255)) AS q,
                    CAST(sqlc.narg('cursor_id')      AS UNSIGNED)  AS ci) prm
 where user.id = ? and p.is_deleted = False
   and (prm.q IS NULL
-       OR p.name LIKE prm.q
-       OR COALESCE(p.shelf_number,'') LIKE prm.q
+       OR p.name LIKE prm.q COLLATE utf8mb4_unicode_ci
+       OR COALESCE(p.shelf_number,'') LIKE prm.q COLLATE utf8mb4_unicode_ci
        OR p.id = prm.qid)
   and (prm.ci IS NULL OR p.id < prm.ci)
 ORDER BY p.id DESC

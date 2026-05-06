@@ -19,16 +19,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func (h *handler) getPurchaseBills(c *gin.Context, args db.GetAllPurchaseBillParams) []db.PurchaseBill {
-
-	bills, err := h.queries.GetAllPurchaseBill(c.Request.Context(), args)
-
-	if err != nil {
-		log.Printf("getPurchaseBills: %v", err)
-		return nil
-	}
-
-	return bills
+func (h *handler) getPurchaseBills(c *gin.Context, args db.GetAllPurchaseBillParams) ([]db.PurchaseBill, error) {
+	return h.queries.GetAllPurchaseBill(c.Request.Context(), args)
 }
 
 // purchaseBillSetup is the result of beginPurchaseBillTx — everything both
@@ -393,7 +385,7 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 	// already enforced by the SQL); otherwise exact match.
 	stateFilter := nonNegativeStateFilter(request.State)
 
-	bill := h.getPurchaseBills(c, db.GetAllPurchaseBillParams{
+	bill, err := h.getPurchaseBills(c, db.GetAllPurchaseBillParams{
 		ID:            int32(userSession.id),
 		StateFilter:   nullInt64FromInt32Ptr(stateFilter),
 		QueryLike:     queryLike,
@@ -402,6 +394,11 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 		CursorID:      nullInt64FromUint64Ptr(cursorID),
 		Limit:         int32(limit + 1),
 	})
+	if err != nil {
+		log.Printf("GetAllPurchaseBill: %v", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
 
 	envelope := pagination.BuildEnvelope(
 		bill,

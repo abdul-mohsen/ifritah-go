@@ -35,8 +35,8 @@ WHERE bill.state >= 0
   AND (
         (p.qn IS NULL AND p.qp IS NULL)
      OR (p.qp IS NOT NULL AND (
-            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE p.qp
-         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE p.qp
+            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE p.qp COLLATE utf8mb4_unicode_ci
+         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE p.qp COLLATE utf8mb4_unicode_ci
         ))
      OR (p.qn IS NOT NULL AND (
             bill.userName LIKE p.qn COLLATE utf8mb4_unicode_ci
@@ -87,8 +87,8 @@ WHERE bill.state >= 0
   AND (
         (q.qn IS NULL AND q.qp IS NULL)
      OR (q.qp IS NOT NULL AND (
-            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE q.qp
-         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE q.qp
+            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE q.qp COLLATE utf8mb4_unicode_ci
+         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE q.qp COLLATE utf8mb4_unicode_ci
         ))
      OR (q.qn IS NOT NULL AND (
             bill.userName LIKE q.qn COLLATE utf8mb4_unicode_ci

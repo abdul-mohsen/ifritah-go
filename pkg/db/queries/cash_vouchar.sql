@@ -8,6 +8,12 @@
 -- ============================================================================
 
 -- name: ListCashVouchers :many
+-- NOTE: This sqlc query is currently superseded by the dynamic
+-- raw-SQL builder in pkg/handlers/cash_vouchar.go (`buildCashVoucherWhere`)
+-- which composes the WHERE clause based on optional filters
+-- (state, voucher_type, query, sequence_number alias). Kept here as
+-- the canonical static shape for any consumer that doesn't need
+-- conditional filters.
 SELECT
   id, voucher_number, voucher_type, effective_date, amount,
   payment_method, state, reference_type, reference_id,

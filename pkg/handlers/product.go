@@ -118,16 +118,13 @@ const productListSort = "-id"
 // in GetAllProducts (Sonar S1192).
 const errGetAllProducts = "GetAllProducts: %v"
 
-// applyProductStockFilter is the in-memory implementation of the
-// FE round-2 P0 #2 "stock" filter. It runs against the bounded
-// page slice because adding a new sqlc narg would explode the
-// generated query branches.
+// applyProductStockFilter filters a page in memory.
 //
 //	"in"  → quantity > 0
 //	"out" → quantity == 0
 //	"low" → 0 < quantity <= min_stock
 //	""    → no filter (returns input unchanged)
-//	any other value → no-op (degrades to "no filter")
+//	unknown → no-op
 func applyProductStockFilter(products []db.Product, stock string) []db.Product {
 	if stock == "" {
 		return products
@@ -151,8 +148,6 @@ func productMatchesStock(p db.Product, stock string) bool {
 		lowThr := decimal.NewFromInt(int64(p.MinStock))
 		return p.Quantity.GreaterThan(decimal.Zero) && p.Quantity.LessThanOrEqual(lowThr)
 	default:
-		// Unknown value — treat as "no filter" to keep the response
-		// non-empty rather than silently discarding the page.
 		return true
 	}
 }
@@ -179,17 +174,18 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 	cursorID := cursorIDOnly(cur)
 	limit := listReq.EffectiveLimit()
 
-	// Search sentinels (FE §1): %term% LIKE wrapper plus an exact-PK
-	// match when the query is all digits, so users can paste a
-	// sticker id and get a direct hit.
 	queryLike, queryIDMatch := buildLikeAndDigitsExact(request.Query)
+	partNumberPrefix := buildPlainPrefixFilter(request.PartNumber)
+	barcodePrefix := buildPlainPrefixFilter(request.Barcode)
 
 	args := db.GetAllProductParams{
-		ID:           int32(user.id),
-		QueryLike:    queryLike,
-		QueryIDMatch: nullInt64FromUint64Ptr(queryIDMatch),
-		CursorID:     nullInt64FromUint64Ptr(cursorID),
-		Limit:        int32(limit + 1),
+		ID:                       int32(user.id),
+		QueryLike:                queryLike,
+		QueryIDMatch:             nullInt64FromUint64Ptr(queryIDMatch),
+		FilterPartNumberPrefix:   partNumberPrefix,
+		FilterBarcodePrefix:      barcodePrefix,
+		CursorID:                 nullInt64FromUint64Ptr(cursorID),
+		Limit:                    int32(limit + 1),
 	}
 
 	products, err := h.queries.GetAllProduct(c.Request.Context(), args)

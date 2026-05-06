@@ -1,22 +1,21 @@
 -- name: GetClients :many
--- Keyset pagination on (updated_at DESC, id DESC). Backed by
--- idx_client_keyset (migration 0003). Sort key carries updated_at so
--- the FE keeps the existing "recently-touched first" UX.
--- query_like is the sentinel-filter for search (pre-wrapped %term%
--- on the Go side; NULL = "no search"). Keeps SQL static (Sonar S2077).
---
--- Each sqlc.narg() literal appears once, in the `p` derived table, so
--- the rest of the query references `p.<col>` and the file stays
--- under plsql:S1192's duplicated-literal threshold.
+-- Keyset pagination on (updated_at DESC, id DESC).
+-- Typed filters AND with `query_like` and with each other.
 SELECT c.* FROM client c
-CROSS JOIN (SELECT CAST(sqlc.narg('query_like')        AS CHAR(255))   AS q,
-                   CAST(sqlc.narg('cursor_updated_at') AS DATETIME(6)) AS cu,
-                   CAST(sqlc.narg('cursor_id')         AS UNSIGNED)    AS ci) p
+CROSS JOIN (SELECT CAST(sqlc.narg('query_like')          AS CHAR(255))   AS q,
+                   CAST(sqlc.narg('filter_phone_prefix') AS CHAR(20))    AS fp,
+                   CAST(sqlc.narg('filter_vat_prefix')   AS CHAR(20))    AS fv,
+                   CAST(sqlc.narg('filter_cr_prefix')    AS CHAR(50))    AS fc,
+                   CAST(sqlc.narg('cursor_updated_at')   AS DATETIME(6)) AS cu,
+                   CAST(sqlc.narg('cursor_id')           AS UNSIGNED)    AS ci) p
 WHERE c.is_deleted = FALSE
   AND (p.q IS NULL
        OR c.name  LIKE p.q COLLATE utf8mb4_unicode_ci
        OR c.email LIKE p.q COLLATE utf8mb4_unicode_ci
        OR c.phone LIKE p.q COLLATE utf8mb4_unicode_ci)
+  AND (p.fp IS NULL OR c.phone COLLATE utf8mb4_unicode_ci LIKE p.fp)
+  AND (p.fv IS NULL OR c.vat_number   COLLATE utf8mb4_unicode_ci LIKE p.fv)
+  AND (p.fc IS NULL OR c.commercial_registration COLLATE utf8mb4_unicode_ci LIKE p.fc)
   AND (p.cu IS NULL
        OR c.updated_at < p.cu
        OR (c.updated_at = p.cu AND c.id < p.ci))

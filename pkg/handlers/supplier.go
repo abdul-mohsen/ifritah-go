@@ -62,14 +62,19 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 
 	limit := listReq.EffectiveLimit()
 
-	// Sentinel-filter for search: NULL = no search, otherwise %term%.
-	// Same shape as bill / cash_voucher / client / product (FE §1).
 	queryLike, _ := buildLikeAndDigitsExact(request.Query)
 
+	phonePrefix := buildPlainPrefixFilter(request.Phone)
+	vatPrefix := buildPlainPrefixFilter(request.VatNumber)
+	crPrefix := buildPlainPrefixFilter(request.CommercialRegistration)
+
 	args := db.GetAllSupplierParams{
-		QueryLike: queryLike,
-		CursorID:  cursorIDNullable,
-		Limit:     int32(limit + 1),
+		QueryLike:         queryLike,
+		FilterPhonePrefix: phonePrefix,
+		FilterVatPrefix:   vatPrefix,
+		FilterCrPrefix:    crPrefix,
+		CursorID:          cursorIDNullable,
+		Limit:             int32(limit + 1),
 	}
 
 	suppliers, err := h.queries.GetAllSupplier(c.Request.Context(), args)

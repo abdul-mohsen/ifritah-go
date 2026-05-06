@@ -75,16 +75,20 @@ func (h *handler) GetAllClient(c *gin.Context) {
 
 	limit := listReq.EffectiveLimit()
 
-	// Search sentinel: NULL = no search; otherwise %term% used against
-	// name / email / phone (FE §1). Digits-exact isn't supported on
-	// client (id is internal); only the LIKE wrapper is computed.
 	queryLike, _ := buildLikeAndDigitsExact(request.Query)
 
+	phonePrefix := buildPlainPrefixFilter(request.Phone)
+	vatPrefix := buildPlainPrefixFilter(request.VatNumber)
+	crPrefix := buildPlainPrefixFilter(request.CommercialRegistration)
+
 	res, err := h.queries.GetClients(c.Request.Context(), db.GetClientsParams{
-		QueryLike:       queryLike,
-		CursorUpdatedAt: cursorUpdatedAt,
-		CursorID:        cursorIDNI,
-		Limit:           int32(limit + 1),
+		QueryLike:         queryLike,
+		FilterPhonePrefix: phonePrefix,
+		FilterVatPrefix:   vatPrefix,
+		FilterCrPrefix:    crPrefix,
+		CursorUpdatedAt:   cursorUpdatedAt,
+		CursorID:          cursorIDNI,
+		Limit:             int32(limit + 1),
 	})
 	if err != nil {
 		log.Printf(errGetAllClient, err)

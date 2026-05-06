@@ -37,7 +37,7 @@ select b.*
 	  and (p.sf is null or b.state = p.sf)
 	  and (
 	        (p.q is null and p.qe is null)
-	     or supplier.name like p.q
+	     or supplier.name like p.q COLLATE utf8mb4_unicode_ci
 	     or CAST(b.supplier_sequence_number AS CHAR) = CAST(p.qe AS CHAR)
 	     or CAST(b.id AS CHAR)                       = CAST(p.qe AS CHAR)
 	  )

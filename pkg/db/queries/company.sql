@@ -12,3 +12,9 @@ FROM company WHERE id = ? LIMIT 1;
 UPDATE company
    SET name = ?, name_ar = ?
  WHERE id = ?;
+
+-- name: ListCompanies :many
+SELECT id, name FROM company;
+
+-- name: GetUserCompanyIDCoalesced :one
+SELECT CAST(COALESCE(company_id, 1) AS SIGNED) FROM user WHERE id = ?;

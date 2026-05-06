@@ -67,9 +67,9 @@ WHERE bill.state >= 0
   AND (p.sf IS NULL OR bill.state = p.sf)
   AND (
         (p.q IS NULL AND p.qe IS NULL)
-     OR bill.user_phone_number LIKE p.q
-     OR bill.userName           LIKE p.q
-     OR client.name             LIKE p.q
+     OR bill.user_phone_number LIKE p.q COLLATE utf8mb4_unicode_ci
+     OR bill.userName           LIKE p.q COLLATE utf8mb4_unicode_ci
+     OR client.name             LIKE p.q COLLATE utf8mb4_unicode_ci
      OR CAST(bill.sequence_number AS CHAR) = CAST(p.qe AS CHAR)
   )
   AND (
@@ -104,9 +104,9 @@ WHERE bill.state >= 0
   AND (q.sf IS NULL OR bill.state = q.sf)
   AND (
         (q.q IS NULL AND q.qe IS NULL)
-     OR bill.user_phone_number LIKE q.q
-     OR bill.userName           LIKE q.q
-     OR client.name             LIKE q.q
+     OR bill.user_phone_number LIKE q.q COLLATE utf8mb4_unicode_ci
+     OR bill.userName           LIKE q.q COLLATE utf8mb4_unicode_ci
+     OR client.name             LIKE q.q COLLATE utf8mb4_unicode_ci
      OR CAST(bill.sequence_number AS CHAR) = CAST(q.qe AS CHAR)
   )
   AND (

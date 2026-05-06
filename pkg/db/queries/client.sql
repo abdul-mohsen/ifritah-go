@@ -14,9 +14,9 @@ CROSS JOIN (SELECT CAST(sqlc.narg('query_like')        AS CHAR(255))   AS q,
                    CAST(sqlc.narg('cursor_id')         AS UNSIGNED)    AS ci) p
 WHERE c.is_deleted = FALSE
   AND (p.q IS NULL
-       OR c.name  LIKE p.q
-       OR c.email LIKE p.q
-       OR c.phone LIKE p.q)
+       OR c.name  LIKE p.q COLLATE utf8mb4_unicode_ci
+       OR c.email LIKE p.q COLLATE utf8mb4_unicode_ci
+       OR c.phone LIKE p.q COLLATE utf8mb4_unicode_ci)
   AND (p.cu IS NULL
        OR c.updated_at < p.cu
        OR (c.updated_at = p.cu AND c.id < p.ci))

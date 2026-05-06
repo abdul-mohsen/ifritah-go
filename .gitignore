@@ -17,5 +17,9 @@ cmd/hashpw/
 
 err.log
 out.log
+be.log
+be.err.log
+ifritah.exe~
 /.vscode/
 /.github/chatmodes/
+scripts/reset_admin_password/

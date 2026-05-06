@@ -5,21 +5,21 @@ UPDATE supplier SET name=?, address=?, phone_number=?, number=?, vat_number=?, b
 SELECT * From supplier where is_deleted = FALSE and id = ?;
 
 -- name: GetAllSupplier :many
--- Keyset pagination on (id DESC). Primary key serves the scan order.
--- query_like is the canonical sentinel-filter for search: NULL means
--- "no search", otherwise it is the pre-wrapped %term% string. Keeping
--- the SQL static avoids Sonar S2077 (dynamic SQL).
---
--- Each sqlc.narg() is referenced once (in the `p` derived table) so
--- the file stays under plsql:S1192's repeated-literal threshold.
+-- Keyset on (id DESC). Typed filters AND with query_like.
 SELECT s.* From supplier s
-CROSS JOIN (SELECT CAST(sqlc.narg('query_like') AS CHAR(255)) AS q,
-                   CAST(sqlc.narg('cursor_id')  AS UNSIGNED)  AS ci) p
+CROSS JOIN (SELECT CAST(sqlc.narg('query_like')          AS CHAR(255)) AS q,
+                   CAST(sqlc.narg('filter_phone_prefix') AS CHAR(20))  AS fp,
+                   CAST(sqlc.narg('filter_vat_prefix')   AS CHAR(20))  AS fv,
+                   CAST(sqlc.narg('filter_cr_prefix')    AS CHAR(50))  AS fc,
+                   CAST(sqlc.narg('cursor_id')           AS UNSIGNED)  AS ci) p
 WHERE s.is_deleted = FALSE
   AND (p.q IS NULL
        OR s.name         LIKE p.q COLLATE utf8mb4_unicode_ci
        OR s.phone_number LIKE p.q COLLATE utf8mb4_unicode_ci
        OR s.vat_number   LIKE p.q COLLATE utf8mb4_unicode_ci)
+  AND (p.fp IS NULL OR s.phone_number COLLATE utf8mb4_unicode_ci LIKE p.fp)
+  AND (p.fv IS NULL OR s.vat_number   COLLATE utf8mb4_unicode_ci LIKE p.fv)
+  AND (p.fc IS NULL OR s.commercial_registration COLLATE utf8mb4_unicode_ci LIKE p.fc)
   AND (p.ci IS NULL OR s.id < p.ci)
 ORDER BY s.id DESC
 LIMIT ?;

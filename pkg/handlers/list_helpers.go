@@ -6,6 +6,7 @@ import (
 	"ifritah/web-service-gin/pkg/pagination"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -115,15 +116,14 @@ func buildLikeAndDigitsExact(query *string) (like *string, digits *uint64) {
 	return like, digits
 }
 
-// foldDigits maps Arabic-Indic (٠-٩) and Extended Arabic-Indic (۰-۹)
-// digits to ASCII 0-9. Other runes are passed through unchanged.
+// foldDigits maps Arabic-Indic and Extended Arabic-Indic digits to ASCII 0-9.
 func foldDigits(s string) string {
 	out := make([]rune, 0, len(s))
 	for _, r := range s {
 		switch {
-		case r >= '\u0660' && r <= '\u0669': // ٠-٩
+		case r >= '\u0660' && r <= '\u0669':
 			out = append(out, '0'+(r-'\u0660'))
-		case r >= '\u06F0' && r <= '\u06F9': // ۰-۹
+		case r >= '\u06F0' && r <= '\u06F9':
 			out = append(out, '0'+(r-'\u06F0'))
 		default:
 			out = append(out, r)
@@ -132,10 +132,7 @@ func foldDigits(s string) string {
 	return string(out)
 }
 
-// digitsOnly returns only the ASCII digits in s after folding Arabic
-// digit forms. Used to normalize phone-number search input on the
-// query side; the SQL strips the same set on the column side via
-// REGEXP_REPLACE.
+// digitsOnly returns ASCII digits in s after folding Arabic forms.
 func digitsOnly(s string) string {
 	folded := foldDigits(s)
 	out := make([]byte, 0, len(folded))
@@ -147,27 +144,10 @@ func digitsOnly(s string) string {
 	return string(out)
 }
 
-// minPhoneSearchDigits is the minimum digit count below which we do
-// not treat a query as a phone-number search. Below this threshold
-// the digit string would match too broadly (e.g. "12" appears in
-// thousands of phone numbers).
 const minPhoneSearchDigits = 4
 
-// buildBillSearchParams splits a free-text query into a name LIKE
-// and a digits-only phone fragment. Either may be nil.
-//
-//   - phoneDigits: %digits% wrapper, set when the query yields at
-//     least minPhoneSearchDigits digits after folding/stripping.
-//     Compared in SQL against REGEXP_REPLACE(phone, '[^0-9]+', '')
-//     so input format does not have to match storage format.
-//   - nameLike:    %query% wrapper, set when the query contains any
-//     non-digit (i.e. it could be a name) OR when no phoneDigits
-//     was produced (so a short numeric query still finds a name).
-//
-// The previous helper silently ParseUint'd the entire query into a
-// sequence_number match, which made phone-shaped searches like
-// "0512345678" return invoice #512345678. That heuristic is gone;
-// sequence-number search now requires a dedicated request field.
+// buildBillSearchParams splits a free-text query into a name LIKE and a
+// digits-only phone fragment for the bill list. See PR #32 for context.
 func buildBillSearchParams(query *string) (nameLike *string, phoneDigits *string) {
 	if query == nil || *query == "" {
 		return nil, nil
@@ -192,6 +172,20 @@ func buildBillSearchParams(query *string) (nameLike *string, phoneDigits *string
 		nameLike = &s
 	}
 	return nameLike, phoneDigits
+}
+
+// buildPlainPrefixFilter returns 'value%' for a non-empty trimmed input,
+// or nil. Used for typed-filter chips that match literal alnum tokens.
+func buildPlainPrefixFilter(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*v)
+	if s == "" {
+		return nil
+	}
+	out := s + "%"
+	return &out
 }
 
 // nonNegativeStateFilter returns nil for negative state; otherwise returns the value.

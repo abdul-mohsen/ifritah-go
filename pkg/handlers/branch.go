@@ -36,6 +36,7 @@ func (h *handler) ListBranches(c *gin.Context) {
 		Sort   string  `json:"sort"`
 		Dir    string  `json:"dir"`
 		Query  *string `json:"query"`
+		Phone  *string `json:"phone"`
 		// Legacy keys ignored once Cursor != "".
 		PageNumber int `json:"page_number"`
 		PageSize   int `json:"page_size"`
@@ -62,17 +63,20 @@ func (h *handler) ListBranches(c *gin.Context) {
 
 	limit := listReq.EffectiveLimit()
 
-	// Sentinel-filter pattern in the dynamic builder: `(? = '' OR …)`
-	// keeps the SQL effectively static so MySQL still plans it as a
-	// composite range scan when the search is empty.
+	// Sentinel-filter pattern keeps the SQL effectively static.
 	q := ""
 	if req.Query != nil {
 		q = *req.Query
 	}
 	qLike := "%" + q + "%"
+	phonePrefix := buildPlainPrefixFilter(req.Phone)
 
 	where := "WHERE (? = '' OR b.name LIKE ? OR COALESCE(b.address,'') LIKE ? OR COALESCE(b.phone,'') LIKE ?)"
 	args := []any{q, qLike, qLike, qLike}
+	if phonePrefix != nil {
+		where += " AND b.phone COLLATE utf8mb4_unicode_ci LIKE ?"
+		args = append(args, *phonePrefix)
+	}
 	if cursorID != nil {
 		where += " AND b.id > ?"
 		args = append(args, *cursorID)

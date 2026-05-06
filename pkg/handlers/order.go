@@ -51,12 +51,17 @@ func (h *handler) GetOrders(c *gin.Context) {
 	limit := listReq.EffectiveLimit()
 	queryLike, _ := buildLikeAndDigitsExact(req.Query)
 
+	seqPrefix := buildPlainPrefixFilter(req.SequenceNumber)
+	phonePrefix := buildPlainPrefixFilter(req.Phone)
+
 	rows, err := h.queries.GetOrders(c.Request.Context(), db.GetOrdersParams{
-		CompanyID:       sql.NullInt64{Int64: int64(companyID), Valid: true},
-		QueryLike:       queryLike,
-		CursorCreatedAt: cursorCreatedAt,
-		CursorID:        nullInt64FromUint64Ptr(cursorID),
-		Limit:           int32(limit + 1),
+		CompanyID:         sql.NullInt64{Int64: int64(companyID), Valid: true},
+		QueryLike:         queryLike,
+		FilterSeqPrefix:   seqPrefix,
+		FilterPhonePrefix: phonePrefix,
+		CursorCreatedAt:   cursorCreatedAt,
+		CursorID:          nullInt64FromUint64Ptr(cursorID),
+		Limit:             int32(limit + 1),
 	})
 	if err != nil {
 		log.Printf("GetOrders: %v", err)

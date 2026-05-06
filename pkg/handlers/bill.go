@@ -125,6 +125,8 @@ func (h *handler) GetBills(c *gin.Context) {
 
 	queryNameLike, queryPhoneDigits := buildBillSearchParams(request.Query)
 	stateFilter := nonNegativeStateFilter(request.State)
+	phonePrefix := buildPlainPrefixFilter(request.Phone)
+	seqPrefix := buildPlainPrefixFilter(request.SequenceNumber)
 
 	cur, _ := listReq.DecodedCursor()
 	cursorDate, cursorID, cursorIsCredit, ok := decodeBillCursor(cur)
@@ -136,18 +138,16 @@ func (h *handler) GetBills(c *gin.Context) {
 
 	limit := listReq.EffectiveLimit()
 
-	// Adapt the *T sentinel pointers to sql.NullInt64 for the
-	// generated params: the CAST(... AS UNSIGNED/SIGNED) wrapper in
-	// bill.sql forces sqlc to emit Null* types for the keyset cols.
 	args := db.GetAllBillParams{
 		StateFilter:       nullInt64FromInt32Ptr(stateFilter),
 		QueryNameLike:     queryNameLike,
 		QueryPhoneDigits:  queryPhoneDigits,
+		FilterPhonePrefix: phonePrefix,
+		FilterSeqPrefix:   seqPrefix,
 		CursorDate:        cursorDate,
 		CursorID:          nullInt64FromUint64Ptr(cursorID),
 		CursorIsCredit:    nullInt64FromAny(cursorIsCredit),
-		// +1 row signals has_more without a COUNT(*).
-		Limit: int32(limit + 1),
+		Limit:             int32(limit + 1),
 	}
 	bills, err := h.queries.GetAllBill(c.Request.Context(), args)
 	if err != nil {

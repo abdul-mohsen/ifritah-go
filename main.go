@@ -184,7 +184,7 @@ func main() {
 		authorized.GET("users/me", h.GetMe)
 
 		// ── User management (admin-only) ───────────────────────────────
-		authorized.GET("user/all", admin, h.ListUsers)
+		authorized.POST("user/all", admin, h.ListUsers)
 		authorized.GET("user/:id", admin, h.GetUserByID)
 		authorized.POST("user", admin, h.CreateUser)
 		authorized.PUT("user/:id", admin, h.UpdateUser)

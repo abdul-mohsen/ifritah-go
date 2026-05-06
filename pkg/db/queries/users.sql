@@ -60,11 +60,26 @@ UPDATE user SET password = ? WHERE id = ?;
 DELETE FROM sessions WHERE user_id = ?;
 
 -- name: ListUsers :many
-SELECT id, username, COALESCE(full_name,'') AS full_name, COALESCE(email,'') AS email,
-       COALESCE(phone,'') AS phone, role, is_active, company_id,
-       DATE_FORMAT(last_login, '%Y-%m-%dT%H:%i:%sZ') AS last_login
-FROM user
-ORDER BY id ASC;
+-- Keyset on (id ASC). Typed filters AND with query_like.
+SELECT u.id, u.username, COALESCE(u.full_name,'') AS full_name,
+       COALESCE(u.email,'') AS email, COALESCE(u.phone,'') AS phone,
+       u.role, u.is_active, u.company_id,
+       CAST(COALESCE(DATE_FORMAT(u.last_login, '%Y-%m-%dT%H:%i:%sZ'), '') AS CHAR(40)) AS last_login
+FROM user u
+CROSS JOIN (SELECT CAST(sqlc.narg('query_like')           AS CHAR(255)) AS q,
+                   CAST(sqlc.narg('filter_phone_prefix')  AS CHAR(20))  AS fp,
+                   CAST(sqlc.narg('filter_email_prefix')  AS CHAR(150)) AS fe,
+                   CAST(sqlc.narg('cursor_id')            AS UNSIGNED)  AS ci) prm
+WHERE (prm.q IS NULL
+       OR u.username             LIKE prm.q COLLATE utf8mb4_unicode_ci
+       OR COALESCE(u.full_name,'') LIKE prm.q COLLATE utf8mb4_unicode_ci
+       OR COALESCE(u.email,'')     LIKE prm.q COLLATE utf8mb4_unicode_ci
+       OR COALESCE(u.phone,'')     LIKE prm.q COLLATE utf8mb4_unicode_ci)
+  AND (prm.fp IS NULL OR u.phone COLLATE utf8mb4_unicode_ci LIKE prm.fp)
+  AND (prm.fe IS NULL OR COALESCE(u.email,'') COLLATE utf8mb4_unicode_ci LIKE prm.fe)
+  AND (prm.ci IS NULL OR u.id > prm.ci)
+ORDER BY u.id ASC
+LIMIT ?;
 
 -- name: GetUserAdmin :one
 SELECT id, username, COALESCE(full_name,'') AS full_name, COALESCE(email,'') AS email,

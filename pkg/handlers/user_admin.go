@@ -6,7 +6,7 @@ package handlers
 //
 // Routes:
 //   GET    /api/v2/users/me           → GetMe                    (any auth)
-//   GET    /api/v2/user/all           → ListUsers                (admin)
+//   POST   /api/v2/user/all           → ListUsers                (admin) — keyset envelope
 //   GET    /api/v2/user/:id           → GetUserByID              (admin)
 //   POST   /api/v2/user               → CreateUser               (admin, sets role)
 //   PUT    /api/v2/user/:id           → UpdateUser               (admin)
@@ -16,6 +16,8 @@ package handlers
 import (
 	"database/sql"
 	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/model"
+	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
 	"strconv"
@@ -45,8 +47,17 @@ type userResponse struct {
 }
 
 // fromListRow / fromAdminRow convert sqlc-generated row types to userResponse.
+// LastLogin is `interface{}` on ListUsersRow because the new keyset query
+// wraps DATE_FORMAT in CAST(COALESCE(..., '') AS CHAR(40)) — sqlc can't
+// statically prove the result is non-null without extra hints, so we
+// runtime-coerce here. NULL becomes "" which buildUserResponse maps back to
+// nil on the JSON side, preserving the wire shape.
 func fromListRow(r db.ListUsersRow) userResponse {
-	return buildUserResponse(int64(r.ID), r.Username, r.FullName, r.Email, r.Phone, string(r.Role), r.IsActive, r.CompanyID, r.LastLogin)
+	ll, _ := r.LastLogin.(string)
+	if b, ok := r.LastLogin.([]byte); ok {
+		ll = string(b)
+	}
+	return buildUserResponse(int64(r.ID), r.Username, r.FullName, r.Email, r.Phone, string(r.Role), r.IsActive, r.CompanyID, ll)
 }
 
 func fromAdminRow(r db.GetUserAdminRow) userResponse {
@@ -74,20 +85,63 @@ func buildUserResponse(id int64, username, fullName, email, phone, role string, 
 	return u
 }
 
-// ── ListUsers ──────────────────────────────────────────────────────────────
+// Keyset-paginated user list. Sort: id ASC.
+const userListSort = "id"
 
 func (h *handler) ListUsers(c *gin.Context) {
-	rows, err := h.queries.ListUsers(c.Request.Context())
+	var req model.PaginationRequest
+	c.ShouldBindJSON(&req)
+
+	listReq := pagination.ListRequest{
+		Limit:      int(req.Limit),
+		Cursor:     req.Cursor,
+		Sort:       req.Sort,
+		Dir:        req.Dir,
+		Query:      req.Query,
+		PageNumber: int(req.PageNumber),
+		PageSize:   int(req.PageSize),
+	}
+	if err := listReq.Validate(userListSort); err != nil {
+		log.Printf("ListUsers: %v", err)
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	cur, _ := listReq.DecodedCursor()
+	cursorID := cursorIDOnly(cur)
+	limit := listReq.EffectiveLimit()
+
+	queryLike, _ := buildLikeAndDigitsExact(req.Query)
+	phonePrefix := buildPlainPrefixFilter(req.Phone)
+	emailPrefix := buildPlainPrefixFilter(req.Email)
+
+	params := db.ListUsersParams{
+		QueryLike:         queryLike,
+		FilterPhonePrefix: phonePrefix,
+		FilterEmailPrefix: emailPrefix,
+		CursorID:          nullInt64FromUint64Ptr(cursorID),
+		Limit:             int32(limit + 1),
+	}
+
+	rows, err := h.queries.ListUsers(c.Request.Context(), params)
 	if err != nil {
 		log.Printf("ListUsers query: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": ErrListUsers})
 		return
 	}
+
 	users := make([]userResponse, 0, len(rows))
 	for _, r := range rows {
 		users = append(users, fromListRow(r))
 	}
-	c.JSON(http.StatusOK, gin.H{"data": users})
+
+	envelope := pagination.BuildEnvelope(
+		users,
+		limit,
+		userListSort,
+		func(u userResponse) []any { return []any{u.ID} },
+	)
+	c.JSON(http.StatusOK, envelope)
 }
 
 // ── GetUserByID ────────────────────────────────────────────────────────────

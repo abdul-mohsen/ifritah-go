@@ -3,49 +3,9 @@
   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetAllBill :many
--- Keyset / cursor pagination. Sort key: (effective_date DESC, id DESC, is_credit DESC).
---
--- Why three keys, not two: a bill that has a credit_note is shown as
--- TWO list items — the original invoice and its credit note are
--- different documents in the user's view. The UNION ALL below emits
--- both with identical (effective_date, id) but different `is_credit`,
--- so we need that third column as a deterministic tiebreaker for the
--- seek predicate.
---
--- The (cursor_date, cursor_id, cursor_is_credit) sentinels are all
--- NULL on the first page and all non-NULL on subsequent pages. The
--- OR-tree is the canonical lex-compare seek predicate
--- (Markus Winand, use-the-index-luke.com/no-offset).
---
--- Search (query_name_like / query_phone_digits):
---   - query_name_like:    pre-wrapped %term% used against userName
---     and client.name (LEFT JOIN already in place).
---   - query_phone_digits: pre-wrapped %digits% (Arabic-Indic folded,
---     non-digits stripped) compared against the digits-only form of
---     bill.user_phone_number and client.phone via REGEXP_REPLACE.
---     This makes "+966 51-234-5678", "00966512345678", "0512345678",
---     "٠٥١٢٣٤٥٦٧٨" all match the same customer.
--- All-NULL on the search args = "no search".
---
--- NOTE: sequence_number search was intentionally removed. Previously
--- any all-digit query was silently coerced to an exact sequence_number
--- match, which caused phone-shaped searches like "0512345678" to
--- surface unrelated invoices whose sequence_number happened to equal
--- 512345678 (leading zero dropped by ParseUint). If sequence-number
--- search is reintroduced it must come from a dedicated request field,
--- not a heuristic on the free-text query.
---
--- state_filter (sqlc.narg('state_filter')):
---   - NULL = "any non-deleted" (state >= 0). Default.
---   - any int >= 0 = exact match (caller supplies 0/1/2/3).
---   - We never accept negative values here; the request layer maps
---     a missing/sentinel filter to NULL before binding.
---
--- Caller fetches `limit + 1` to detect has_more without a COUNT(*).
---
--- Each sqlc.narg() literal is referenced at most once per UNION
--- branch, via the `p` / `q` derived tables, so the file stays under
--- plsql:S1192's repeated-literal threshold.
+-- Keyset pagination on (effective_date DESC, id DESC, is_credit DESC).
+-- query_name_like / query_phone_digits split (PR #32) for free-text q.
+-- filter_phone_prefix / filter_seq_prefix: typed-chip prefix filters.
 SELECT bill.id AS id,
        bill.effective_date AS effective_date,
        payment_due_date,
@@ -65,6 +25,8 @@ LEFT JOIN client  ON client.id = bill.client_id
 CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')        AS SIGNED)       AS sf,
                    CAST(sqlc.narg('query_name_like')    AS CHAR(255))    AS qn,
                    CAST(sqlc.narg('query_phone_digits') AS CHAR(32))     AS qp,
+                   CAST(sqlc.narg('filter_phone_prefix') AS CHAR(20))    AS fp,
+                   CAST(sqlc.narg('filter_seq_prefix')   AS CHAR(32))    AS fs,
                    CAST(sqlc.narg('cursor_date')        AS DATETIME(6))  AS cd,
                    CAST(sqlc.narg('cursor_id')          AS UNSIGNED)     AS ci,
                    CAST(sqlc.narg('cursor_is_credit')   AS UNSIGNED)     AS cic) p
@@ -73,13 +35,22 @@ WHERE bill.state >= 0
   AND (
         (p.qn IS NULL AND p.qp IS NULL)
      OR (p.qp IS NOT NULL AND (
-            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE p.qp
-         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE p.qp
+            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE p.qp COLLATE utf8mb4_unicode_ci
+         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE p.qp COLLATE utf8mb4_unicode_ci
         ))
      OR (p.qn IS NOT NULL AND (
             bill.userName LIKE p.qn COLLATE utf8mb4_unicode_ci
          OR client.name   LIKE p.qn COLLATE utf8mb4_unicode_ci
         ))
+  )
+  AND (
+        p.fp IS NULL
+     OR bill.user_phone_number COLLATE utf8mb4_unicode_ci LIKE p.fp
+     OR client.phone           COLLATE utf8mb4_unicode_ci LIKE p.fp
+  )
+  AND (
+        p.fs IS NULL
+     OR CAST(bill.sequence_number AS CHAR) COLLATE utf8mb4_unicode_ci LIKE p.fs
   )
   AND (
         p.cd IS NULL
@@ -106,6 +77,8 @@ LEFT JOIN client ON client.id = bill.client_id
 CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')        AS SIGNED)       AS sf,
                    CAST(sqlc.narg('query_name_like')    AS CHAR(255))    AS qn,
                    CAST(sqlc.narg('query_phone_digits') AS CHAR(32))     AS qp,
+                   CAST(sqlc.narg('filter_phone_prefix') AS CHAR(20))    AS fp,
+                   CAST(sqlc.narg('filter_seq_prefix')   AS CHAR(32))    AS fs,
                    CAST(sqlc.narg('cursor_date')        AS DATETIME(6))  AS cd,
                    CAST(sqlc.narg('cursor_id')          AS UNSIGNED)     AS ci,
                    CAST(sqlc.narg('cursor_is_credit')   AS UNSIGNED)     AS cic) q
@@ -114,13 +87,22 @@ WHERE bill.state >= 0
   AND (
         (q.qn IS NULL AND q.qp IS NULL)
      OR (q.qp IS NOT NULL AND (
-            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE q.qp
-         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE q.qp
+            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE q.qp COLLATE utf8mb4_unicode_ci
+         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE q.qp COLLATE utf8mb4_unicode_ci
         ))
      OR (q.qn IS NOT NULL AND (
             bill.userName LIKE q.qn COLLATE utf8mb4_unicode_ci
          OR client.name   LIKE q.qn COLLATE utf8mb4_unicode_ci
         ))
+  )
+  AND (
+        q.fp IS NULL
+     OR bill.user_phone_number COLLATE utf8mb4_unicode_ci LIKE q.fp
+     OR client.phone           COLLATE utf8mb4_unicode_ci LIKE q.fp
+  )
+  AND (
+        q.fs IS NULL
+     OR CAST(bill.sequence_number AS CHAR) COLLATE utf8mb4_unicode_ci LIKE q.fs
   )
   AND (
         q.cd IS NULL

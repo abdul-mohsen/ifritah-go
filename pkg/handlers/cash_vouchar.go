@@ -52,10 +52,10 @@ type cashVoucherListRequest struct {
 
 	Query       string `json:"query"`
 	VoucherType string `json:"voucher_type"` // "disbursement", "receipt", or "" for all
-	// State filter (FE §3). nil/absent = "any state" for cash vouchers
-	// (workflow: 0=draft, 1=approved, 2=posted). Negative values are
-	// treated as "any" so the FE can send -1 as the sentinel.
+	// State filter. nil/negative = "any". 0=draft, 1=approved, 2=posted.
 	State *int `json:"state"`
+	// Typed-filter chip — prefix LIKE on voucher_number.
+	SequenceNumber *string `json:"sequence_number"`
 }
 
 type cashVoucherCreateRequest struct {
@@ -166,6 +166,12 @@ func buildCashVoucherWhere(req cashVoucherListRequest, merchantID int64, cursorD
 		where += " AND (recipient_name LIKE ? OR description LIKE ? OR note LIKE ?)"
 		q := "%" + req.Query + "%"
 		args = append(args, q, q, q)
+	}
+
+	// Typed filter sequence_number → prefix LIKE on voucher_number.
+	if vp := buildPlainPrefixFilter(req.SequenceNumber); vp != nil {
+		where += " AND CAST(voucher_number AS CHAR) LIKE ?"
+		args = append(args, *vp)
 	}
 
 	// Seek predicate (skip on first page).

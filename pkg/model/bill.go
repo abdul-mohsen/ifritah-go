@@ -38,10 +38,13 @@ type BillRequestFilter struct {
 	Page     int     `json:"page_number"`
 	PageSize int     `json:"page_size"`
 	Query    *string `json:"query"`
-	// State filter (FE §3). nil/absent or -1 = "any non-deleted" (server
-	// already excludes soft-deleted state<0). Otherwise an exact match
-	// on bill.state / purchase_bill.state.
+	// State filter. nil or -1 = "any non-deleted"; else exact match.
 	State *int32 `json:"state"`
+
+	// Typed-field prefix filters; empty/missing = no-op.
+	Phone                  *string `json:"phone"`
+	SequenceNumber         *string `json:"sequence_number"`
+	SupplierSequenceNumber *string `json:"supplier_sequence_number"`
 }
 
 type AddBillRequest struct {

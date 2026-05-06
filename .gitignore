@@ -22,3 +22,4 @@ be.err.log
 ifritah.exe~
 /.vscode/
 /.github/chatmodes/
+scripts/reset_admin_password/

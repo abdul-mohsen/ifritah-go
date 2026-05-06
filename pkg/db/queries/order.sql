@@ -12,8 +12,8 @@ CROSS JOIN (SELECT CAST(sqlc.narg('company_id')         AS UNSIGNED)    AS cid,
                    CAST(sqlc.narg('cursor_id')          AS UNSIGNED)    AS ci) p
 WHERE o.store_id IN (SELECT id FROM store WHERE company_id = p.cid)
   AND (p.q IS NULL
-       OR o.sequence_number LIKE p.q
-       OR o.customer_name LIKE p.q)
+       OR o.sequence_number LIKE p.q COLLATE utf8mb4_unicode_ci
+       OR o.customer_name LIKE p.q COLLATE utf8mb4_unicode_ci)
   AND (p.cca IS NULL
        OR o.created_at < p.cca
        OR (o.created_at = p.cca AND o.id < p.ci))

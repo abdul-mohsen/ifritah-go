@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
@@ -66,11 +65,10 @@ func (h *handler) GetAllClient(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 		return
 	}
-	// Cursor uses sql.NullInt64 in the gen for client (the CAST in the
-	// derived-table param wrapper bumps the inferred type).
-	var cursorIDNI sql.NullInt64
+	var cursorIDPtr *uint32
 	if cursorID != nil {
-		cursorIDNI = sql.NullInt64{Int64: int64(*cursorID), Valid: true}
+		v := uint32(*cursorID)
+		cursorIDPtr = &v
 	}
 
 	limit := listReq.EffectiveLimit()
@@ -82,13 +80,13 @@ func (h *handler) GetAllClient(c *gin.Context) {
 	crPrefix := buildPlainPrefixFilter(request.CommercialRegistration)
 
 	res, err := h.queries.GetClients(c.Request.Context(), db.GetClientsParams{
-		QueryLike:         queryLike,
-		PhonePrefix: phonePrefix,
-		VatPrefix:   vatPrefix,
-		CrPrefix:    crPrefix,
-		CursorUpdatedAt:   cursorUpdatedAt,
-		CursorID:          cursorIDNI,
-		Limit:             int32(limit + 1),
+		QueryLike:       queryLike,
+		PhonePrefix:     phonePrefix,
+		VatPrefix:       vatPrefix,
+		CrPrefix:        crPrefix,
+		CursorUpdatedAt: cursorUpdatedAt,
+		CursorID:        cursorIDPtr,
+		Limit:           int32(limit + 1),
 	})
 	if err != nil {
 		log.Printf(errGetAllClient, err)

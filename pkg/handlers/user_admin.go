@@ -115,12 +115,18 @@ func (h *handler) ListUsers(c *gin.Context) {
 	phonePrefix := buildPlainPrefixFilter(req.Phone)
 	emailPrefix := buildPlainPrefixFilter(req.Email)
 
+	var cursorIDPtr *int32
+	if cursorID != nil {
+		v := int32(*cursorID)
+		cursorIDPtr = &v
+	}
+
 	params := db.ListUsersParams{
-		QueryLike:         queryLike,
+		QueryLike:   queryLike,
 		PhonePrefix: phonePrefix,
 		EmailPrefix: emailPrefix,
-		CursorID:          nullInt64FromUint64Ptr(cursorID),
-		Limit:             int32(limit + 1),
+		CursorID:    cursorIDPtr,
+		Limit:       int32(limit + 1),
 	}
 
 	rows, err := h.queries.ListUsers(c.Request.Context(), params)

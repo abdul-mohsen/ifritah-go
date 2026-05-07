@@ -1,25 +1,19 @@
 -- name: GetClients :many
 -- Keyset pagination on (updated_at DESC, id DESC).
 -- Typed filters AND with `query_like` and with each other.
-SELECT c.* FROM client c
-CROSS JOIN (SELECT CAST(sqlc.narg('query_like') AS CHAR(255))   AS q,
-                   CAST(sqlc.narg('phone_prefix') AS CHAR(20))    AS fp,
-                   CAST(sqlc.narg('vat_prefix') AS CHAR(20))    AS fv,
-                   CAST(sqlc.narg('cr_prefix') AS CHAR(50))    AS fc,
-                   CAST(sqlc.narg('cursor_updated_at')   AS DATETIME(6)) AS cu,
-                   CAST(sqlc.narg('cursor_id')           AS UNSIGNED)    AS ci) p
-WHERE c.is_deleted = FALSE
-  AND (p.q IS NULL
-       OR c.name COLLATE utf8mb4_unicode_ci LIKE p.q
-       OR c.email COLLATE utf8mb4_unicode_ci LIKE p.q
-       OR c.phone COLLATE utf8mb4_unicode_ci LIKE p.q)
-  AND (p.fp IS NULL OR c.phone COLLATE utf8mb4_unicode_ci LIKE p.fp)
-  AND (p.fv IS NULL OR c.vat_number COLLATE utf8mb4_unicode_ci LIKE p.fv)
-  AND (p.fc IS NULL OR c.commercial_registration COLLATE utf8mb4_unicode_ci LIKE p.fc)
-  AND (p.cu IS NULL
-       OR c.updated_at < p.cu
-       OR (c.updated_at = p.cu AND c.id < p.ci))
-ORDER BY c.updated_at DESC, c.id DESC
+SELECT * FROM client
+WHERE is_deleted = FALSE
+  AND (sqlc.narg('query_like') IS NULL
+       OR name  LIKE sqlc.narg('query_like')
+       OR email LIKE sqlc.narg('query_like')
+       OR phone LIKE sqlc.narg('query_like'))
+  AND (sqlc.narg('phone_prefix') IS NULL OR phone                   LIKE sqlc.narg('phone_prefix'))
+  AND (sqlc.narg('vat_prefix')   IS NULL OR vat_number              LIKE sqlc.narg('vat_prefix'))
+  AND (sqlc.narg('cr_prefix')    IS NULL OR commercial_registration LIKE sqlc.narg('cr_prefix'))
+  AND (sqlc.narg('cursor_updated_at') IS NULL
+       OR updated_at < sqlc.narg('cursor_updated_at')
+       OR (updated_at = sqlc.narg('cursor_updated_at') AND id < sqlc.narg('cursor_id')))
+ORDER BY updated_at DESC, id DESC
 LIMIT ?;
 
 -- name: GetClientByID :one

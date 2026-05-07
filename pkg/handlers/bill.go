@@ -139,15 +139,15 @@ func (h *handler) GetBills(c *gin.Context) {
 	limit := listReq.EffectiveLimit()
 
 	args := db.GetAllBillParams{
-		StateFilter:       nullInt64FromInt32Ptr(stateFilter),
-		QueryNameLike:     queryNameLike,
-		QueryPhoneDigits:  queryPhoneDigits,
-		PhonePrefix: phonePrefix,
-		SeqPrefix:   seqPrefix,
-		CursorDate:        cursorDate,
-		CursorID:          nullInt64FromUint64Ptr(cursorID),
-		CursorIsCredit:    nullInt64FromAny(cursorIsCredit),
-		Limit:             int32(limit + 1),
+		StateFilter:      stateFilter,
+		QueryNameLike:    queryNameLike,
+		QueryPhoneDigits: queryPhoneDigits,
+		PhonePrefix:      phonePrefix,
+		SeqPrefix:        seqPrefix,
+		CursorDate:       cursorDate,
+		CursorID:         cursorID,
+		CursorIsCredit:   nullInt64FromAny(cursorIsCredit),
+		Limit:            int32(limit + 1),
 	}
 	bills, err := h.queries.GetAllBill(c.Request.Context(), args)
 	if err != nil {

@@ -11,38 +11,29 @@ select p.* from product p where p.id = ? and p.is_deleted = False;
 -- value of q when q is all-digits (exact id match), 0 otherwise.
 -- NULL on both means "no search".
 --
--- Typed filters (search-and-filters thread, Round E):
---   - filter_part_number_prefix: pre-wrapped 'prefix%' against
---     articles.articleNumber (joined via legacyArticleId).
---   - filter_barcode_prefix: pre-wrapped 'prefix%' resolved through
---     an EXISTS subquery on articleean.eancode → legacyArticleId,
---     so multi-row barcode FK explosion can never duplicate product
---     rows in the page (caller still slices to limit+1).
---
--- Each sqlc.narg() is referenced once (in the `prm` derived table) so
--- the file stays under plsql:S1192's repeated-literal threshold.
-select p.*
-from user
-join store s on s.company_id = user.company_id
-join product p on p.store_id = s.id
-left join articles a on a.legacyArticleId = p.article_id
-CROSS JOIN (SELECT CAST(sqlc.narg('query_like') AS CHAR(255)) AS q,
-                   CAST(sqlc.narg('query_id_match')             AS UNSIGNED)  AS qid,
-                   CAST(sqlc.narg('part_number_prefix') AS CHAR(150)) AS fpn,
-                   CAST(sqlc.narg('barcode_prefix') AS CHAR(25))  AS fbc,
-                   CAST(sqlc.narg('cursor_id')                  AS UNSIGNED)  AS ci) prm
-where user.id = ? and p.is_deleted = False
-  and (prm.q IS NULL
-       OR p.name COLLATE utf8mb4_unicode_ci LIKE prm.q
-       OR COALESCE(p.shelf_number,'') COLLATE utf8mb4_unicode_ci LIKE prm.q
-       OR p.id = prm.qid)
-  and (prm.fpn IS NULL
-       OR a.articleNumber COLLATE utf8mb4_unicode_ci LIKE prm.fpn)
-  and (prm.fbc IS NULL
+-- Typed filters:
+--   - part_number_prefix: 'prefix%' against articles.articleNumber
+--     (joined via legacyArticleId).
+--   - barcode_prefix: 'prefix%' resolved through an EXISTS subquery on
+--     articleean.eancode → legacyArticleId, so multi-row barcode FK
+--     explosion can never duplicate product rows in the page.
+SELECT p.*
+FROM user
+JOIN store s     ON s.company_id = user.company_id
+JOIN product p   ON p.store_id = s.id
+LEFT JOIN articles a ON a.legacyArticleId = p.article_id
+WHERE user.id = ? AND p.is_deleted = FALSE
+  AND (sqlc.narg('query_like') IS NULL
+       OR p.name LIKE sqlc.narg('query_like')
+       OR COALESCE(p.shelf_number,'') LIKE sqlc.narg('query_like')
+       OR p.id = sqlc.narg('query_id_match'))
+  AND (sqlc.narg('part_number_prefix') IS NULL
+       OR a.articleNumber LIKE sqlc.narg('part_number_prefix'))
+  AND (sqlc.narg('barcode_prefix') IS NULL
        OR EXISTS (SELECT 1 FROM articleean ae
                    WHERE ae.legacyArticleId = p.article_id
-                     AND ae.eancode COLLATE utf8mb4_unicode_ci LIKE prm.fbc))
-  and (prm.ci IS NULL OR p.id < prm.ci)
+                     AND ae.eancode LIKE sqlc.narg('barcode_prefix')))
+  AND (sqlc.narg('cursor_id') IS NULL OR p.id < sqlc.narg('cursor_id'))
 ORDER BY p.id DESC
 LIMIT ?;
 

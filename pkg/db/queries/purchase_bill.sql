@@ -2,38 +2,28 @@
 -- Keyset pagination on (effective_date DESC, id DESC). Caller fetches
 -- limit+1 to detect has_more.
 -- query_seq_exact matches either supplier_sequence_number or b.id.
-select b.*
-	from purchase_bill as b
-	join store on store.id = b.store_id
-	join company on company.id = store.company_id
-	join user on user.id = ? and company.id = user.company_id
-	left join supplier on supplier.id = b.supplier_id
-	cross join (select CAST(sqlc.narg('state_filter')               AS SIGNED)      AS sf,
-	                   CAST(sqlc.narg('query_like') AS CHAR(255))   AS q,
-	                   CAST(sqlc.narg('query_seq_exact')            AS UNSIGNED)    AS qe,
-	                   CAST(sqlc.narg('seq_prefix') AS CHAR(32))    AS fs,
-	                   CAST(sqlc.narg('supplier_seq_prefix') AS CHAR(64))    AS fss,
-	                   CAST(sqlc.narg('phone_prefix') AS CHAR(20))    AS fp,
-	                   CAST(sqlc.narg('cursor_date')                AS DATETIME(6)) AS cd,
-	                   CAST(sqlc.narg('cursor_id')                  AS UNSIGNED)    AS ci) p
-	where b.state >= 0
-	  and (p.sf is null or b.state = p.sf)
-	  and (
-	        (p.q is null and p.qe is null)
-	     or supplier.name COLLATE utf8mb4_unicode_ci LIKE p.q
-	     or CAST(b.supplier_sequence_number AS CHAR) = CAST(p.qe AS CHAR)
-	     or CAST(b.id AS CHAR)                       = CAST(p.qe AS CHAR)
-	  )
-	  and (p.fs  is null or CAST(b.sequence_number AS CHAR) COLLATE utf8mb4_unicode_ci LIKE p.fs)
-	  and (p.fss is null or CAST(b.supplier_sequence_number AS CHAR) COLLATE utf8mb4_unicode_ci LIKE p.fss)
-	  and (p.fp  is null or supplier.phone_number COLLATE utf8mb4_unicode_ci LIKE p.fp)
-	  and (
-	        p.cd is null
-	     or b.effective_date < p.cd
-	     or (b.effective_date = p.cd and b.id < p.ci)
-	  )
-	order by b.effective_date desc, b.id desc
-	limit ?;
+SELECT b.*
+FROM purchase_bill AS b
+JOIN store ON store.id = b.store_id
+JOIN company ON company.id = store.company_id
+JOIN user ON user.id = ? AND company.id = user.company_id
+LEFT JOIN supplier ON supplier.id = b.supplier_id
+WHERE b.state >= 0
+  AND (sqlc.narg('state_filter') IS NULL OR b.state = sqlc.narg('state_filter'))
+  AND (
+        (sqlc.narg('query_like') IS NULL AND sqlc.narg('query_seq_exact') IS NULL)
+     OR supplier.name LIKE sqlc.narg('query_like')
+     OR b.supplier_sequence_number = sqlc.narg('query_seq_exact')
+     OR b.id                       = sqlc.narg('query_seq_exact')
+  )
+  AND (sqlc.narg('seq_prefix')          IS NULL OR b.sequence_number_str          LIKE sqlc.narg('seq_prefix'))
+  AND (sqlc.narg('supplier_seq_prefix') IS NULL OR b.supplier_sequence_number_str LIKE sqlc.narg('supplier_seq_prefix'))
+  AND (sqlc.narg('phone_prefix')        IS NULL OR supplier.phone_number          LIKE sqlc.narg('phone_prefix'))
+  AND (sqlc.narg('cursor_date') IS NULL
+       OR b.effective_date < sqlc.narg('cursor_date')
+       OR (b.effective_date = sqlc.narg('cursor_date') AND b.id < sqlc.narg('cursor_id')))
+ORDER BY b.effective_date DESC, b.id DESC
+LIMIT ?;
 
 -- name: GetPurchaseBillDetail :one
 select b.*

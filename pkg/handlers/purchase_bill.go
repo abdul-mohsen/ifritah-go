@@ -382,16 +382,16 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 	phonePrefix := buildPlainPrefixFilter(request.Phone)
 
 	bill, err := h.getPurchaseBills(c, db.GetAllPurchaseBillParams{
-		ID:                      int32(userSession.id),
-		StateFilter:             nullInt64FromInt32Ptr(stateFilter),
-		QueryLike:               queryLike,
-		QuerySeqExact:           nullInt64FromUint64Ptr(querySeqExact),
+		ID:                int32(userSession.id),
+		StateFilter:       stateFilter,
+		QueryLike:         queryLike,
+		QuerySeqExact:     querySeqExact,
 		SeqPrefix:         seqPrefix,
 		SupplierSeqPrefix: supplierSeqPrefix,
 		PhonePrefix:       phonePrefix,
-		CursorDate:              cursorDate,
-		CursorID:                nullInt64FromUint64Ptr(cursorID),
-		Limit:                   int32(limit + 1),
+		CursorDate:        cursorDate,
+		CursorID:          cursorID,
+		Limit:             int32(limit + 1),
 	})
 	if err != nil {
 		log.Printf("GetAllPurchaseBill: %v", err)

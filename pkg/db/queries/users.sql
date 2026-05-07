@@ -66,18 +66,14 @@ SELECT u.id, u.username, COALESCE(u.full_name,'') AS full_name,
        u.role, u.is_active, u.company_id,
        CAST(COALESCE(DATE_FORMAT(u.last_login, '%Y-%m-%dT%H:%i:%sZ'), '') AS CHAR(40)) AS last_login
 FROM user u
-CROSS JOIN (SELECT CAST(sqlc.narg('query_like') AS CHAR(255)) AS q,
-                   CAST(sqlc.narg('phone_prefix') AS CHAR(20))  AS fp,
-                   CAST(sqlc.narg('email_prefix') AS CHAR(150)) AS fe,
-                   CAST(sqlc.narg('cursor_id')            AS UNSIGNED)  AS ci) prm
-WHERE (prm.q IS NULL
-       OR u.username COLLATE utf8mb4_unicode_ci LIKE prm.q
-       OR COALESCE(u.full_name,'') COLLATE utf8mb4_unicode_ci LIKE prm.q
-       OR COALESCE(u.email,'') COLLATE utf8mb4_unicode_ci LIKE prm.q
-       OR COALESCE(u.phone,'') COLLATE utf8mb4_unicode_ci LIKE prm.q)
-  AND (prm.fp IS NULL OR u.phone COLLATE utf8mb4_unicode_ci LIKE prm.fp)
-  AND (prm.fe IS NULL OR COALESCE(u.email,'') COLLATE utf8mb4_unicode_ci LIKE prm.fe)
-  AND (prm.ci IS NULL OR u.id > prm.ci)
+WHERE (sqlc.narg('query_like') IS NULL
+       OR u.username                   LIKE sqlc.narg('query_like')
+       OR COALESCE(u.full_name,'')     LIKE sqlc.narg('query_like')
+       OR COALESCE(u.email,'')         LIKE sqlc.narg('query_like')
+       OR COALESCE(u.phone,'')         LIKE sqlc.narg('query_like'))
+  AND (sqlc.narg('phone_prefix') IS NULL OR u.phone               LIKE sqlc.narg('phone_prefix'))
+  AND (sqlc.narg('email_prefix') IS NULL OR COALESCE(u.email,'')  LIKE sqlc.narg('email_prefix'))
+  AND (sqlc.narg('cursor_id')    IS NULL OR u.id > sqlc.narg('cursor_id'))
 ORDER BY u.id ASC
 LIMIT ?;
 

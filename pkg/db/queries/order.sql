@@ -6,21 +6,15 @@ SELECT o.id, o.sequence_number, o.client_id, COALESCE(o.customer_name, '') AS cu
        COALESCE(c.name, o.customer_name, '') AS client_name
 FROM orders o
 LEFT JOIN client c ON c.id = o.client_id
-CROSS JOIN (SELECT CAST(sqlc.narg('company_id')           AS UNSIGNED)    AS cid,
-                   CAST(sqlc.narg('query_like') AS CHAR(255))   AS q,
-                   CAST(sqlc.narg('seq_prefix') AS CHAR(32))    AS fs,
-                   CAST(sqlc.narg('phone_prefix') AS CHAR(20))    AS fp,
-                   CAST(sqlc.narg('cursor_created_at')    AS DATETIME(6)) AS cca,
-                   CAST(sqlc.narg('cursor_id')            AS UNSIGNED)    AS ci) p
-WHERE o.store_id IN (SELECT id FROM store WHERE company_id = p.cid)
-  AND (p.q IS NULL
-       OR o.sequence_number COLLATE utf8mb4_unicode_ci LIKE p.q
-       OR o.customer_name COLLATE utf8mb4_unicode_ci LIKE p.q)
-  AND (p.fs IS NULL OR o.sequence_number COLLATE utf8mb4_unicode_ci LIKE p.fs)
-  AND (p.fp IS NULL OR c.phone COLLATE utf8mb4_unicode_ci LIKE p.fp)
-  AND (p.cca IS NULL
-       OR o.created_at < p.cca
-       OR (o.created_at = p.cca AND o.id < p.ci))
+WHERE o.store_id IN (SELECT id FROM store WHERE company_id = sqlc.narg('company_id'))
+  AND (sqlc.narg('query_like') IS NULL
+       OR o.sequence_number LIKE sqlc.narg('query_like')
+       OR o.customer_name   LIKE sqlc.narg('query_like'))
+  AND (sqlc.narg('seq_prefix')   IS NULL OR o.sequence_number LIKE sqlc.narg('seq_prefix'))
+  AND (sqlc.narg('phone_prefix') IS NULL OR c.phone           LIKE sqlc.narg('phone_prefix'))
+  AND (sqlc.narg('cursor_created_at') IS NULL
+       OR o.created_at < sqlc.narg('cursor_created_at')
+       OR (o.created_at = sqlc.narg('cursor_created_at') AND o.id < sqlc.narg('cursor_id')))
 ORDER BY o.created_at DESC, o.id DESC
 LIMIT ?;
 

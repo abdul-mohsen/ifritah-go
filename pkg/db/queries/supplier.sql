@@ -6,22 +6,17 @@ SELECT * From supplier where is_deleted = FALSE and id = ?;
 
 -- name: GetAllSupplier :many
 -- Keyset on (id DESC). Typed filters AND with query_like.
-SELECT s.* From supplier s
-CROSS JOIN (SELECT CAST(sqlc.narg('query_like') AS CHAR(255)) AS q,
-                   CAST(sqlc.narg('phone_prefix') AS CHAR(20))  AS fp,
-                   CAST(sqlc.narg('vat_prefix') AS CHAR(20))  AS fv,
-                   CAST(sqlc.narg('cr_prefix') AS CHAR(50))  AS fc,
-                   CAST(sqlc.narg('cursor_id')           AS UNSIGNED)  AS ci) p
-WHERE s.is_deleted = FALSE
-  AND (p.q IS NULL
-       OR s.name COLLATE utf8mb4_unicode_ci LIKE p.q
-       OR s.phone_number COLLATE utf8mb4_unicode_ci LIKE p.q
-       OR s.vat_number COLLATE utf8mb4_unicode_ci LIKE p.q)
-  AND (p.fp IS NULL OR s.phone_number COLLATE utf8mb4_unicode_ci LIKE p.fp)
-  AND (p.fv IS NULL OR s.vat_number COLLATE utf8mb4_unicode_ci LIKE p.fv)
-  AND (p.fc IS NULL OR s.commercial_registration COLLATE utf8mb4_unicode_ci LIKE p.fc)
-  AND (p.ci IS NULL OR s.id < p.ci)
-ORDER BY s.id DESC
+SELECT * FROM supplier
+WHERE is_deleted = FALSE
+  AND (sqlc.narg('query_like') IS NULL
+       OR name         LIKE sqlc.narg('query_like')
+       OR phone_number LIKE sqlc.narg('query_like')
+       OR vat_number   LIKE sqlc.narg('query_like'))
+  AND (sqlc.narg('phone_prefix') IS NULL OR phone_number            LIKE sqlc.narg('phone_prefix'))
+  AND (sqlc.narg('vat_prefix')   IS NULL OR vat_number              LIKE sqlc.narg('vat_prefix'))
+  AND (sqlc.narg('cr_prefix')    IS NULL OR commercial_registration LIKE sqlc.narg('cr_prefix'))
+  AND (sqlc.narg('cursor_id')    IS NULL OR id < sqlc.narg('cursor_id'))
+ORDER BY id DESC
 LIMIT ?;
 
 -- name: AddSupplier :execresult

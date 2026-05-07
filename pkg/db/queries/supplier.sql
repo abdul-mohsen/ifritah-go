@@ -7,18 +7,18 @@ SELECT * From supplier where is_deleted = FALSE and id = ?;
 -- name: GetAllSupplier :many
 -- Keyset on (id DESC). Typed filters AND with query_like.
 SELECT s.* From supplier s
-CROSS JOIN (SELECT CAST(sqlc.narg('query_like')          AS CHAR(255)) AS q,
-                   CAST(sqlc.narg('filter_phone_prefix') AS CHAR(20))  AS fp,
-                   CAST(sqlc.narg('filter_vat_prefix')   AS CHAR(20))  AS fv,
-                   CAST(sqlc.narg('filter_cr_prefix')    AS CHAR(50))  AS fc,
+CROSS JOIN (SELECT CAST(sqlc.narg('query_like') AS CHAR(255)) AS q,
+                   CAST(sqlc.narg('phone_prefix') AS CHAR(20))  AS fp,
+                   CAST(sqlc.narg('vat_prefix') AS CHAR(20))  AS fv,
+                   CAST(sqlc.narg('cr_prefix') AS CHAR(50))  AS fc,
                    CAST(sqlc.narg('cursor_id')           AS UNSIGNED)  AS ci) p
 WHERE s.is_deleted = FALSE
   AND (p.q IS NULL
-       OR s.name         LIKE p.q COLLATE utf8mb4_unicode_ci
-       OR s.phone_number LIKE p.q COLLATE utf8mb4_unicode_ci
-       OR s.vat_number   LIKE p.q COLLATE utf8mb4_unicode_ci)
+       OR s.name COLLATE utf8mb4_unicode_ci LIKE p.q
+       OR s.phone_number COLLATE utf8mb4_unicode_ci LIKE p.q
+       OR s.vat_number COLLATE utf8mb4_unicode_ci LIKE p.q)
   AND (p.fp IS NULL OR s.phone_number COLLATE utf8mb4_unicode_ci LIKE p.fp)
-  AND (p.fv IS NULL OR s.vat_number   COLLATE utf8mb4_unicode_ci LIKE p.fv)
+  AND (p.fv IS NULL OR s.vat_number COLLATE utf8mb4_unicode_ci LIKE p.fv)
   AND (p.fc IS NULL OR s.commercial_registration COLLATE utf8mb4_unicode_ci LIKE p.fc)
   AND (p.ci IS NULL OR s.id < p.ci)
 ORDER BY s.id DESC

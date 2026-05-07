@@ -57,8 +57,8 @@ func (h *handler) GetOrders(c *gin.Context) {
 	rows, err := h.queries.GetOrders(c.Request.Context(), db.GetOrdersParams{
 		CompanyID:         sql.NullInt64{Int64: int64(companyID), Valid: true},
 		QueryLike:         queryLike,
-		FilterSeqPrefix:   seqPrefix,
-		FilterPhonePrefix: phonePrefix,
+		SeqPrefix:   seqPrefix,
+		PhonePrefix: phonePrefix,
 		CursorCreatedAt:   cursorCreatedAt,
 		CursorID:          nullInt64FromUint64Ptr(cursorID),
 		Limit:             int32(limit + 1),

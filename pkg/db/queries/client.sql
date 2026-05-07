@@ -2,19 +2,19 @@
 -- Keyset pagination on (updated_at DESC, id DESC).
 -- Typed filters AND with `query_like` and with each other.
 SELECT c.* FROM client c
-CROSS JOIN (SELECT CAST(sqlc.narg('query_like')          AS CHAR(255))   AS q,
-                   CAST(sqlc.narg('filter_phone_prefix') AS CHAR(20))    AS fp,
-                   CAST(sqlc.narg('filter_vat_prefix')   AS CHAR(20))    AS fv,
-                   CAST(sqlc.narg('filter_cr_prefix')    AS CHAR(50))    AS fc,
+CROSS JOIN (SELECT CAST(sqlc.narg('query_like') AS CHAR(255))   AS q,
+                   CAST(sqlc.narg('phone_prefix') AS CHAR(20))    AS fp,
+                   CAST(sqlc.narg('vat_prefix') AS CHAR(20))    AS fv,
+                   CAST(sqlc.narg('cr_prefix') AS CHAR(50))    AS fc,
                    CAST(sqlc.narg('cursor_updated_at')   AS DATETIME(6)) AS cu,
                    CAST(sqlc.narg('cursor_id')           AS UNSIGNED)    AS ci) p
 WHERE c.is_deleted = FALSE
   AND (p.q IS NULL
-       OR c.name  LIKE p.q COLLATE utf8mb4_unicode_ci
-       OR c.email LIKE p.q COLLATE utf8mb4_unicode_ci
-       OR c.phone LIKE p.q COLLATE utf8mb4_unicode_ci)
+       OR c.name COLLATE utf8mb4_unicode_ci LIKE p.q
+       OR c.email COLLATE utf8mb4_unicode_ci LIKE p.q
+       OR c.phone COLLATE utf8mb4_unicode_ci LIKE p.q)
   AND (p.fp IS NULL OR c.phone COLLATE utf8mb4_unicode_ci LIKE p.fp)
-  AND (p.fv IS NULL OR c.vat_number   COLLATE utf8mb4_unicode_ci LIKE p.fv)
+  AND (p.fv IS NULL OR c.vat_number COLLATE utf8mb4_unicode_ci LIKE p.fv)
   AND (p.fc IS NULL OR c.commercial_registration COLLATE utf8mb4_unicode_ci LIKE p.fc)
   AND (p.cu IS NULL
        OR c.updated_at < p.cu

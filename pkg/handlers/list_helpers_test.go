@@ -97,4 +97,3 @@ func TestBuildBillSearchParams_Empty(t *testing.T) {
 		t.Fatalf("empty query must yield nil/nil, got name=%v phone=%v", name, phone)
 	}
 }
-

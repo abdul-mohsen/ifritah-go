@@ -83,9 +83,9 @@ func (h *handler) GetAllClient(c *gin.Context) {
 
 	res, err := h.queries.GetClients(c.Request.Context(), db.GetClientsParams{
 		QueryLike:         queryLike,
-		FilterPhonePrefix: phonePrefix,
-		FilterVatPrefix:   vatPrefix,
-		FilterCrPrefix:    crPrefix,
+		PhonePrefix: phonePrefix,
+		VatPrefix:   vatPrefix,
+		CrPrefix:    crPrefix,
 		CursorUpdatedAt:   cursorUpdatedAt,
 		CursorID:          cursorIDNI,
 		Limit:             int32(limit + 1),

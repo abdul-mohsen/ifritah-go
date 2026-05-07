@@ -179,13 +179,13 @@ func (h *handler) GetAllProducts(c *gin.Context) {
 	barcodePrefix := buildPlainPrefixFilter(request.Barcode)
 
 	args := db.GetAllProductParams{
-		ID:                       int32(user.id),
-		QueryLike:                queryLike,
-		QueryIDMatch:             nullInt64FromUint64Ptr(queryIDMatch),
-		FilterPartNumberPrefix:   partNumberPrefix,
-		FilterBarcodePrefix:      barcodePrefix,
-		CursorID:                 nullInt64FromUint64Ptr(cursorID),
-		Limit:                    int32(limit + 1),
+		ID:                     int32(user.id),
+		QueryLike:              queryLike,
+		QueryIDMatch:           nullInt64FromUint64Ptr(queryIDMatch),
+		PartNumberPrefix: partNumberPrefix,
+		BarcodePrefix:    barcodePrefix,
+		CursorID:               nullInt64FromUint64Ptr(cursorID),
+		Limit:                  int32(limit + 1),
 	}
 
 	products, err := h.queries.GetAllProduct(c.Request.Context(), args)

@@ -26,15 +26,15 @@ from user
 join store s on s.company_id = user.company_id
 join product p on p.store_id = s.id
 left join articles a on a.legacyArticleId = p.article_id
-CROSS JOIN (SELECT CAST(sqlc.narg('query_like')                 AS CHAR(255)) AS q,
+CROSS JOIN (SELECT CAST(sqlc.narg('query_like') AS CHAR(255)) AS q,
                    CAST(sqlc.narg('query_id_match')             AS UNSIGNED)  AS qid,
-                   CAST(sqlc.narg('filter_part_number_prefix')  AS CHAR(150)) AS fpn,
-                   CAST(sqlc.narg('filter_barcode_prefix')      AS CHAR(25))  AS fbc,
+                   CAST(sqlc.narg('part_number_prefix') AS CHAR(150)) AS fpn,
+                   CAST(sqlc.narg('barcode_prefix') AS CHAR(25))  AS fbc,
                    CAST(sqlc.narg('cursor_id')                  AS UNSIGNED)  AS ci) prm
 where user.id = ? and p.is_deleted = False
   and (prm.q IS NULL
-       OR p.name LIKE prm.q COLLATE utf8mb4_unicode_ci
-       OR COALESCE(p.shelf_number,'') LIKE prm.q COLLATE utf8mb4_unicode_ci
+       OR p.name COLLATE utf8mb4_unicode_ci LIKE prm.q
+       OR COALESCE(p.shelf_number,'') COLLATE utf8mb4_unicode_ci LIKE prm.q
        OR p.id = prm.qid)
   and (prm.fpn IS NULL
        OR a.articleNumber COLLATE utf8mb4_unicode_ci LIKE prm.fpn)

@@ -117,8 +117,8 @@ func (h *handler) ListUsers(c *gin.Context) {
 
 	params := db.ListUsersParams{
 		QueryLike:         queryLike,
-		FilterPhonePrefix: phonePrefix,
-		FilterEmailPrefix: emailPrefix,
+		PhonePrefix: phonePrefix,
+		EmailPrefix: emailPrefix,
 		CursorID:          nullInt64FromUint64Ptr(cursorID),
 		Limit:             int32(limit + 1),
 	}

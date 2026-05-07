@@ -23,10 +23,10 @@ FROM bill
 JOIN credit_note cn ON cn.bill_id = bill.id
 LEFT JOIN client  ON client.id = bill.client_id
 CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')        AS SIGNED)       AS sf,
-                   CAST(sqlc.narg('query_name_like')    AS CHAR(255))    AS qn,
+                   CAST(sqlc.narg('query_name_like') AS CHAR(255))    AS qn,
                    CAST(sqlc.narg('query_phone_digits') AS CHAR(32))     AS qp,
-                   CAST(sqlc.narg('filter_phone_prefix') AS CHAR(20))    AS fp,
-                   CAST(sqlc.narg('filter_seq_prefix')   AS CHAR(32))    AS fs,
+                   CAST(sqlc.narg('phone_prefix') AS CHAR(20))    AS fp,
+                   CAST(sqlc.narg('seq_prefix') AS CHAR(32))    AS fs,
                    CAST(sqlc.narg('cursor_date')        AS DATETIME(6))  AS cd,
                    CAST(sqlc.narg('cursor_id')          AS UNSIGNED)     AS ci,
                    CAST(sqlc.narg('cursor_is_credit')   AS UNSIGNED)     AS cic) p
@@ -35,18 +35,17 @@ WHERE bill.state >= 0
   AND (
         (p.qn IS NULL AND p.qp IS NULL)
      OR (p.qp IS NOT NULL AND (
-            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE p.qp COLLATE utf8mb4_unicode_ci
-         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE p.qp COLLATE utf8mb4_unicode_ci
+            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') COLLATE utf8mb4_unicode_ci LIKE p.qp
+         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') COLLATE utf8mb4_unicode_ci LIKE p.qp
         ))
-     OR (p.qn IS NOT NULL AND (
-            bill.userName LIKE p.qn COLLATE utf8mb4_unicode_ci
-         OR client.name   LIKE p.qn COLLATE utf8mb4_unicode_ci
+     OR (p.qn IS NOT NULL AND ( bill.userName COLLATE utf8mb4_unicode_ci LIKE p.qn
+         OR client.name COLLATE utf8mb4_unicode_ci LIKE p.qn
         ))
   )
   AND (
         p.fp IS NULL
      OR bill.user_phone_number COLLATE utf8mb4_unicode_ci LIKE p.fp
-     OR client.phone           COLLATE utf8mb4_unicode_ci LIKE p.fp
+     OR client.phone COLLATE utf8mb4_unicode_ci LIKE p.fp
   )
   AND (
         p.fs IS NULL
@@ -75,10 +74,10 @@ SELECT bill.id AS id,
 FROM bill
 LEFT JOIN client ON client.id = bill.client_id
 CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')        AS SIGNED)       AS sf,
-                   CAST(sqlc.narg('query_name_like')    AS CHAR(255))    AS qn,
+                   CAST(sqlc.narg('query_name_like') AS CHAR(255))    AS qn,
                    CAST(sqlc.narg('query_phone_digits') AS CHAR(32))     AS qp,
-                   CAST(sqlc.narg('filter_phone_prefix') AS CHAR(20))    AS fp,
-                   CAST(sqlc.narg('filter_seq_prefix')   AS CHAR(32))    AS fs,
+                   CAST(sqlc.narg('phone_prefix') AS CHAR(20))    AS fp,
+                   CAST(sqlc.narg('seq_prefix') AS CHAR(32))    AS fs,
                    CAST(sqlc.narg('cursor_date')        AS DATETIME(6))  AS cd,
                    CAST(sqlc.narg('cursor_id')          AS UNSIGNED)     AS ci,
                    CAST(sqlc.narg('cursor_is_credit')   AS UNSIGNED)     AS cic) q
@@ -87,18 +86,17 @@ WHERE bill.state >= 0
   AND (
         (q.qn IS NULL AND q.qp IS NULL)
      OR (q.qp IS NOT NULL AND (
-            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE q.qp COLLATE utf8mb4_unicode_ci
-         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE q.qp COLLATE utf8mb4_unicode_ci
+            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') COLLATE utf8mb4_unicode_ci LIKE q.qp
+         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') COLLATE utf8mb4_unicode_ci LIKE q.qp
         ))
-     OR (q.qn IS NOT NULL AND (
-            bill.userName LIKE q.qn COLLATE utf8mb4_unicode_ci
-         OR client.name   LIKE q.qn COLLATE utf8mb4_unicode_ci
+     OR (q.qn IS NOT NULL AND ( bill.userName COLLATE utf8mb4_unicode_ci LIKE q.qn
+         OR client.name COLLATE utf8mb4_unicode_ci LIKE q.qn
         ))
   )
   AND (
         q.fp IS NULL
      OR bill.user_phone_number COLLATE utf8mb4_unicode_ci LIKE q.fp
-     OR client.phone           COLLATE utf8mb4_unicode_ci LIKE q.fp
+     OR client.phone COLLATE utf8mb4_unicode_ci LIKE q.fp
   )
   AND (
         q.fs IS NULL

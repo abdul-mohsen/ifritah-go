@@ -9,24 +9,24 @@ select b.*
 	join user on user.id = ? and company.id = user.company_id
 	left join supplier on supplier.id = b.supplier_id
 	cross join (select CAST(sqlc.narg('state_filter')               AS SIGNED)      AS sf,
-	                   CAST(sqlc.narg('query_like')                 AS CHAR(255))   AS q,
+	                   CAST(sqlc.narg('query_like') AS CHAR(255))   AS q,
 	                   CAST(sqlc.narg('query_seq_exact')            AS UNSIGNED)    AS qe,
-	                   CAST(sqlc.narg('filter_seq_prefix')          AS CHAR(32))    AS fs,
-	                   CAST(sqlc.narg('filter_supplier_seq_prefix') AS CHAR(64))    AS fss,
-	                   CAST(sqlc.narg('filter_phone_prefix')        AS CHAR(20))    AS fp,
+	                   CAST(sqlc.narg('seq_prefix') AS CHAR(32))    AS fs,
+	                   CAST(sqlc.narg('supplier_seq_prefix') AS CHAR(64))    AS fss,
+	                   CAST(sqlc.narg('phone_prefix') AS CHAR(20))    AS fp,
 	                   CAST(sqlc.narg('cursor_date')                AS DATETIME(6)) AS cd,
 	                   CAST(sqlc.narg('cursor_id')                  AS UNSIGNED)    AS ci) p
 	where b.state >= 0
 	  and (p.sf is null or b.state = p.sf)
 	  and (
 	        (p.q is null and p.qe is null)
-	     or supplier.name like p.q COLLATE utf8mb4_unicode_ci
+	     or supplier.name COLLATE utf8mb4_unicode_ci LIKE p.q
 	     or CAST(b.supplier_sequence_number AS CHAR) = CAST(p.qe AS CHAR)
 	     or CAST(b.id AS CHAR)                       = CAST(p.qe AS CHAR)
 	  )
-	  and (p.fs  is null or CAST(b.sequence_number AS CHAR)          COLLATE utf8mb4_unicode_ci like p.fs)
-	  and (p.fss is null or CAST(b.supplier_sequence_number AS CHAR) COLLATE utf8mb4_unicode_ci like p.fss)
-	  and (p.fp  is null or supplier.phone_number                    COLLATE utf8mb4_unicode_ci like p.fp)
+	  and (p.fs  is null or CAST(b.sequence_number AS CHAR) COLLATE utf8mb4_unicode_ci LIKE p.fs)
+	  and (p.fss is null or CAST(b.supplier_sequence_number AS CHAR) COLLATE utf8mb4_unicode_ci LIKE p.fss)
+	  and (p.fp  is null or supplier.phone_number COLLATE utf8mb4_unicode_ci LIKE p.fp)
 	  and (
 	        p.cd is null
 	     or b.effective_date < p.cd

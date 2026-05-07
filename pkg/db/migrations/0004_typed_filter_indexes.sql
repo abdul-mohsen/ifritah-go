@@ -1,6 +1,24 @@
 -- Indexes backing typed-field filter chips.
--- Idempotent: drops legacy phone_digits columns from prior rounds,
--- then creates the merged index set on raw columns.
+-- Idempotent: unifies table collation to utf8mb4_unicode_ci (matches the
+-- driver DSN), drops legacy phone_digits columns, then creates the merged
+-- index set on raw columns.
+
+-- Unify collation on every table the list endpoints filter against, so
+-- queries don't need per-comparison COLLATE clauses to avoid error 1267.
+SET @s := IF((SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='bill')         <> 'utf8mb4_unicode_ci', 'ALTER TABLE `bill`         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @s := IF((SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='client')       <> 'utf8mb4_unicode_ci', 'ALTER TABLE `client`       CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @s := IF((SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='supplier')     <> 'utf8mb4_unicode_ci', 'ALTER TABLE `supplier`     CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @s := IF((SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='purchase_bill')<> 'utf8mb4_unicode_ci', 'ALTER TABLE `purchase_bill`CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @s := IF((SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='product')      <> 'utf8mb4_unicode_ci', 'ALTER TABLE `product`      CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @s := IF((SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='user')         <> 'utf8mb4_unicode_ci', 'ALTER TABLE `user`         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @s := IF((SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='cash_voucher') <> 'utf8mb4_unicode_ci', 'ALTER TABLE `cash_voucher` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
 -- Drop legacy generated columns (PREPARE pattern: MySQL 8 has no DROP COLUMN IF EXISTS).
 SET @s := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bill'     AND column_name='user_phone_digits')>0, 'ALTER TABLE `bill` DROP COLUMN `user_phone_digits`',     'DO 0');

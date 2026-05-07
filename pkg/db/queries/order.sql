@@ -7,17 +7,17 @@ SELECT o.id, o.sequence_number, o.client_id, COALESCE(o.customer_name, '') AS cu
 FROM orders o
 LEFT JOIN client c ON c.id = o.client_id
 CROSS JOIN (SELECT CAST(sqlc.narg('company_id')           AS UNSIGNED)    AS cid,
-                   CAST(sqlc.narg('query_like')           AS CHAR(255))   AS q,
-                   CAST(sqlc.narg('filter_seq_prefix')    AS CHAR(32))    AS fs,
-                   CAST(sqlc.narg('filter_phone_prefix')  AS CHAR(20))    AS fp,
+                   CAST(sqlc.narg('query_like') AS CHAR(255))   AS q,
+                   CAST(sqlc.narg('seq_prefix') AS CHAR(32))    AS fs,
+                   CAST(sqlc.narg('phone_prefix') AS CHAR(20))    AS fp,
                    CAST(sqlc.narg('cursor_created_at')    AS DATETIME(6)) AS cca,
                    CAST(sqlc.narg('cursor_id')            AS UNSIGNED)    AS ci) p
 WHERE o.store_id IN (SELECT id FROM store WHERE company_id = p.cid)
   AND (p.q IS NULL
-       OR o.sequence_number LIKE p.q COLLATE utf8mb4_unicode_ci
-       OR o.customer_name LIKE p.q COLLATE utf8mb4_unicode_ci)
-  AND (p.fs IS NULL OR o.sequence_number LIKE p.fs COLLATE utf8mb4_unicode_ci)
-  AND (p.fp IS NULL OR c.phone           COLLATE utf8mb4_unicode_ci LIKE p.fp)
+       OR o.sequence_number COLLATE utf8mb4_unicode_ci LIKE p.q
+       OR o.customer_name COLLATE utf8mb4_unicode_ci LIKE p.q)
+  AND (p.fs IS NULL OR o.sequence_number COLLATE utf8mb4_unicode_ci LIKE p.fs)
+  AND (p.fp IS NULL OR c.phone COLLATE utf8mb4_unicode_ci LIKE p.fp)
   AND (p.cca IS NULL
        OR o.created_at < p.cca
        OR (o.created_at = p.cca AND o.id < p.ci))

@@ -3,9 +3,6 @@
   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetAllBill :many
--- Keyset pagination on (effective_date DESC, id DESC, is_credit DESC).
--- query_name_like / query_phone_digits split (PR #32) for free-text q.
--- filter_phone_prefix / filter_seq_prefix: typed-chip prefix filters.
 SELECT bill.id AS id,
        bill.effective_date AS effective_date,
        payment_due_date,
@@ -22,42 +19,24 @@ SELECT bill.id AS id,
 FROM bill
 JOIN credit_note cn ON cn.bill_id = bill.id
 LEFT JOIN client  ON client.id = bill.client_id
-CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')        AS SIGNED)       AS sf,
-                   CAST(sqlc.narg('query_name_like')    AS CHAR(255))    AS qn,
-                   CAST(sqlc.narg('query_phone_digits') AS CHAR(32))     AS qp,
-                   CAST(sqlc.narg('filter_phone_prefix') AS CHAR(20))    AS fp,
-                   CAST(sqlc.narg('filter_seq_prefix')   AS CHAR(32))    AS fs,
-                   CAST(sqlc.narg('cursor_date')        AS DATETIME(6))  AS cd,
-                   CAST(sqlc.narg('cursor_id')          AS UNSIGNED)     AS ci,
-                   CAST(sqlc.narg('cursor_is_credit')   AS UNSIGNED)     AS cic) p
 WHERE bill.state >= 0
-  AND (p.sf IS NULL OR bill.state = p.sf)
+  AND (sqlc.narg('state_filter') IS NULL OR bill.state = sqlc.narg('state_filter'))
   AND (
-        (p.qn IS NULL AND p.qp IS NULL)
-     OR (p.qp IS NOT NULL AND (
-            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE p.qp COLLATE utf8mb4_unicode_ci
-         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE p.qp COLLATE utf8mb4_unicode_ci
-        ))
-     OR (p.qn IS NOT NULL AND (
-            bill.userName LIKE p.qn COLLATE utf8mb4_unicode_ci
-         OR client.name   LIKE p.qn COLLATE utf8mb4_unicode_ci
-        ))
+        (sqlc.narg('query_name_like') IS NULL AND sqlc.narg('query_phone_digits') IS NULL)
+     OR REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE sqlc.narg('query_phone_digits')
+     OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE sqlc.narg('query_phone_digits')
+     OR bill.userName LIKE sqlc.narg('query_name_like')
+     OR client.name   LIKE sqlc.narg('query_name_like')
   )
-  AND (
-        p.fp IS NULL
-     OR bill.user_phone_number COLLATE utf8mb4_unicode_ci LIKE p.fp
-     OR client.phone           COLLATE utf8mb4_unicode_ci LIKE p.fp
-  )
-  AND (
-        p.fs IS NULL
-     OR CAST(bill.sequence_number AS CHAR) COLLATE utf8mb4_unicode_ci LIKE p.fs
-  )
-  AND (
-        p.cd IS NULL
-     OR bill.effective_date < p.cd
-     OR (bill.effective_date = p.cd AND bill.id < p.ci)
-     OR (bill.effective_date = p.cd AND bill.id = p.ci AND 1 < p.cic)
-  )
+  AND (sqlc.narg('phone_prefix') IS NULL
+       OR bill.user_phone_number LIKE sqlc.narg('phone_prefix')
+       OR client.phone           LIKE sqlc.narg('phone_prefix'))
+  AND (sqlc.narg('seq_prefix') IS NULL OR bill.sequence_number_str LIKE sqlc.narg('seq_prefix'))
+  AND (sqlc.narg('cursor_date') IS NULL
+       OR bill.effective_date < sqlc.narg('cursor_date')
+       OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id < sqlc.narg('cursor_id'))
+       OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id = sqlc.narg('cursor_id')
+           AND CAST(sqlc.narg('cursor_is_credit') AS UNSIGNED) > 1))
 UNION ALL
 SELECT bill.id AS id,
        bill.effective_date AS effective_date,
@@ -74,42 +53,24 @@ SELECT bill.id AS id,
        0 AS is_credit
 FROM bill
 LEFT JOIN client ON client.id = bill.client_id
-CROSS JOIN (SELECT CAST(sqlc.narg('state_filter')        AS SIGNED)       AS sf,
-                   CAST(sqlc.narg('query_name_like')    AS CHAR(255))    AS qn,
-                   CAST(sqlc.narg('query_phone_digits') AS CHAR(32))     AS qp,
-                   CAST(sqlc.narg('filter_phone_prefix') AS CHAR(20))    AS fp,
-                   CAST(sqlc.narg('filter_seq_prefix')   AS CHAR(32))    AS fs,
-                   CAST(sqlc.narg('cursor_date')        AS DATETIME(6))  AS cd,
-                   CAST(sqlc.narg('cursor_id')          AS UNSIGNED)     AS ci,
-                   CAST(sqlc.narg('cursor_is_credit')   AS UNSIGNED)     AS cic) q
 WHERE bill.state >= 0
-  AND (q.sf IS NULL OR bill.state = q.sf)
+  AND (sqlc.narg('state_filter') IS NULL OR bill.state = sqlc.narg('state_filter'))
   AND (
-        (q.qn IS NULL AND q.qp IS NULL)
-     OR (q.qp IS NOT NULL AND (
-            REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE q.qp COLLATE utf8mb4_unicode_ci
-         OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE q.qp COLLATE utf8mb4_unicode_ci
-        ))
-     OR (q.qn IS NOT NULL AND (
-            bill.userName LIKE q.qn COLLATE utf8mb4_unicode_ci
-         OR client.name   LIKE q.qn COLLATE utf8mb4_unicode_ci
-        ))
+        (sqlc.narg('query_name_like') IS NULL AND sqlc.narg('query_phone_digits') IS NULL)
+     OR REGEXP_REPLACE(IFNULL(bill.user_phone_number, ''), '[^0-9]+', '') LIKE sqlc.narg('query_phone_digits')
+     OR REGEXP_REPLACE(IFNULL(client.phone, ''),            '[^0-9]+', '') LIKE sqlc.narg('query_phone_digits')
+     OR bill.userName LIKE sqlc.narg('query_name_like')
+     OR client.name   LIKE sqlc.narg('query_name_like')
   )
-  AND (
-        q.fp IS NULL
-     OR bill.user_phone_number COLLATE utf8mb4_unicode_ci LIKE q.fp
-     OR client.phone           COLLATE utf8mb4_unicode_ci LIKE q.fp
-  )
-  AND (
-        q.fs IS NULL
-     OR CAST(bill.sequence_number AS CHAR) COLLATE utf8mb4_unicode_ci LIKE q.fs
-  )
-  AND (
-        q.cd IS NULL
-     OR bill.effective_date < q.cd
-     OR (bill.effective_date = q.cd AND bill.id < q.ci)
-     OR (bill.effective_date = q.cd AND bill.id = q.ci AND 0 < q.cic)
-  )
+  AND (sqlc.narg('phone_prefix') IS NULL
+       OR bill.user_phone_number LIKE sqlc.narg('phone_prefix')
+       OR client.phone           LIKE sqlc.narg('phone_prefix'))
+  AND (sqlc.narg('seq_prefix') IS NULL OR bill.sequence_number_str LIKE sqlc.narg('seq_prefix'))
+  AND (sqlc.narg('cursor_date') IS NULL
+       OR bill.effective_date < sqlc.narg('cursor_date')
+       OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id < sqlc.narg('cursor_id'))
+       OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id = sqlc.narg('cursor_id')
+           AND CAST(sqlc.narg('cursor_is_credit') AS UNSIGNED) > 0))
 ORDER BY effective_date DESC, id DESC, is_credit DESC
 LIMIT ?;
 

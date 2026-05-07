@@ -70,9 +70,9 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 
 	args := db.GetAllSupplierParams{
 		QueryLike:         queryLike,
-		FilterPhonePrefix: phonePrefix,
-		FilterVatPrefix:   vatPrefix,
-		FilterCrPrefix:    crPrefix,
+		PhonePrefix: phonePrefix,
+		VatPrefix:   vatPrefix,
+		CrPrefix:    crPrefix,
 		CursorID:          cursorIDNullable,
 		Limit:             int32(limit + 1),
 	}

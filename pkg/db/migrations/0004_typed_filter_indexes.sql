@@ -1,7 +1,12 @@
 -- Indexes backing typed-field filter chips.
 -- Idempotent: unifies table collation to utf8mb4_unicode_ci (matches the
--- driver DSN), drops legacy phone_digits columns, then creates the merged
--- index set on raw columns.
+-- driver DSN), drops legacy phone_digits columns, adds VARCHAR mirror
+-- columns for the numeric sequence_number fields used in prefix-LIKE
+-- typed-filter queries (so sqlc infers *string instead of *uint64), then
+-- creates the merged index set on raw columns.
+--
+-- The mirror columns are VIRTUAL GENERATED — computed on read, no storage
+-- cost — and indexed so prefix LIKEs stay fast.
 
 -- Unify collation on every table the list endpoints filter against, so
 -- queries don't need per-comparison COLLATE clauses to avoid error 1267.
@@ -30,6 +35,20 @@ PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @s := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='branches' AND column_name='phone_digits')>0,      'ALTER TABLE `branches` DROP COLUMN `phone_digits`',        'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @s := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='user'     AND column_name='phone_digits')>0,      'ALTER TABLE `user` DROP COLUMN `phone_digits`',            'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+
+-- Add VARCHAR mirror columns for numeric sequence_number fields. sqlc's
+-- MySQL parser cannot infer *string from `CAST(numeric AS CHAR) LIKE narg`
+-- — it sees the underlying column type and emits *uint64. Mirroring as a
+-- VIRTUAL GENERATED VARCHAR gives sqlc a *string-typed column.
+SET @s := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bill'          AND column_name='sequence_number_str')=0,
+            'ALTER TABLE `bill`          ADD COLUMN `sequence_number_str`          VARCHAR(32) GENERATED ALWAYS AS (CAST(`sequence_number`          AS CHAR)) VIRTUAL', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @s := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='purchase_bill' AND column_name='sequence_number_str')=0,
+            'ALTER TABLE `purchase_bill` ADD COLUMN `sequence_number_str`          VARCHAR(32) GENERATED ALWAYS AS (CAST(`sequence_number`          AS CHAR)) VIRTUAL', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @s := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='purchase_bill' AND column_name='supplier_sequence_number_str')=0,
+            'ALTER TABLE `purchase_bill` ADD COLUMN `supplier_sequence_number_str` VARCHAR(64) GENERATED ALWAYS AS (CAST(`supplier_sequence_number` AS CHAR)) VIRTUAL', 'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
 -- Indexes (idempotent: skip when an index of the same name already exists).
@@ -62,4 +81,10 @@ PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='articles'      AND index_name='idx_articles_articleNumber')=0,           'CREATE INDEX `idx_articles_articleNumber` ON `articles` (`articleNumber`(64))',                   'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='articleean'    AND index_name='idx_articleean_eancode_legacy')=0,        'CREATE INDEX `idx_articleean_eancode_legacy` ON `articleean` (`eancode`, `legacyArticleId`)',     'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='bill'          AND index_name='idx_bill_sequence_number_str')=0,         'CREATE INDEX `idx_bill_sequence_number_str` ON `bill` (`sequence_number_str`)',                   'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='purchase_bill' AND index_name='idx_pb_sequence_number_str')=0,           'CREATE INDEX `idx_pb_sequence_number_str` ON `purchase_bill` (`sequence_number_str`)',           'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='purchase_bill' AND index_name='idx_pb_supplier_sequence_number_str')=0,  'CREATE INDEX `idx_pb_supplier_sequence_number_str` ON `purchase_bill` (`supplier_sequence_number_str`)', 'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;

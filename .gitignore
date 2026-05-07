@@ -11,7 +11,6 @@ ifritah
 ifritah.exe
 _*.ps1
 _*.sql
-docker-compose.yml
 docker/
 cmd/hashpw/
 

@@ -1,15 +1,6 @@
--- Indexes backing typed-field filter chips.
--- Idempotent: unifies table collation to utf8mb4_unicode_ci (matches the
--- driver DSN), drops legacy phone_digits columns, adds VARCHAR mirror
--- columns for the numeric sequence_number fields used in prefix-LIKE
--- typed-filter queries (so sqlc infers *string instead of *uint64), then
--- creates the merged index set on raw columns.
---
--- The mirror columns are VIRTUAL GENERATED — computed on read, no storage
--- cost — and indexed so prefix LIKEs stay fast.
+-- Idempotent. Unifies table collation, drops legacy phone_digits columns,
+-- adds VARCHAR mirrors for numeric sequence_number, and creates filter indexes.
 
--- Unify collation on every table the list endpoints filter against, so
--- queries don't need per-comparison COLLATE clauses to avoid error 1267.
 SET @s := IF((SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='bill')         <> 'utf8mb4_unicode_ci', 'ALTER TABLE `bill`         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', 'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @s := IF((SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='client')       <> 'utf8mb4_unicode_ci', 'ALTER TABLE `client`       CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', 'DO 0');
@@ -25,7 +16,6 @@ PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @s := IF((SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='cash_voucher') <> 'utf8mb4_unicode_ci', 'ALTER TABLE `cash_voucher` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', 'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
--- Drop legacy generated columns (PREPARE pattern: MySQL 8 has no DROP COLUMN IF EXISTS).
 SET @s := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bill'     AND column_name='user_phone_digits')>0, 'ALTER TABLE `bill` DROP COLUMN `user_phone_digits`',     'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @s := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='client'   AND column_name='phone_digits')>0,      'ALTER TABLE `client` DROP COLUMN `phone_digits`',          'DO 0');
@@ -37,10 +27,6 @@ PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @s := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='user'     AND column_name='phone_digits')>0,      'ALTER TABLE `user` DROP COLUMN `phone_digits`',            'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
--- Add VARCHAR mirror columns for numeric sequence_number fields. sqlc's
--- MySQL parser cannot infer *string from `CAST(numeric AS CHAR) LIKE narg`
--- — it sees the underlying column type and emits *uint64. Mirroring as a
--- VIRTUAL GENERATED VARCHAR gives sqlc a *string-typed column.
 SET @s := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bill'          AND column_name='sequence_number_str')=0,
             'ALTER TABLE `bill`          ADD COLUMN `sequence_number_str`          VARCHAR(32) GENERATED ALWAYS AS (CAST(`sequence_number`          AS CHAR)) VIRTUAL', 'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
@@ -51,7 +37,6 @@ SET @s := IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema
             'ALTER TABLE `purchase_bill` ADD COLUMN `supplier_sequence_number_str` VARCHAR(64) GENERATED ALWAYS AS (CAST(`supplier_sequence_number` AS CHAR)) VIRTUAL', 'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
--- Indexes (idempotent: skip when an index of the same name already exists).
 SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='bill'          AND index_name='idx_bill_user_phone_number')=0,           'CREATE INDEX `idx_bill_user_phone_number` ON `bill` (`user_phone_number`)',                       'DO 0');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='bill'          AND index_name='idx_bill_sequence_number')=0,             'CREATE INDEX `idx_bill_sequence_number` ON `bill` (`sequence_number`)',                           'DO 0');

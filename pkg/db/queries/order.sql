@@ -1,5 +1,4 @@
 -- name: GetOrders :many
--- Keyset (created_at DESC, id DESC). Typed filters AND with query_like.
 SELECT o.id, o.sequence_number, o.client_id, COALESCE(o.customer_name, '') AS customer_name,
        o.store_id, o.status, o.total, COALESCE(o.note, '') AS note,
        o.created_by, o.created_at, o.updated_at,

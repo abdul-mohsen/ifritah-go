@@ -3,9 +3,6 @@
   values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetAllBill :many
--- Keyset pagination on (effective_date DESC, id DESC, is_credit DESC).
--- query_name_like / query_phone_digits split (PR #32) for free-text q.
--- phone_prefix / seq_prefix: typed-chip prefix filters.
 SELECT bill.id AS id,
        bill.effective_date AS effective_date,
        payment_due_date,

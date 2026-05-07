@@ -5,7 +5,6 @@ UPDATE supplier SET name=?, address=?, phone_number=?, number=?, vat_number=?, b
 SELECT * From supplier where is_deleted = FALSE and id = ?;
 
 -- name: GetAllSupplier :many
--- Keyset on (id DESC). Typed filters AND with query_like.
 SELECT * FROM supplier
 WHERE is_deleted = FALSE
   AND (sqlc.narg('query_like') IS NULL

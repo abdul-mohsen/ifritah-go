@@ -60,7 +60,6 @@ UPDATE user SET password = ? WHERE id = ?;
 DELETE FROM sessions WHERE user_id = ?;
 
 -- name: ListUsers :many
--- Keyset on (id ASC). Typed filters AND with query_like.
 SELECT u.id, u.username, COALESCE(u.full_name,'') AS full_name,
        COALESCE(u.email,'') AS email, COALESCE(u.phone,'') AS phone,
        u.role, u.is_active, u.company_id,

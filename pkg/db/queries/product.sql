@@ -2,21 +2,6 @@
 select p.* from product p where p.id = ? and p.is_deleted = False;
 
 -- name: GetAllProduct :many
--- Keyset pagination on (id DESC). The InnoDB primary key already
--- serves the scan order natively — no extra index needed. Caller
--- fetches limit+1 to detect has_more.
---
--- query_like is the sentinel-filter for free-text search across
--- p.name and p.shelf_number. query_id_match is set to the integer
--- value of q when q is all-digits (exact id match), 0 otherwise.
--- NULL on both means "no search".
---
--- Typed filters:
---   - part_number_prefix: 'prefix%' against articles.articleNumber
---     (joined via legacyArticleId).
---   - barcode_prefix: 'prefix%' resolved through an EXISTS subquery on
---     articleean.eancode → legacyArticleId, so multi-row barcode FK
---     explosion can never duplicate product rows in the page.
 SELECT p.*
 FROM user
 JOIN store s     ON s.company_id = user.company_id

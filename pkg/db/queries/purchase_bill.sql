@@ -1,7 +1,4 @@
 -- name: GetAllPurchaseBill :many
--- Keyset pagination on (effective_date DESC, id DESC). Caller fetches
--- limit+1 to detect has_more.
--- query_seq_exact matches either supplier_sequence_number or b.id.
 SELECT b.*
 FROM purchase_bill AS b
 JOIN store ON store.id = b.store_id

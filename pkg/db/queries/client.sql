@@ -1,6 +1,4 @@
 -- name: GetClients :many
--- Keyset pagination on (updated_at DESC, id DESC).
--- Typed filters AND with `query_like` and with each other.
 SELECT * FROM client
 WHERE is_deleted = FALSE
   AND (sqlc.narg('query_like') IS NULL

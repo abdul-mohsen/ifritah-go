@@ -18,6 +18,9 @@ on:
     branches: [main, dev]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/ifritah-api
 

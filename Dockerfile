@@ -6,9 +6,7 @@
 # =============================================================================
 
 # ---- Build stage ----
-FROM golang:1.25-alpine AS builder
-
-RUN apk add --no-cache git ca-certificates tzdata
+FROM golang:1.25-bookworm AS builder
 
 WORKDIR /src
 COPY go.mod go.sum ./

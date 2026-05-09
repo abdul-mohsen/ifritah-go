@@ -887,23 +887,6 @@ CREATE TABLE `cash_voucher` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Temporary view structure for view `cash_voucher_summary`
---
-
-DROP TABLE IF EXISTS `cash_voucher_summary`;
-/*!50001 DROP VIEW IF EXISTS `cash_voucher_summary`*/;
-SET @saved_cs_client     = @@character_set_client;
-/*!50503 SET character_set_client = utf8mb4 */;
-/*!50001 CREATE VIEW `cash_voucher_summary` AS SELECT 
- 1 AS `voucher_type`,
- 1 AS `state`,
- 1 AS `merchant_id`,
- 1 AS `voucher_count`,
- 1 AS `total_amount`,
- 1 AS `month`*/;
-SET character_set_client = @saved_cs_client;
-
---
 -- Table structure for table `client`
 --
 
@@ -2326,22 +2309,24 @@ CREATE TABLE `zatca_submission` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Final view structure for view `cash_voucher_summary`
+-- View structure for view `cash_voucher_summary`
 --
 
-/*!50001 DROP VIEW IF EXISTS `cash_voucher_summary`*/;
-/*!50001 SET @saved_cs_client          = @@character_set_client */;
-/*!50001 SET @saved_cs_results         = @@character_set_results */;
-/*!50001 SET @saved_col_connection     = @@collation_connection */;
-/*!50001 SET character_set_client      = utf8mb4 */;
-/*!50001 SET character_set_results     = utf8mb4 */;
-/*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
-/*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */
-/*!50001 VIEW `cash_voucher_summary` AS select `cash_voucher`.`voucher_type` AS `voucher_type`,`cash_voucher`.`state` AS `state`,`cash_voucher`.`merchant_id` AS `merchant_id`,count(0) AS `voucher_count`,sum(`cash_voucher`.`amount`) AS `total_amount`,date_format(`cash_voucher`.`effective_date`,'%Y-%m') AS `month` from `cash_voucher` group by `cash_voucher`.`voucher_type`,`cash_voucher`.`state`,`cash_voucher`.`merchant_id`,date_format(`cash_voucher`.`effective_date`,'%Y-%m') */;
-/*!50001 SET character_set_client      = @saved_cs_client */;
-/*!50001 SET character_set_results     = @saved_cs_results */;
-/*!50001 SET collation_connection      = @saved_col_connection */;
+DROP VIEW IF EXISTS `cash_voucher_summary`;
+CREATE SQL SECURITY INVOKER VIEW `cash_voucher_summary` AS
+SELECT
+  `cash_voucher`.`voucher_type` AS `voucher_type`,
+  `cash_voucher`.`state` AS `state`,
+  `cash_voucher`.`merchant_id` AS `merchant_id`,
+  COUNT(0) AS `voucher_count`,
+  SUM(`cash_voucher`.`amount`) AS `total_amount`,
+  DATE_FORMAT(`cash_voucher`.`effective_date`, '%Y-%m') AS `month`
+FROM `cash_voucher`
+GROUP BY
+  `cash_voucher`.`voucher_type`,
+  `cash_voucher`.`state`,
+  `cash_voucher`.`merchant_id`,
+  DATE_FORMAT(`cash_voucher`.`effective_date`, '%Y-%m');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

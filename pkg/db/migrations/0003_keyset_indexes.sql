@@ -1,52 +1,22 @@
--- ============================================================================
--- 0003_keyset_indexes.sql
--- Composite indexes that support keyset pagination on the list endpoints.
---
--- Why these specific indexes:
---   The seek predicate is `WHERE (sort_value, id) < (?, ?)
---                          ORDER BY sort_value DESC, id DESC LIMIT N+1`.
---   For that to run as a single index range scan (no filesort, no temp
---   table) we need an index whose leading columns match the ORDER BY.
---   InnoDB silently appends the PK to every secondary index, so a key
---   on `(effective_date)` already sorts ties by `id` for free — but
---   declaring `(effective_date DESC, id DESC)` explicitly lets the
---   optimizer use the index in the natural scan direction, avoiding a
---   backward range scan that some older 8.0 minor versions still cost
---   higher than a filesort. (MySQL 8.0+ supports descending indexes;
---   we already pin to 8.0 in compose.)
---
--- The previously-shipped `(merchant_id, effective_date)` keys are kept
--- — they are still useful for any per-creator queries (dashboards,
--- audit). They do NOT serve the new list seek because `merchant_id`
--- (which actually stores the creator user id, not a tenant id) is not
--- in the WHERE clause of the new list queries.
---
--- Idempotent: `CREATE INDEX IF NOT EXISTS` (MySQL 8.0.29+) makes each
--- statement a no-op on a second run, so we no longer need the
--- per-index information_schema gate that 0002 used.
--- ============================================================================
+-- Keyset pagination indexes. MySQL 8.0 does not support the optional
+-- IF NOT EXISTS clause here, so each index is guarded like the other migrations.
 
-CREATE INDEX IF NOT EXISTS `idx_bill_keyset`
-    ON `bill` (`effective_date` DESC, `id` DESC);
+SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='bill' AND index_name='idx_bill_keyset')=0,
+    'CREATE INDEX `idx_bill_keyset` ON `bill` (`effective_date` DESC, `id` DESC)', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-CREATE INDEX IF NOT EXISTS `idx_pb_keyset`
-    ON `purchase_bill` (`effective_date` DESC, `id` DESC);
+SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='purchase_bill' AND index_name='idx_pb_keyset')=0,
+    'CREATE INDEX `idx_pb_keyset` ON `purchase_bill` (`effective_date` DESC, `id` DESC)', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-CREATE INDEX IF NOT EXISTS `idx_cv_keyset`
-    ON `cash_voucher` (`effective_date` DESC, `id` DESC);
+SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='cash_voucher' AND index_name='idx_cv_keyset')=0,
+    'CREATE INDEX `idx_cv_keyset` ON `cash_voucher` (`effective_date` DESC, `id` DESC)', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
--- Sorted by created_at DESC for the list page. Same DESC-DESC composite
--- so the seek is one index range read.
-CREATE INDEX IF NOT EXISTS `idx_orders_keyset`
-    ON `orders` (`created_at` DESC, `id` DESC);
+SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='orders' AND index_name='idx_orders_keyset')=0,
+    'CREATE INDEX `idx_orders_keyset` ON `orders` (`created_at` DESC, `id` DESC)', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
--- Sorted by updated_at DESC, id DESC (matches existing GetClients ORDER BY
--- and surfaces recently-touched clients first, the existing UX contract).
-CREATE INDEX IF NOT EXISTS `idx_client_keyset`
-    ON `client` (`is_deleted`, `updated_at` DESC, `id` DESC);
-
--- supplier, product, branch, stores list pages all sort by `id DESC` only.
--- The InnoDB primary key already serves that scan order natively — no
--- additional index needed for the seek itself. The existing per-tenant
--- filter indexes (idx_supplier_company_active, idx_product_store_active_qty)
--- still match their respective handler filters.
+SET @s := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='client' AND index_name='idx_client_keyset')=0,
+    'CREATE INDEX `idx_client_keyset` ON `client` (`is_deleted`, `updated_at` DESC, `id` DESC)', 'DO 0');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;

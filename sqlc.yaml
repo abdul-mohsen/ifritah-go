@@ -4,10 +4,7 @@ sql:
     queries: "pkg/db/queries"
     schema:
       - "pkg/db/schema"
-      - "pkg/db/migrations/0001_auth_tables.sql"
-      - "pkg/db/migrations/0002_performance_indexes.sql"
-      - "pkg/db/migrations/0003_keyset_indexes.sql"
-      - "pkg/db/migrations/0004_typed_filter_indexes.sql"
+      - "pkg/db/migrations"
     gen:
       go:
         package: "db"

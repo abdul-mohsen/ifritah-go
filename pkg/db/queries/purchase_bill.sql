@@ -49,14 +49,6 @@ values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 -- name: AddProductToBillPurchase :exec
 insert into purchase_bill_product  (product_id, name, price, quantity, bill_id) values (?, ?, ?, ?, ?);
 
--- name: RefreshPurchaseBillTotals :exec
-UPDATE purchase_bill
-SET
-   total_before_vat = COALESCE((SELECT SUM(pbp.total_before_vat) FROM purchase_bill_product AS pbp WHERE pbp.bill_id = sqlc.arg('target_bill_id')), 0),
-   total_vat = COALESCE((SELECT SUM(pbp.vat_total) FROM purchase_bill_product AS pbp WHERE pbp.bill_id = sqlc.arg('target_bill_id')), 0),
-   total = COALESCE((SELECT SUM(pbp.total_including_vat) FROM purchase_bill_product AS pbp WHERE pbp.bill_id = sqlc.arg('target_bill_id')), 0)
-WHERE purchase_bill.id = sqlc.arg('target_id');
-
 -- name: AddAttachmentsPurchaseBill :exec
 insert into purchase_bill_attachments  (purchase_bill_id, file_key) values (?, ?);
 

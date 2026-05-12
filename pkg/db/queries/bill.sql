@@ -153,15 +153,6 @@ WHERE id = ?;
 -- name: AddProductToBill :exec
 insert into bill_product (name, product_id, price, quantity, bill_id, part_name) values (?, ?, ?, ?, ?, ?);
 
--- name: RefreshBillTotals :exec
-UPDATE bill
-SET
-  total_before_vat = COALESCE((SELECT SUM(bp.total_before_vat) FROM bill_product AS bp WHERE bp.bill_id = sqlc.arg('target_bill_id')), 0),
-  total_vat = COALESCE((SELECT SUM(bp.vat_total) FROM bill_product AS bp WHERE bp.bill_id = sqlc.arg('target_bill_id')), 0),
-  total = COALESCE((SELECT SUM(bp.total_including_vat) FROM bill_product AS bp WHERE bp.bill_id = sqlc.arg('target_bill_id')), 0),
-  discount_amount = COALESCE((SELECT SUM(bp.discount) FROM bill_product AS bp WHERE bp.bill_id = sqlc.arg('target_bill_id')), 0)
-WHERE bill.id = sqlc.arg('target_id');
-
 -- name: DeleteProductToBill :exec
 DELETE FROM bill_product where bill_id = ?;
 

@@ -38,6 +38,7 @@ WORKDIR /app
 COPY --from=builder /out/ifritah /app/ifritah
 COPY --chown=app:app pkg/db/schema /app/db/schema
 COPY --chown=app:app pkg/db/migrations /app/db/migrations
+COPY --chown=app:app pkg/db/runtime_migrations /app/db/migrations
 
 RUN mkdir -p /app/uploads /app/data && chown -R app:app /app
 

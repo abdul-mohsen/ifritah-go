@@ -34,13 +34,14 @@ services:
       - mysql-data:/var/lib/mysql
       # Seed the database on first init. Files run alphabetically; numeric
       # prefixes here control the apply order. Add new migrations to this list
-      # when you add a new file under pkg/db/migrations/.
+      # when you add a new file under pkg/db/migrations or runtime_migrations.
       - ./pkg/db/schema/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./pkg/db/schema/car_part.sql:/docker-entrypoint-initdb.d/02-car_part.sql:ro
       - ./pkg/db/migrations/0001_auth_tables.sql:/docker-entrypoint-initdb.d/10-0001-auth-tables.sql:ro
       - ./pkg/db/migrations/0002_performance_indexes.sql:/docker-entrypoint-initdb.d/11-0002-performance-indexes.sql:ro
       - ./pkg/db/migrations/0003_keyset_indexes.sql:/docker-entrypoint-initdb.d/12-0003-keyset-indexes.sql:ro
       - ./pkg/db/migrations/0004_typed_filter_indexes.sql:/docker-entrypoint-initdb.d/13-0004-typed-filter-indexes.sql:ro
+      - ./pkg/db/runtime_migrations/0005_bill_total_triggers.sql:/docker-entrypoint-initdb.d/14-0005-bill-total-triggers.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
       interval: 5s

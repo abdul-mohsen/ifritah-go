@@ -1,9 +1,18 @@
-DROP TRIGGER IF EXISTS bill_product_after_insert_totals;
-DROP TRIGGER IF EXISTS bill_product_after_update_totals;
-DROP TRIGGER IF EXISTS bill_product_after_delete_totals;
-DROP TRIGGER IF EXISTS purchase_bill_product_after_insert_totals;
-DROP TRIGGER IF EXISTS purchase_bill_product_after_update_totals;
-DROP TRIGGER IF EXISTS purchase_bill_product_after_delete_totals;
+DELIMITER //
+CREATE PROCEDURE drop_bill_total_triggers_0005()
+BEGIN
+  DECLARE CONTINUE HANDLER FOR 1360 BEGIN END;
+  DROP TRIGGER bill_product_after_insert_totals;
+  DROP TRIGGER bill_product_after_update_totals;
+  DROP TRIGGER bill_product_after_delete_totals;
+  DROP TRIGGER purchase_bill_product_after_insert_totals;
+  DROP TRIGGER purchase_bill_product_after_update_totals;
+  DROP TRIGGER purchase_bill_product_after_delete_totals;
+END//
+DELIMITER ;
+
+CALL drop_bill_total_triggers_0005();
+DROP PROCEDURE drop_bill_total_triggers_0005;
 
 UPDATE bill
 SET

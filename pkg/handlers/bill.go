@@ -256,6 +256,12 @@ func (h *handler) AddBill(c *gin.Context) {
 		return
 	}
 
+	if err := qtx.RefreshBillTotals(c.Request.Context(), uint64(id)); err != nil {
+		log.Printf("AddBill refresh totals: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
 	// ── Stock tracking: deduct stock for catalog products ──
 	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
@@ -388,6 +394,12 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 
 	if err := addProductToBill(qtx, c, products, billID); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+
+	if err := qtx.RefreshBillTotals(c.Request.Context(), billID); err != nil {
+		log.Printf("SubmitDraftBill refresh totals: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 

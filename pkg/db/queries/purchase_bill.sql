@@ -42,6 +42,14 @@ UPDATE purchase_bill set effective_date = ?, payment_due_date = ?, state = ?, di
 -- name: DeleteProductPurchaseBill :exec
 DELETE FROM purchase_bill_product where bill_id = ?;
 
+-- name: RefreshPurchaseBillTotals :exec
+UPDATE purchase_bill
+SET
+   total_before_vat = COALESCE((SELECT SUM(total_before_vat) FROM purchase_bill_product WHERE purchase_bill_product.bill_id = purchase_bill.id), 0),
+   total_vat = COALESCE((SELECT SUM(vat_total) FROM purchase_bill_product WHERE purchase_bill_product.bill_id = purchase_bill.id), 0),
+   total = COALESCE((SELECT SUM(total_including_vat) FROM purchase_bill_product WHERE purchase_bill_product.bill_id = purchase_bill.id), 0)
+WHERE purchase_bill.id = ?;
+
 -- name: AddPurchaseBill :execresult
 insert into purchase_bill (effective_date, payment_due_date, state, discount, store_id, merchant_id, supplier_id, supplier_sequence_number, pdf_link, payment_method, deliver_date)
 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

@@ -151,6 +151,12 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		return
 	}
 
+	if err := qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
+		log.Printf("UpdatePurchaseBill refresh totals: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
 	// ── Stock tracking: add new stock for updated products ──
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		if err := recordPurchaseMovements(
@@ -234,6 +240,12 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	if err != nil {
 		log.Printf("AddPurchaseBill: %v", err)
 		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	if err := qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
+		log.Printf("AddPurchaseBill refresh totals: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 

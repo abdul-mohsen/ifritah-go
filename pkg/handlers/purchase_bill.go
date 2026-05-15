@@ -151,12 +151,6 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		return
 	}
 
-	if err := qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
-		log.Printf("UpdatePurchaseBill refresh totals: %v", err)
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
 	// ── Stock tracking: add new stock for updated products ──
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		if err := recordPurchaseMovements(
@@ -240,12 +234,6 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	if err != nil {
 		log.Printf("AddPurchaseBill: %v", err)
 		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	if err := qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
-		log.Printf("AddPurchaseBill refresh totals: %v", err)
-		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
@@ -394,16 +382,16 @@ func (h *handler) GetAllPurchaseBill(c *gin.Context) {
 	phonePrefix := buildPlainPrefixFilter(request.Phone)
 
 	bill, err := h.getPurchaseBills(c, db.GetAllPurchaseBillParams{
-		ID:                int32(userSession.id),
-		StateFilter:       stateFilter,
-		QueryLike:         queryLike,
-		QuerySeqExact:     querySeqExact,
-		SeqPrefix:         seqPrefix,
-		SupplierSeqPrefix: supplierSeqPrefix,
-		PhonePrefix:       phonePrefix,
-		CursorDate:        cursorDate,
-		CursorID:          cursorID,
-		Limit:             int32(limit + 1),
+		ID:                      int32(userSession.id),
+		StateFilter:             nullInt64FromInt32Ptr(stateFilter),
+		QueryLike:               queryLike,
+		QuerySeqExact:           nullInt64FromUint64Ptr(querySeqExact),
+		FilterSeqPrefix:         seqPrefix,
+		FilterSupplierSeqPrefix: supplierSeqPrefix,
+		FilterPhonePrefix:       phonePrefix,
+		CursorDate:              cursorDate,
+		CursorID:                nullInt64FromUint64Ptr(cursorID),
+		Limit:                   int32(limit + 1),
 	})
 	if err != nil {
 		log.Printf("GetAllPurchaseBill: %v", err)

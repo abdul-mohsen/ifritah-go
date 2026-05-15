@@ -26,6 +26,14 @@ func nullInt64FromUint64Ptr(v *uint64) sql.NullInt64 {
 	return sql.NullInt64{Int64: int64(*v), Valid: true}
 }
 
+// nullInt64FromUint32Ptr wraps uint32 → sql.NullInt64 for sqlc narg() params.
+func nullInt64FromUint32Ptr(v *uint32) sql.NullInt64 {
+	if v == nil {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(*v), Valid: true}
+}
+
 // nullInt64FromAny converts cursor values to sql.NullInt64.
 func nullInt64FromAny(v any) sql.NullInt64 {
 	if v == nil {

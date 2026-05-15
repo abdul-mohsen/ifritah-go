@@ -15,6 +15,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
@@ -138,6 +139,11 @@ func (h *handler) GetBills(c *gin.Context) {
 
 	limit := listReq.EffectiveLimit()
 
+	var cursorIsCreditArg sql.NullInt64
+	if cursorIsCredit != nil {
+		cursorIsCreditArg = sql.NullInt64{Int64: int64(*cursorIsCredit), Valid: true}
+	}
+
 	args := db.GetAllBillParams{
 		StateFilter:      stateFilter,
 		QueryNameLike:    queryNameLike,
@@ -146,7 +152,8 @@ func (h *handler) GetBills(c *gin.Context) {
 		SeqPrefix:        seqPrefix,
 		CursorDate:       cursorDate,
 		CursorID:         cursorID,
-		CursorIsCredit:   nullInt64FromAny(cursorIsCredit),
+		CursorIsCredit:   cursorIsCreditArg,
+		CursorIsCredit_2: cursorIsCreditArg,
 		Limit:            int32(limit + 1),
 	}
 	bills, err := h.queries.GetAllBill(c.Request.Context(), args)

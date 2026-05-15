@@ -35,8 +35,8 @@ WHERE bill.state >= 0
   AND (sqlc.narg('cursor_date') IS NULL
        OR bill.effective_date < sqlc.narg('cursor_date')
        OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id < sqlc.narg('cursor_id'))
-       OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id = sqlc.narg('cursor_id')
-           AND CAST(sqlc.narg('cursor_is_credit') AS UNSIGNED) > 1))
+           OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id = sqlc.narg('cursor_id')
+             AND CAST(sqlc.narg('cursor_is_credit') AS UNSIGNED) > 1))
 UNION ALL
 SELECT bill.id AS id,
        bill.effective_date AS effective_date,
@@ -69,8 +69,8 @@ WHERE bill.state >= 0
   AND (sqlc.narg('cursor_date') IS NULL
        OR bill.effective_date < sqlc.narg('cursor_date')
        OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id < sqlc.narg('cursor_id'))
-       OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id = sqlc.narg('cursor_id')
-           AND CAST(sqlc.narg('cursor_is_credit') AS UNSIGNED) > 0))
+           OR (bill.effective_date = sqlc.narg('cursor_date') AND bill.id = sqlc.narg('cursor_id')
+             AND CAST(sqlc.narg('cursor_is_credit') AS UNSIGNED) > 0))
 ORDER BY effective_date DESC, id DESC, is_credit DESC
 LIMIT ?;
 

@@ -1,0 +1,73 @@
+=== RUN   TestPlaceholder
+    main_test.go:9: placeholder test ΓÇö replace with real coverage
+--- PASS: TestPlaceholder (0.00s)
+PASS
+ok  	ifritah/web-service-gin	1.221s
+?   	ifritah/web-service-gin/pkg/db	[no test files]
+?   	ifritah/web-service-gin/pkg/db/gen	[no test files]
+=== RUN   TestBuildPlainPrefixFilter
+=== RUN   TestBuildPlainPrefixFilter/nil
+=== RUN   TestBuildPlainPrefixFilter/empty
+=== RUN   TestBuildPlainPrefixFilter/whitespace
+=== RUN   TestBuildPlainPrefixFilter/simple
+=== RUN   TestBuildPlainPrefixFilter/trims
+=== RUN   TestBuildPlainPrefixFilter/unicode_passthrough
+=== RUN   TestBuildPlainPrefixFilter/phone_digits
+--- PASS: TestBuildPlainPrefixFilter (0.00s)
+    --- PASS: TestBuildPlainPrefixFilter/nil (0.00s)
+    --- PASS: TestBuildPlainPrefixFilter/empty (0.00s)
+    --- PASS: TestBuildPlainPrefixFilter/whitespace (0.00s)
+    --- PASS: TestBuildPlainPrefixFilter/simple (0.00s)
+    --- PASS: TestBuildPlainPrefixFilter/trims (0.00s)
+    --- PASS: TestBuildPlainPrefixFilter/unicode_passthrough (0.00s)
+    --- PASS: TestBuildPlainPrefixFilter/phone_digits (0.00s)
+=== RUN   TestBuildBillSearchParams_PhoneShapedQuery
+--- PASS: TestBuildBillSearchParams_PhoneShapedQuery (0.00s)
+=== RUN   TestBuildBillSearchParams_FormattedPhone
+--- PASS: TestBuildBillSearchParams_FormattedPhone (0.00s)
+=== RUN   TestBuildBillSearchParams_ArabicIndicDigits
+--- PASS: TestBuildBillSearchParams_ArabicIndicDigits (0.00s)
+=== RUN   TestBuildBillSearchParams_NameQuery
+--- PASS: TestBuildBillSearchParams_NameQuery (0.00s)
+=== RUN   TestBuildBillSearchParams_MixedQuery
+--- PASS: TestBuildBillSearchParams_MixedQuery (0.00s)
+=== RUN   TestBuildBillSearchParams_TooShortForPhone
+--- PASS: TestBuildBillSearchParams_TooShortForPhone (0.00s)
+=== RUN   TestBuildBillSearchParams_Empty
+--- PASS: TestBuildBillSearchParams_Empty (0.00s)
+PASS
+ok  	ifritah/web-service-gin/pkg/handlers	1.180s
+?   	ifritah/web-service-gin/pkg/model	[no test files]
+=== RUN   TestEncodeDecodeRoundTrip
+--- PASS: TestEncodeDecodeRoundTrip (0.00s)
+=== RUN   TestDecodeEmptyIsZero
+--- PASS: TestDecodeEmptyIsZero (0.00s)
+=== RUN   TestDecodeMalformedReturnsErrInvalidCursor
+--- PASS: TestDecodeMalformedReturnsErrInvalidCursor (0.00s)
+=== RUN   TestDecodeAcceptsPaddedBase64
+--- PASS: TestDecodeAcceptsPaddedBase64 (0.00s)
+=== RUN   TestEffectiveLimit
+=== RUN   TestEffectiveLimit/default_when_zero
+=== RUN   TestEffectiveLimit/legacy_page_size
+=== RUN   TestEffectiveLimit/new_limit_beats_legacy
+=== RUN   TestEffectiveLimit/clamped_to_max
+--- PASS: TestEffectiveLimit (0.00s)
+    --- PASS: TestEffectiveLimit/default_when_zero (0.00s)
+    --- PASS: TestEffectiveLimit/legacy_page_size (0.00s)
+    --- PASS: TestEffectiveLimit/new_limit_beats_legacy (0.00s)
+    --- PASS: TestEffectiveLimit/clamped_to_max (0.00s)
+=== RUN   TestValidateSortMismatchRejected
+--- PASS: TestValidateSortMismatchRejected (0.00s)
+=== RUN   TestValidateSortDefaultAccepted
+--- PASS: TestValidateSortDefaultAccepted (0.00s)
+=== RUN   TestValidateLimitTooLarge
+--- PASS: TestValidateLimitTooLarge (0.00s)
+=== RUN   TestBuildEnvelopeHasMore
+--- PASS: TestBuildEnvelopeHasMore (0.00s)
+=== RUN   TestBuildEnvelopeNoMore
+--- PASS: TestBuildEnvelopeNoMore (0.00s)
+=== RUN   TestBuildEnvelopeEmptyEmitsArrayNotNull
+--- PASS: TestBuildEnvelopeEmptyEmitsArrayNotNull (0.00s)
+PASS
+ok  	ifritah/web-service-gin/pkg/pagination	0.679s
+?   	ifritah/web-service-gin/scripts/reset_admin_password	[no test files]

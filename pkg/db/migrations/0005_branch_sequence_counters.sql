@@ -1,7 +1,7 @@
 -- 0005_branch_sequence_counters.sql
 -- Per-branch monotonic sequence allocator. Idempotent.
 
-CREATE TABLE IF NOT EXISTS `branch_sequence` (
+CREATE TABLE `branch_sequence` (
   `branch_id`  INT UNSIGNED    NOT NULL,
   `scope`      VARCHAR(32)     NOT NULL,
   `last_value` BIGINT UNSIGNED NOT NULL DEFAULT 0,

@@ -69,12 +69,12 @@ func (h *handler) GetAllSupplier(c *gin.Context) {
 	crPrefix := buildPlainPrefixFilter(request.CommercialRegistration)
 
 	args := db.GetAllSupplierParams{
-		QueryLike:         queryLike,
-		FilterPhonePrefix: phonePrefix,
-		FilterVatPrefix:   vatPrefix,
-		FilterCrPrefix:    crPrefix,
-		CursorID:          cursorIDNullable,
-		Limit:             int32(limit + 1),
+		QueryLike:   queryLike,
+		PhonePrefix: phonePrefix,
+		VatPrefix:   vatPrefix,
+		CrPrefix:    crPrefix,
+		CursorID:    cursorIDNullable,
+		Limit:       int32(limit + 1),
 	}
 
 	suppliers, err := h.queries.GetAllSupplier(c.Request.Context(), args)

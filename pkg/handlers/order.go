@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
@@ -62,13 +61,13 @@ func (h *handler) GetOrders(c *gin.Context) {
 	}
 
 	rows, err := h.queries.GetOrders(c.Request.Context(), db.GetOrdersParams{
-		CompanyID:         sql.NullInt64{Int64: int64(companyIDInt32), Valid: true},
-		QueryLike:         queryLike,
-		FilterSeqPrefix:   seqPrefix,
-		FilterPhonePrefix: phonePrefix,
-		CursorCreatedAt:   cursorCreatedAt,
-		CursorID:          nullInt64FromUint32Ptr(cursorIDPtr),
-		Limit:             int32(limit + 1),
+		CompanyID:       &companyIDInt32,
+		QueryLike:       queryLike,
+		SeqPrefix:       seqPrefix,
+		PhonePrefix:     phonePrefix,
+		CursorCreatedAt: cursorCreatedAt,
+		CursorID:        cursorIDPtr,
+		Limit:           int32(limit + 1),
 	})
 	if err != nil {
 		log.Printf("GetOrders: %v", err)

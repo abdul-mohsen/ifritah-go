@@ -1,23 +1,15 @@
 -- 0005_branch_sequence_counters.sql
 -- Per-branch monotonic sequence allocator. Idempotent.
 
-SET @has_branch_sequence := (
-  SELECT COUNT(*) FROM information_schema.tables
-   WHERE table_schema = DATABASE()
-     AND table_name = 'branch_sequence'
-);
-SET @sql := IF(@has_branch_sequence = 0,
-  'CREATE TABLE `branch_sequence` (
-    `branch_id`  INT UNSIGNED    NOT NULL,
-    `scope`      VARCHAR(32)     NOT NULL,
-    `last_value` BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    `updated_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (`branch_id`, `scope`),
-    CONSTRAINT `fk_bsq_branch` FOREIGN KEY (`branch_id`)
-      REFERENCES `branches` (`id`) ON DELETE CASCADE
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
-  'SELECT 1');
-PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+CREATE TABLE IF NOT EXISTS `branch_sequence` (
+  `branch_id`  INT UNSIGNED    NOT NULL,
+  `scope`      VARCHAR(32)     NOT NULL,
+  `last_value` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `updated_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`branch_id`, `scope`),
+  CONSTRAINT `fk_bsq_branch` FOREIGN KEY (`branch_id`)
+    REFERENCES `branches` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 UPDATE bill SET sequence_number = NULL WHERE sequence_number = 0;
 

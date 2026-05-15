@@ -139,15 +139,16 @@ func (h *handler) GetBills(c *gin.Context) {
 	limit := listReq.EffectiveLimit()
 
 	args := db.GetAllBillParams{
-		StateFilter:       nullInt64FromInt32Ptr(stateFilter),
-		QueryNameLike:     queryNameLike,
-		QueryPhoneDigits:  queryPhoneDigits,
-		FilterPhonePrefix: phonePrefix,
-		FilterSeqPrefix:   seqPrefix,
-		CursorDate:        cursorDate,
-		CursorID:          nullInt64FromUint64Ptr(cursorID),
-		CursorIsCredit:    nullInt64FromAny(cursorIsCredit),
-		Limit:             int32(limit + 1),
+		StateFilter:      stateFilter,
+		QueryNameLike:    queryNameLike,
+		QueryPhoneDigits: queryPhoneDigits,
+		PhonePrefix:      phonePrefix,
+		SeqPrefix:        seqPrefix,
+		CursorDate:       cursorDate,
+		CursorID:         cursorID,
+		CursorIsCredit:   nullInt64FromAny(cursorIsCredit),
+		CursorIsCredit_2: nullInt64FromAny(cursorIsCredit),
+		Limit:            int32(limit + 1),
 	}
 	bills, err := h.queries.GetAllBill(c.Request.Context(), args)
 	if err != nil {
@@ -253,6 +254,12 @@ func (h *handler) AddBill(c *gin.Context) {
 
 	if err := addProductToBill(qtx, c, products, uint64(id)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+
+	if err := qtx.RefreshBillTotals(c.Request.Context(), uint64(id)); err != nil {
+		log.Printf("AddBill refresh totals: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
@@ -391,12 +398,11 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		return
 	}
 
-	// TODO: RefreshBillTotals commented out due to sqlc generation issue
-	// if err := qtx.RefreshBillTotals(c.Request.Context(), billID); err != nil {
-	// 	log.Printf("SubmitDraftBill refresh totals: %v", err)
-	// 	c.AbortWithError(http.StatusInternalServerError, err)
-	// 	return
-	// }
+	if err := qtx.RefreshBillTotals(c.Request.Context(), billID); err != nil {
+		log.Printf("SubmitDraftBill refresh totals: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
 
 	// ── Stock tracking: deduct stock for catalog products ──
 	enforcement := h.getStockEnforcementMode(c)

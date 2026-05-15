@@ -80,13 +80,13 @@ func (h *handler) GetAllClient(c *gin.Context) {
 	crPrefix := buildPlainPrefixFilter(request.CommercialRegistration)
 
 	res, err := h.queries.GetClients(c.Request.Context(), db.GetClientsParams{
-		QueryLike:         queryLike,
-		FilterPhonePrefix: phonePrefix,
-		FilterVatPrefix:   vatPrefix,
-		FilterCrPrefix:    crPrefix,
-		CursorUpdatedAt:   cursorUpdatedAt,
-		CursorID:          nullInt64FromUint32Ptr(cursorIDPtr),
-		Limit:             int32(limit + 1),
+		QueryLike:       queryLike,
+		PhonePrefix:     phonePrefix,
+		VatPrefix:       vatPrefix,
+		CrPrefix:        crPrefix,
+		CursorUpdatedAt: cursorUpdatedAt,
+		CursorID:        cursorIDPtr,
+		Limit:           int32(limit + 1),
 	})
 	if err != nil {
 		log.Printf(errGetAllClient, err)

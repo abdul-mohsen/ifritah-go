@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"ifritah/web-service-gin/pkg/model"
 	"ifritah/web-service-gin/pkg/pagination"
 	"slices"
@@ -9,51 +8,6 @@ import (
 	"strings"
 	"time"
 )
-
-// nullInt64FromInt32Ptr wraps int32 → sql.NullInt64 for sqlc narg() params.
-func nullInt64FromInt32Ptr(v *int32) sql.NullInt64 {
-	if v == nil {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: int64(*v), Valid: true}
-}
-
-// nullInt64FromUint64Ptr wraps uint64 → sql.NullInt64 for sqlc narg() params.
-func nullInt64FromUint64Ptr(v *uint64) sql.NullInt64 {
-	if v == nil {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: int64(*v), Valid: true}
-}
-
-// nullInt64FromUint32Ptr wraps uint32 → sql.NullInt64 for sqlc narg() params.
-func nullInt64FromUint32Ptr(v *uint32) sql.NullInt64 {
-	if v == nil {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: int64(*v), Valid: true}
-}
-
-// nullInt64FromAny converts cursor values to sql.NullInt64.
-func nullInt64FromAny(v any) sql.NullInt64 {
-	if v == nil {
-		return sql.NullInt64{}
-	}
-	switch t := v.(type) {
-	case int64:
-		return sql.NullInt64{Int64: t, Valid: true}
-	case float64:
-		return sql.NullInt64{Int64: int64(t), Valid: true}
-	case int:
-		return sql.NullInt64{Int64: int64(t), Valid: true}
-	case int32:
-		return sql.NullInt64{Int64: int64(t), Valid: true}
-	}
-	if p := decodeCursorUint64(v); p != nil {
-		return sql.NullInt64{Int64: int64(*p), Valid: true}
-	}
-	return sql.NullInt64{}
-}
 
 // listRequestFromPagination converts model.PaginationRequest → pagination.ListRequest.
 func listRequestFromPagination(p model.PaginationRequest) pagination.ListRequest {
@@ -281,15 +235,13 @@ func parseRFC3339Cursor(v any) *time.Time {
 }
 
 // decodeBillCursor decodes the (date, id, is_credit) keyset cursor.
-func decodeBillCursor(c pagination.Cursor) (date *time.Time, id *uint64, isCredit any, ok bool) {
+func decodeBillCursor(c pagination.Cursor) (date *time.Time, id *uint64, isCredit *int32, ok bool) {
 	if len(c.K) < 3 {
 		return nil, nil, nil, true
 	}
 	date = parseRFC3339Cursor(c.K[0])
 	id = decodeCursorUint64(c.K[1])
-	if v := decodeCursorInt32(c.K[2]); v != nil {
-		isCredit = *v
-	}
+	isCredit = decodeCursorInt32(c.K[2])
 	if date == nil || id == nil || isCredit == nil {
 		return nil, nil, nil, false
 	}

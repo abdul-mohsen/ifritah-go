@@ -8,10 +8,15 @@ package handlers
 // with the frontend.
 const (
 	// 400 Bad Request
-	ErrInvalidRequest    = "invalid request"
-	ErrInvalidUserID     = "invalid user id"
-	ErrInvalidRole       = "invalid role"
-	ErrNoFieldsToUpdate  = "no fields to update"
+	ErrInvalidRequest   = "invalid request"
+	ErrInvalidUserID    = "invalid user id"
+	ErrInvalidRole      = "invalid role"
+	ErrNoFieldsToUpdate = "no fields to update"
+	ErrInvalidInvoiceID = "invalid invoice id"
+	ErrWhatsAppDisabled = "whatsapp integration is disabled"
+	ErrWhatsAppConfig   = "whatsapp credentials are incomplete"
+	ErrWhatsAppNoPhone  = "customer phone number is missing"
+	ErrWhatsAppBadPhone = "customer phone number is invalid"
 
 	// 401 Unauthorized
 	ErrInvalidCredentials = "invalid credentials"
@@ -24,7 +29,8 @@ const (
 	ErrAccountDeactivated = "account is deactivated"
 
 	// 404 Not Found
-	ErrUserNotFound = "user not found"
+	ErrUserNotFound    = "user not found"
+	ErrInvoiceNotFound = "invoice not found"
 
 	// 409 Conflict
 	ErrUsernameExists = "username already exists"
@@ -42,6 +48,8 @@ const (
 	ErrUpdatePassword      = "failed to update password"
 	ErrGenerateAccessTok   = "could not generate access token"
 	ErrGenerateRefreshTok  = "could not generate refresh token"
+	ErrGenerateInvoicePDF  = "failed to generate invoice pdf"
+	ErrSendWhatsAppMessage = "failed to send whatsapp message"
 )
 
 // invalidRequestDetail returns the canonical "invalid request" string with

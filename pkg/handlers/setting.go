@@ -15,7 +15,7 @@ package handlers
 //       value TEXT, description VARCHAR(255),
 //       updated_by INT, updated_at DATETIME
 //
-// Settings are organized into 7 categories (42 keys total):
+// Settings are organized into 8 categories:
 //   1. company (9)    — company_name, company_vat, company_cr, etc.
 //   2. invoice (12)   — currency, vat_rate, invoice_prefix, etc.
 //   3. print (7)      — paper_size, print_copies, show_logo_print, etc.
@@ -23,16 +23,24 @@ package handlers
 //   5. notifications (5) — notif_invoices, notif_stock, etc.
 //   6. security (4)   — session_duration, max_login_attempts, etc.
 //   7. inventory (6)  — low_stock_threshold, default_unit, etc.
+//   8. integrations (6) — WhatsApp Business settings
 //
 // ZATCA config is NOT in settings — it's per-branch in branch_zatca_config.
 // Stock enforcement (stock_enforcement key) is read separately by stock handlers.
 // ============================================================================
 
 import (
+	"database/sql"
+	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/model"
+	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
+
+const maskedWhatsAppAccessToken = "********"
 
 // settingCategories maps each setting_key to its category name.
 // Used by both GetSettings (to group) and UpdateSettings (to whitelist).
@@ -100,6 +108,29 @@ var settingCategories = map[string]string{
 
 	// ── Stock enforcement (read by stock handlers, editable via inventory) ──
 	"stock_enforcement": "inventory",
+
+	// ── Section 8: Integrations (6 keys) ──
+	"whatsapp_enabled":             "integrations",
+	"whatsapp_business_account_id": "integrations",
+	"whatsapp_phone_number_id":     "integrations",
+	"whatsapp_access_token":        "integrations",
+	"whatsapp_api_version":         "integrations",
+	"whatsapp_invoice_message":     "integrations",
+}
+
+func maskSettingValue(key, value string) string {
+	if key == "whatsapp_access_token" && strings.TrimSpace(value) != "" {
+		return maskedWhatsAppAccessToken
+	}
+	return value
+}
+
+func shouldPreserveSettingValue(key, value string) bool {
+	if key != "whatsapp_access_token" {
+		return false
+	}
+	trimmed := strings.TrimSpace(value)
+	return trimmed == "" || trimmed == maskedWhatsAppAccessToken
 }
 
 // ── GET /api/v2/settings ────────────────────────────────────────────────────
@@ -120,12 +151,12 @@ var settingCategories = map[string]string{
 //	}
 
 func (h *handler) GetSettings(c *gin.Context) {
-	rows, err := h.DB.Query("SELECT setting_key, COALESCE(value,'') FROM settings ORDER BY setting_key")
+	settings, err := h.queries.ListSettings(c.Request.Context())
 	if err != nil {
+		log.Printf("GetSettings: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to fetch settings"})
 		return
 	}
-	defer rows.Close()
 
 	// Initialize all category maps
 	grouped := map[string]map[string]string{
@@ -136,15 +167,12 @@ func (h *handler) GetSettings(c *gin.Context) {
 		"notifications": {},
 		"security":      {},
 		"inventory":     {},
+		"integrations":  {},
 	}
 
-	for rows.Next() {
-		var key, value string
-		if err := rows.Scan(&key, &value); err != nil {
-			continue
-		}
-		if cat, ok := settingCategories[key]; ok {
-			grouped[cat][key] = value
+	for _, setting := range settings {
+		if cat, ok := settingCategories[setting.SettingKey]; ok {
+			grouped[cat][setting.SettingKey] = maskSettingValue(setting.SettingKey, setting.Value)
 		}
 	}
 
@@ -161,16 +189,14 @@ func (h *handler) GetSettings(c *gin.Context) {
 //	  "settings": {"company_name": "عفريته", "company_vat": "123456789012345"}
 //	}
 //
-// Valid categories: company, invoice, print, appearance, notifications, security, inventory
+// Valid categories: company, invoice, print, appearance, notifications, security, inventory, integrations
 //
 // Response: {"detail": "success"}
 
 func (h *handler) UpdateSettings(c *gin.Context) {
-	var req struct {
-		Category string            `json:"category" binding:"required"`
-		Settings map[string]string `json:"settings" binding:"required"`
-	}
+	var req model.UpdateSettingsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("UpdateSettings: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid request"})
 		return
 	}
@@ -179,13 +205,14 @@ func (h *handler) UpdateSettings(c *gin.Context) {
 	validCategories := map[string]bool{
 		"company": true, "invoice": true, "print": true,
 		"appearance": true, "notifications": true, "security": true, "inventory": true,
+		"integrations": true,
 	}
 	if !validCategories[req.Category] {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid category"})
 		return
 	}
 
-	userID := GetSessionInfo(c).id
+	userID := int32(GetSessionInfo(c).id)
 
 	updated := 0
 	for key, value := range req.Settings {
@@ -195,15 +222,28 @@ func (h *handler) UpdateSettings(c *gin.Context) {
 			continue
 		}
 
-		_, err := h.DB.Exec(
-			`INSERT INTO settings (setting_key, value, updated_by)
-			 VALUES (?, ?, ?)
-			 ON DUPLICATE KEY UPDATE value = VALUES(value), updated_by = VALUES(updated_by)`,
-			key, value, userID,
-		)
-		if err == nil {
-			updated++
+		if shouldPreserveSettingValue(key, value) {
+			existingValue, err := h.queries.GetSettingValue(c.Request.Context(), key)
+			if err != nil && err != sql.ErrNoRows {
+				log.Printf("UpdateSettings: %v", err)
+				continue
+			}
+			if strings.TrimSpace(existingValue) == "" {
+				continue
+			}
+			value = existingValue
 		}
+
+		err := h.queries.UpsertSetting(c.Request.Context(), db.UpsertSettingParams{
+			SettingKey: key,
+			Value:      &value,
+			UpdatedBy:  &userID,
+		})
+		if err != nil {
+			log.Printf("UpdateSettings: %v", err)
+			continue
+		}
+		updated++
 	}
 
 	c.JSON(http.StatusOK, gin.H{

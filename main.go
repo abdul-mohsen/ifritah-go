@@ -78,6 +78,7 @@ func main() {
 		authorized.GET("bill/:id", h.GetBillDetail)
 		authorized.POST("bill/all", h.GetBills)
 		authorized.POST("bill", h.AddBill)
+		authorized.POST("bill/:id/whatsapp", h.SendBillWhatsApp)
 		authorized.PUT("bill/:id", h.SubmitDraftBill)
 		authorized.DELETE("bill/:id", mgr, h.DeleteBillDetail)
 

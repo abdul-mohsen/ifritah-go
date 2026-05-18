@@ -489,19 +489,23 @@ func getNextSquenceNumber(qtx *db.Queries, c *gin.Context) uint64 {
 	return uint64(maxSequenceNumber) + 1
 }
 
-func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProductResponse) {
-
-	Id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-
-	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
-		return model.Bill{}, nil
+func parsePositiveBillID(rawID string) (uint64, error) {
+	billID, err := strconv.ParseUint(rawID, 10, 64)
+	if err != nil || billID == 0 {
+		return 0, fmt.Errorf("invalid bill id")
 	}
+	return billID, nil
+}
 
-	id := uint64(Id)
-
-	bill, err := h.queries.GetBillPDFByID(c.Request.Context(), id)
-	dbProducts, err := h.queries.GetBillProductByBillID(c.Request.Context(), bill.ID)
+func (h *handler) getBillDetailByID(ctx context.Context, id uint64) (model.Bill, []model.BillProductResponse, error) {
+	bill, err := h.queries.GetBillPDFByID(ctx, id)
+	if err != nil {
+		return model.Bill{}, nil, err
+	}
+	dbProducts, err := h.queries.GetBillProductByBillID(ctx, bill.ID)
+	if err != nil {
+		return model.Bill{}, nil, err
+	}
 	var xProducts []model.BillProductResponse
 	for _, product := range dbProducts {
 		name := "ERR"
@@ -510,7 +514,7 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		} else if product.ProductID != nil {
 			name = fmt.Sprint(product.ProductID)
 		} else {
-			return model.Bill{}, nil
+			return model.Bill{}, nil, fmt.Errorf("bill product has no name or product id")
 		}
 
 		u := ""
@@ -568,8 +572,12 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 	var client *db.Client = nil
 
 	if bill.ClientID != nil {
-		Client, _ := h.queries.GetClientByID(c.Request.Context(), uint32(*bill.ClientID))
-		client = &Client
+		Client, err := h.queries.GetClientByID(ctx, uint32(*bill.ClientID))
+		if err != nil {
+			log.Printf("getBillDetailByID: %v", err)
+		} else {
+			client = &Client
+		}
 	}
 	return model.Bill{
 		Id:                           bill.ID,
@@ -608,7 +616,26 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		PaymentMethod: bill.PaymentMethod,
 		DeliverDate:   bill.DeliverDate,
 		BranchID:      bill.BranchID,
-	}, xProducts
+	}, xProducts, nil
+
+}
+
+func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProductResponse) {
+	billID, err := parsePositiveBillID(c.Param("id"))
+	if err != nil {
+		log.Printf("getBillDetail: %v", err)
+		c.AbortWithError(http.StatusBadRequest, err)
+		return model.Bill{}, nil
+	}
+
+	bill, products, err := h.getBillDetailByID(c.Request.Context(), billID)
+	if err != nil {
+		log.Printf("getBillDetail: %v", err)
+		c.AbortWithError(http.StatusBadRequest, err)
+		return model.Bill{}, nil
+	}
+
+	return bill, products
 }
 
 func (h *handler) GetBillDetail(c *gin.Context) {
@@ -624,9 +651,9 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 	// Path-traversal hardening (Sonar gosecurity:S2083): the param feeds
 	// filepath.Join below, so any value containing path separators or
 	// `..` segments could escape the downloads directory.
-	rawID := c.Param("id")
-	billID, err := strconv.ParseUint(rawID, 10, 64)
-	if err != nil || billID == 0 {
+	billID, err := parsePositiveBillID(c.Param("id"))
+	if err != nil {
+		log.Printf("GetBillPDF: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -634,27 +661,10 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
 	if true {
-		bill, products := h.getBillDetail(c)
-		for _, p := range products {
-			if p.Name == model.MaintenanceCost {
-				p.Name = "تكلفة الصيانة"
-			}
-		}
-
-		var invoice invoice.Invoice
-		if bill.Client == nil {
-			invoice = b2cInvoice(true, models.PaperThermal, bill, products).
-				WithType(models.InvoiceTypeB2C).
-				Build()
-		} else {
-			invoice = b2bInvoice(true, models.PaperA4, bill, products, *bill.Client).
-				WithType(models.InvoiceTypeB2B).
-				Build()
-		}
-
-		fontDir := "fonts"
-		pdfBytes, err := pdf.GenerateInvoiceBytes(invoice, fontDir)
+		pdfBytes, _, err := h.buildBillPDFBytes(c.Request.Context(), billID)
 		if err != nil {
+			log.Printf("GetBillPDF: %v", err)
+			c.Status(http.StatusInternalServerError)
 			return
 		}
 
@@ -668,6 +678,42 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 	c.File(filename)
 
+}
+
+func (h *handler) buildBillPDFBytes(ctx context.Context, billID uint64) ([]byte, model.Bill, error) {
+	bill, products, err := h.getBillDetailByID(ctx, billID)
+	if err != nil {
+		return nil, model.Bill{}, err
+	}
+
+	pdfBytes, err := generateBillPDFBytes(bill, products)
+	if err != nil {
+		return nil, model.Bill{}, err
+	}
+
+	return pdfBytes, bill, nil
+}
+
+func generateBillPDFBytes(bill model.Bill, products []model.BillProductResponse) ([]byte, error) {
+	return pdf.GenerateInvoiceBytes(buildBillInvoice(bill, products), "fonts")
+}
+
+func buildBillInvoice(bill model.Bill, products []model.BillProductResponse) invoice.Invoice {
+	for i := range products {
+		if products[i].Name == model.MaintenanceCost {
+			products[i].Name = "تكلفة الصيانة"
+		}
+	}
+
+	if bill.Client == nil {
+		return b2cInvoice(true, models.PaperThermal, bill, products).
+			WithType(models.InvoiceTypeB2C).
+			Build()
+	}
+
+	return b2bInvoice(true, models.PaperA4, bill, products, *bill.Client).
+		WithType(models.InvoiceTypeB2B).
+		Build()
 }
 
 func (h *handler) GetBillCreditDetail(c *gin.Context) {

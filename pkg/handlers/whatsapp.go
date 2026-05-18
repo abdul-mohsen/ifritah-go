@@ -82,14 +82,14 @@ func (h *handler) SendBillWhatsApp(c *gin.Context) {
 		return
 	}
 
-	pdfBytes, bill, err := h.buildBillPDFBytes(c.Request.Context(), billID)
+	bill, products, err := h.getBillDetailByID(c.Request.Context(), billID)
 	if err != nil {
 		log.Printf("SendBillWhatsApp: %v", err)
 		if errors.Is(err, sql.ErrNoRows) {
 			c.JSON(http.StatusNotFound, model.WhatsAppSendResponse{Detail: ErrInvoiceNotFound})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, model.WhatsAppSendResponse{Detail: ErrGenerateInvoicePDF})
+		c.JSON(http.StatusInternalServerError, model.WhatsAppSendResponse{Detail: ErrDatabase})
 		return
 	}
 
@@ -101,6 +101,13 @@ func (h *handler) SendBillWhatsApp(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusBadRequest, model.WhatsAppSendResponse{Detail: ErrWhatsAppBadPhone})
+		return
+	}
+
+	pdfBytes, err := renderBillPDFBytes(bill, products)
+	if err != nil {
+		log.Printf("SendBillWhatsApp: %v", err)
+		c.JSON(http.StatusInternalServerError, model.WhatsAppSendResponse{Detail: ErrGenerateInvoicePDF})
 		return
 	}
 

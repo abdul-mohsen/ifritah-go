@@ -686,13 +686,15 @@ func (h *handler) buildBillPDFBytes(ctx context.Context, billID uint64) ([]byte,
 		return nil, model.Bill{}, err
 	}
 
-	pdfBytes, err := generateBillPDFBytes(bill, products)
+	pdfBytes, err := renderBillPDFBytes(bill, products)
 	if err != nil {
 		return nil, model.Bill{}, err
 	}
 
 	return pdfBytes, bill, nil
 }
+
+var renderBillPDFBytes = generateBillPDFBytes
 
 func generateBillPDFBytes(bill model.Bill, products []model.BillProductResponse) ([]byte, error) {
 	return pdf.GenerateInvoiceBytes(buildBillInvoice(bill, products), "fonts")

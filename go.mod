@@ -17,6 +17,8 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/abdul-mohsen/go-whatsapp v0.0.0
 	github.com/bradfitz/gomemcache v0.0.0-20250403215159-8d39553ac7cf // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
@@ -57,3 +59,5 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/abdul-mohsen/go-whatsapp => github.com/abdulmohsenssda/go-whatsapp v0.0.0-20260518170500-3a99caa17469

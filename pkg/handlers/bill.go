@@ -633,41 +633,43 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 	id := strconv.FormatUint(billID, 10)
 
 	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
-	if true {
-		bill, products := h.getBillDetail(c)
-		for _, p := range products {
-			if p.Name == model.MaintenanceCost {
-				p.Name = "تكلفة الصيانة"
-			}
-		}
-
-		var invoice invoice.Invoice
-		if bill.Client == nil {
-			invoice = b2cInvoice(true, models.PaperThermal, bill, products).
-				WithType(models.InvoiceTypeB2C).
-				Build()
-		} else {
-			invoice = b2bInvoice(true, models.PaperA4, bill, products, *bill.Client).
-				WithType(models.InvoiceTypeB2B).
-				Build()
-		}
-
-		fontDir := "fonts"
-		pdfBytes, err := pdf.GenerateInvoiceBytes(invoice, fontDir)
-		if err != nil {
-			return
-		}
-
-		if err := os.WriteFile(filename, pdfBytes, 0644); err != nil {
-			c.Header("X-Cache-Warning", err.Error())
-		}
-
-		c.Header("X-Cache", "MISS")
+	bill, products := h.getBillDetail(c)
+	pdfBytes, err := buildBillPDFBytes(bill, products)
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
 	}
+
+	if err := os.WriteFile(filename, pdfBytes, 0644); err != nil {
+		c.Header("X-Cache-Warning", err.Error())
+	}
+
+	c.Header("X-Cache", "MISS")
 	c.Header("X-Cache", "HIT")
 
 	c.File(filename)
 
+}
+
+func buildBillPDFBytes(bill model.Bill, products []model.BillProductResponse) ([]byte, error) {
+	for i := range products {
+		if products[i].Name == model.MaintenanceCost {
+			products[i].Name = "تكلفة الصيانة"
+		}
+	}
+
+	var builtInvoice invoice.Invoice
+	if bill.Client == nil {
+		builtInvoice = b2cInvoice(true, models.PaperThermal, bill, products).
+			WithType(models.InvoiceTypeB2C).
+			Build()
+	} else {
+		builtInvoice = b2bInvoice(true, models.PaperA4, bill, products, *bill.Client).
+			WithType(models.InvoiceTypeB2B).
+			Build()
+	}
+
+	return pdf.GenerateInvoiceBytes(builtInvoice, "fonts")
 }
 
 func (h *handler) GetBillCreditDetail(c *gin.Context) {

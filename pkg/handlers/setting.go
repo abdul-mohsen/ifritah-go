@@ -30,6 +30,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -100,6 +101,25 @@ var settingCategories = map[string]string{
 
 	// ── Stock enforcement (read by stock handlers, editable via inventory) ──
 	"stock_enforcement": "inventory",
+
+	// ── Integrations ─────────────────────────────────────────────────
+	"whatsapp_enabled":             "integrations",
+	"whatsapp_business_account_id": "integrations",
+	"whatsapp_phone_number_id":     "integrations",
+	"whatsapp_access_token":        "integrations",
+	"whatsapp_api_version":         "integrations",
+	"whatsapp_invoice_message":     "integrations",
+}
+
+var sensitiveSettingKeys = map[string]bool{
+	"whatsapp_access_token": true,
+}
+
+func publicSettingValue(key, value string) string {
+	if sensitiveSettingKeys[key] && strings.TrimSpace(value) != "" {
+		return "********"
+	}
+	return value
 }
 
 // ── GET /api/v2/settings ────────────────────────────────────────────────────
@@ -136,6 +156,7 @@ func (h *handler) GetSettings(c *gin.Context) {
 		"notifications": {},
 		"security":      {},
 		"inventory":     {},
+		"integrations":  {},
 	}
 
 	for rows.Next() {
@@ -144,7 +165,7 @@ func (h *handler) GetSettings(c *gin.Context) {
 			continue
 		}
 		if cat, ok := settingCategories[key]; ok {
-			grouped[cat][key] = value
+			grouped[cat][key] = publicSettingValue(key, value)
 		}
 	}
 
@@ -179,6 +200,7 @@ func (h *handler) UpdateSettings(c *gin.Context) {
 	validCategories := map[string]bool{
 		"company": true, "invoice": true, "print": true,
 		"appearance": true, "notifications": true, "security": true, "inventory": true,
+		"integrations": true,
 	}
 	if !validCategories[req.Category] {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid category"})
@@ -193,6 +215,12 @@ func (h *handler) UpdateSettings(c *gin.Context) {
 		cat, known := settingCategories[key]
 		if !known || cat != req.Category {
 			continue
+		}
+		if sensitiveSettingKeys[key] {
+			trimmed := strings.TrimSpace(value)
+			if trimmed == "" || trimmed == "********" {
+				continue
+			}
 		}
 
 		_, err := h.DB.Exec(

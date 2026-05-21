@@ -349,15 +349,13 @@ func TestSendBillWhatsAppHappyPathBehavior(t *testing.T) {
 	h, mock, cleanup := newMockHandler(t)
 	defer cleanup()
 
-	oldRender := renderBillPDFBytes
 	oldClientFactory := newWhatsAppClient
 	defer func() {
-		renderBillPDFBytes = oldRender
 		newWhatsAppClient = oldClientFactory
 	}()
 
 	pdfBytes := []byte("%PDF fake invoice")
-	renderBillPDFBytes = func(bill model.Bill, products []model.BillProductResponse) ([]byte, error) {
+	h.renderBillPDF = func(bill model.Bill, products []model.BillProductResponse) ([]byte, error) {
 		if bill.Id != 10 {
 			t.Fatalf("render bill id=%d", bill.Id)
 		}

@@ -60,7 +60,7 @@ func defaultWhatsAppSettings() whatsappSettings {
 }
 
 func (h *handler) SendBillWhatsApp(c *gin.Context) {
-	billID, err := parsePositiveBillID(c.Param("id"))
+	billID, err := parseBillID(c.Param("id"))
 	if err != nil {
 		log.Printf("SendBillWhatsApp: %v", err)
 		c.JSON(http.StatusBadRequest, model.WhatsAppSendResponse{Detail: ErrInvalidInvoiceID})
@@ -104,7 +104,7 @@ func (h *handler) SendBillWhatsApp(c *gin.Context) {
 		return
 	}
 
-	pdfBytes, err := renderBillPDFBytes(bill, products)
+	pdfBytes, err := h.renderBillPDFBytes(bill, products)
 	if err != nil {
 		log.Printf("SendBillWhatsApp: %v", err)
 		c.JSON(http.StatusInternalServerError, model.WhatsAppSendResponse{Detail: ErrGenerateInvoicePDF})

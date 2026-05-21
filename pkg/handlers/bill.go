@@ -489,9 +489,9 @@ func getNextSquenceNumber(qtx *db.Queries, c *gin.Context) uint64 {
 	return uint64(maxSequenceNumber) + 1
 }
 
-func parsePositiveBillID(rawID string) (uint64, error) {
+func parseBillID(rawID string) (uint64, error) {
 	billID, err := strconv.ParseUint(rawID, 10, 64)
-	if err != nil || billID == 0 {
+	if err != nil {
 		return 0, fmt.Errorf("invalid bill id")
 	}
 	return billID, nil
@@ -621,7 +621,7 @@ func (h *handler) getBillDetailByID(ctx context.Context, id uint64) (model.Bill,
 }
 
 func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProductResponse) {
-	billID, err := parsePositiveBillID(c.Param("id"))
+	billID, err := parseBillID(c.Param("id"))
 	if err != nil {
 		log.Printf("getBillDetail: %v", err)
 		c.AbortWithError(http.StatusBadRequest, err)
@@ -651,7 +651,7 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 	// Path-traversal hardening (Sonar gosecurity:S2083): the param feeds
 	// filepath.Join below, so any value containing path separators or
 	// `..` segments could escape the downloads directory.
-	billID, err := parsePositiveBillID(c.Param("id"))
+	billID, err := parseBillID(c.Param("id"))
 	if err != nil {
 		log.Printf("GetBillPDF: %v", err)
 		c.Status(http.StatusBadRequest)
@@ -686,15 +686,13 @@ func (h *handler) buildBillPDFBytes(ctx context.Context, billID uint64) ([]byte,
 		return nil, model.Bill{}, err
 	}
 
-	pdfBytes, err := renderBillPDFBytes(bill, products)
+	pdfBytes, err := h.renderBillPDFBytes(bill, products)
 	if err != nil {
 		return nil, model.Bill{}, err
 	}
 
 	return pdfBytes, bill, nil
 }
-
-var renderBillPDFBytes = generateBillPDFBytes
 
 func generateBillPDFBytes(bill model.Bill, products []model.BillProductResponse) ([]byte, error) {
 	return pdf.GenerateInvoiceBytes(buildBillInvoice(bill, products), "fonts")

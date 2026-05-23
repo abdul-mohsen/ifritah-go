@@ -1,4 +1,5 @@
 *.sh
+!.github/scripts/validate-version.sh
 .env
 web-service-gin
 pkg/db/gen/*

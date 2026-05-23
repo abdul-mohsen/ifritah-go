@@ -43,6 +43,16 @@ type AddPurchaseBillRequest struct {
 	DeliverDate            *time.Time            `json:"deliver_date"`
 }
 
+type PurchaseBillDuplicateCheckRequest struct {
+	SupplierId             int32  `json:"supplier_id" binding:"required"`
+	SupplierSequenceNumber uint64 `json:"supplier_sequence_number" binding:"required"`
+}
+
+type PurchaseBillDuplicateCheckResponse struct {
+	Exists         bool    `json:"exists"`
+	PurchaseBillId *uint64 `json:"purchase_bill_id,omitempty"`
+}
+
 type UploadFileResponse struct {
 	FileKey      string `json:"file_key"`
 	OriginalName string `json:"original_name"`

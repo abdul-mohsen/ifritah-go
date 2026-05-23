@@ -287,6 +287,37 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 
 }
 
+func (h *handler) CheckPurchaseBillDuplicate(c *gin.Context) {
+	request := model.PurchaseBillDuplicateCheckRequest{}
+	if err := c.BindJSON(&request); err != nil {
+		log.Printf("CheckPurchaseBillDuplicate: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": BindError(err)})
+		return
+	}
+
+	userSession := GetSessionInfo(c)
+	purchaseBillID, err := h.queries.GetPurchaseBillDuplicateBySupplierSequence(c.Request.Context(), db.GetPurchaseBillDuplicateBySupplierSequenceParams{
+		UserID:                 int32(userSession.id),
+		SupplierID:             request.SupplierId,
+		SupplierSequenceNumber: &request.SupplierSequenceNumber,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusOK, model.PurchaseBillDuplicateCheckResponse{Exists: false})
+			return
+		}
+
+		log.Printf("CheckPurchaseBillDuplicate: %v", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	c.JSON(http.StatusOK, model.PurchaseBillDuplicateCheckResponse{
+		Exists:         true,
+		PurchaseBillId: &purchaseBillID,
+	})
+}
+
 func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.PurchaseBillProduct, billId uint64, storeID int32) error {
 
 	for _, product := range products {

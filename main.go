@@ -85,6 +85,7 @@ func main() {
 		authorized.POST("bill/credit", h.CreditBill)
 
 		// ── Purchase Bills (delete & receipt-tracking are manager+) ────
+		authorized.POST("purchase_bill/duplicate-check", h.CheckPurchaseBillDuplicate)
 		authorized.GET("purchase_bill/:id", h.GetPurchaseBillDetail)
 		authorized.POST("purchase_bill", h.AddPurchaseBill)
 		authorized.POST("purchase_bill/all", h.GetAllPurchaseBill)

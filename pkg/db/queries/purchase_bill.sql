@@ -30,6 +30,15 @@ select b.*
 	join user on user.id = ? and company.id=user.company_id
 	where b.id = ? limit 1;
 
+-- name: GetPurchaseBillDuplicateBySupplierSequence :one
+SELECT b.id
+FROM purchase_bill AS b
+JOIN supplier ON supplier.id = b.supplier_id
+JOIN user ON user.id = sqlc.arg('user_id') AND user.company_id = supplier.company_id
+WHERE b.supplier_id = sqlc.arg('supplier_id')
+  AND b.supplier_sequence_number = sqlc.arg('supplier_sequence_number')
+LIMIT 1;
+
 -- name: GetPurchaseBillProducts :many
 select * from purchase_bill_product p where p.bill_id = ?;
 

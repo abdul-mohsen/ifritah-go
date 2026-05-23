@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/abdul-mohsen/go-arabic-pdf-lib v1.2.3
+	github.com/abdul-mohsen/go-whatsapp v0.0.0-20260518221046-6ad7504de147
 	github.com/gin-contrib/cache v1.4.1
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-playground/validator/v10 v10.30.1
@@ -58,3 +59,5 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/abdul-mohsen/go-whatsapp => github.com/abdulmohsenssda/go-whatsapp v0.0.0-20260518221046-6ad7504de147

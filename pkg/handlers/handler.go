@@ -11,10 +11,13 @@ import (
 )
 
 type handler struct {
-	DB      *sql.DB
-	queries *db.Queries
-	pub     *ZatcaPublisher
+	DB            *sql.DB
+	queries       *db.Queries
+	pub           *ZatcaPublisher
+	renderBillPDF billPDFRenderer
 }
+
+type billPDFRenderer func(model.Bill, []model.BillProductResponse) ([]byte, error)
 
 type userSession struct {
 	id       int64
@@ -23,7 +26,20 @@ type userSession struct {
 }
 
 func New(db *sql.DB, queries *db.Queries, pub *ZatcaPublisher) handler {
-	return handler{db, queries, pub}
+	return handler{
+		DB:            db,
+		queries:       queries,
+		pub:           pub,
+		renderBillPDF: generateBillPDFBytes,
+	}
+}
+
+func (h *handler) renderBillPDFBytes(bill model.Bill, products []model.BillProductResponse) ([]byte, error) {
+	renderer := h.renderBillPDF
+	if renderer == nil {
+		renderer = generateBillPDFBytes
+	}
+	return renderer(bill, products)
 }
 
 func EnvSetup() {

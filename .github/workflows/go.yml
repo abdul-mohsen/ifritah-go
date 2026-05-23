@@ -3,6 +3,9 @@
 # available" error inside setup-go.
 name: Go
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, dev]
@@ -14,6 +17,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Validate VERSION
+        id: version
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/validate-version.sh
 
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5

@@ -6,7 +6,9 @@
 # =============================================================================
 
 # ---- Build stage ----
+ARG APP_VERSION=v0.0.1
 FROM golang:1.25-bookworm AS builder
+ARG APP_VERSION
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -29,6 +31,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/ifritah .
 
 # ---- Runtime stage ----
 FROM alpine:3.20
+ARG APP_VERSION
+
+ENV APP_VERSION=${APP_VERSION}
+LABEL org.opencontainers.image.version=${APP_VERSION}
 
 RUN apk add --no-cache ca-certificates tzdata wget \
     && addgroup -S app && adduser -S app -G app

@@ -97,3 +97,40 @@ func TestBuildBillSearchParams_Empty(t *testing.T) {
 		t.Fatalf("empty query must yield nil/nil, got name=%v phone=%v", name, phone)
 	}
 }
+
+// TestSupplierSequenceNumberLiveFilterContract verifies that incremental
+// prefix filtering on supplier_sequence_number works for live typing UX.
+// Frontend sends partial sequences (1, 12, 123, etc) and expects matching bills.
+func TestSupplierSequenceNumberLiveFilterContract(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    *string
+		expected *string
+	}{
+		{"nil input no filter", nil, nil},
+		{"empty string no filter", strPtr(""), nil},
+		{"whitespace no filter", strPtr("   "), nil},
+		{"single digit", strPtr("1"), strPtr("1%")},
+		{"two digits", strPtr("12"), strPtr("12%")},
+		{"three digits", strPtr("123"), strPtr("123%")},
+		{"four digits", strPtr("1234"), strPtr("1234%")},
+		{"trimmed prefix", strPtr("  45  "), strPtr("45%")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			prefix := buildPlainPrefixFilter(tc.input)
+			if tc.expected == nil {
+				if prefix != nil {
+					t.Fatalf("expected nil prefix, got %v", prefix)
+				}
+				return
+			}
+			if prefix == nil {
+				t.Fatalf("expected prefix %q, got nil", *tc.expected)
+			}
+			if *prefix != *tc.expected {
+				t.Fatalf("expected %q, got %q", *tc.expected, *prefix)
+			}
+		})
+	}
+}

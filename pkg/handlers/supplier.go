@@ -243,3 +243,49 @@ func (h *handler) DeleteSupplier(c *gin.Context) {
 
 	c.Status(http.StatusNoContent)
 }
+
+func (h *handler) SearchSuppliers(c *gin.Context) {
+	userSession := GetSessionInfo(c)
+
+	companyID, err := h.queries.GetCompanyIdByUser(c.Request.Context(), int32(userSession.id))
+	if err != nil || companyID == nil {
+		log.Printf("SearchSuppliers: %v", err)
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+
+	q := c.Query("q")
+	queryLike, _ := buildLikeAndDigitsExact(&q)
+
+	const maxResults = 100
+	suppliers, err := h.queries.SearchSuppliers(c.Request.Context(), db.SearchSuppliersParams{
+		CompanyID: *companyID,
+		QueryLike: queryLike,
+		Limit:     maxResults,
+	})
+	if err != nil {
+		log.Printf("SearchSuppliers: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	// Map to response model
+	results := make([]model.SearchSupplierResponse, len(suppliers))
+	for i, s := range suppliers {
+		name := ""
+		code := ""
+		if s.Name != nil {
+			name = *s.Name
+		}
+		if s.Code != nil {
+			code = *s.Code
+		}
+		results[i] = model.SearchSupplierResponse{
+			ID:   s.ID,
+			Name: name,
+			Code: code,
+		}
+	}
+
+	c.IndentedJSON(http.StatusOK, results)
+}

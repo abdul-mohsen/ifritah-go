@@ -18,5 +18,15 @@ WHERE is_deleted = FALSE
 ORDER BY id DESC
 LIMIT ?;
 
+-- name: SearchSuppliers :many
+SELECT id, name, number as code FROM supplier
+WHERE is_deleted = FALSE
+  AND company_id = ?
+  AND (sqlc.narg('query_like') IS NULL
+       OR name LIKE sqlc.narg('query_like')
+       OR number LIKE sqlc.narg('query_like'))
+ORDER BY name ASC
+LIMIT ?;
+
 -- name: AddSupplier :execresult
 INSERT INTO supplier (company_id, name, address, phone_number, number, vat_number, bank_account, is_postpaid, credit_limit, payment_terms_days, preferred_payment_method, commercial_registration, short_address, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

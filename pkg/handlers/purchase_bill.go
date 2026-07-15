@@ -153,6 +153,18 @@ func (h *handler) savePurchaseBillAttachments(id uint64, request model.AddPurcha
 	}
 }
 
+func recordPurchaseBillStockMovements(qtx *db.Queries, c *gin.Context, id uint64,
+	request model.AddPurchaseBillRequest, enforcement string, userID int32) error {
+	if enforcement == model.StockEnforcementDisable || request.State <= 0 {
+		return nil
+	}
+	return recordPurchaseMovements(
+		qtx, c, id, request.StoreId,
+		request.SupplierSequenceNumber,
+		enforcement, userID,
+	)
+}
+
 func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	id, valid := purchaseBillID(c)
 	if !valid {
@@ -192,15 +204,9 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	if enforcement != model.StockEnforcementDisable && request.State > 0 {
-		if err := recordPurchaseMovements(
-			setup.qtx, c, id, request.StoreId,
-			request.SupplierSequenceNumber,
-			enforcement, int32(setup.session.id),
-		); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error(), "type": "stock_error"})
-			return
-		}
+	if err := recordPurchaseBillStockMovements(setup.qtx, c, id, request, enforcement, int32(setup.session.id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error(), "type": "stock_error"})
+		return
 	}
 	if err := setup.tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -241,15 +247,9 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	if enforcement != model.StockEnforcementDisable && request.State > 0 {
-		if err := recordPurchaseMovements(
-			setup.qtx, c, id, request.StoreId,
-			request.SupplierSequenceNumber,
-			enforcement, int32(setup.session.id),
-		); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error(), "type": "stock_error"})
-			return
-		}
+	if err := recordPurchaseBillStockMovements(setup.qtx, c, id, request, enforcement, int32(setup.session.id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error(), "type": "stock_error"})
+		return
 	}
 	if err := setup.tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)

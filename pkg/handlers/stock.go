@@ -229,7 +229,7 @@ func (h *handler) reverseSaleMovements(tx *db.Queries, c *gin.Context, billID ui
 //   2. Insert stock_movement (purchase, positive qty)
 
 func recordPurchaseMovements(tx *db.Queries, c *gin.Context, pbID uint64, storeID int32,
-	products []model.PurchaseBillProduct, seqNumber uint64,
+	seqNumber uint64,
 	enforcement string, userID int32) error {
 
 	if enforcement == model.StockEnforcementDisable {

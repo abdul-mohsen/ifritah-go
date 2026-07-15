@@ -91,6 +91,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	tx, qtx := setup.tx, setup.qtx
 
 	defer tx.Rollback()
+	enforcement := h.getStockEnforcementMode(c)
 
 	args := db.UpdatePurchaseBillParams{
 		EffectiveDate:          effectiveDate,
@@ -120,7 +121,6 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	}
 
 	// ── Stock tracking: reverse old stock before deleting products ──
-	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable {
 		if err := h.reversePurchaseMovements(qtx, c, id, int32(userSession.id)); err != nil {
 			log.Printf("UpdatePurchaseBill: %v", err)
@@ -140,11 +140,13 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	// TODO @ssda work around when the frontend send id when he should not
 	for i := range request.ManualProducts {
 		request.ManualProducts[i].ProductId = nil
+		request.ManualProducts[i].TrackStock = false
 	}
 
 	products := append(request.Products, request.ManualProducts...)
 
-	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId)
+	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId,
+		enforcement != model.StockEnforcementDisable && request.State > 0)
 	if err != nil {
 		log.Printf("UpdatePurchaseBill: %v", err)
 		c.Status(http.StatusBadRequest)
@@ -161,7 +163,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		if err := recordPurchaseMovements(
 			qtx, c, id, request.StoreId,
-			request.Products, request.SupplierSequenceNumber,
+			request.SupplierSequenceNumber,
 			enforcement, int32(userSession.id),
 		); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -192,6 +194,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	tx, qtx := setup.tx, setup.qtx
 
 	defer tx.Rollback()
+	enforcement := h.getStockEnforcementMode(c)
 
 	args := db.AddPurchaseBillParams{
 		EffectiveDate:          effectiveDate,
@@ -232,11 +235,13 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	// TODO @ssda work around when the frontend send id when he should not
 	for i := range request.ManualProducts {
 		request.ManualProducts[i].ProductId = nil
+		request.ManualProducts[i].TrackStock = false
 	}
 
 	products := append(request.Products, request.ManualProducts...)
 
-	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId)
+	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId,
+		enforcement != model.StockEnforcementDisable && request.State > 0)
 	if err != nil {
 		log.Printf("AddPurchaseBill: %v", err)
 		c.Status(http.StatusBadRequest)
@@ -250,11 +255,10 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	}
 
 	// ── Stock tracking: add stock for catalog products ──
-	enforcement := h.getStockEnforcementMode(c)
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		if err := recordPurchaseMovements(
 			qtx, c, id, request.StoreId,
-			request.Products, request.SupplierSequenceNumber,
+			request.SupplierSequenceNumber,
 			enforcement, int32(userSession.id),
 		); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -318,40 +322,75 @@ func (h *handler) CheckPurchaseBillDuplicate(c *gin.Context) {
 	})
 }
 
-func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.PurchaseBillProduct, billId uint64, storeID int32) error {
+func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.PurchaseBillProduct,
+	billID uint64, storeID int32, recordStockMovement bool) error {
 
 	for _, product := range products {
-		arg := db.AddProductParams{
-			ArticleID:   product.ProductId,
-			Quantity:    product.Quantity,
+		var inventoryProductID *uint64
+		if product.TrackStock {
+			if product.ProductId != nil && *product.ProductId > 0 {
+				existing, err := tx.GetProduct(c.Request.Context(), uint64(*product.ProductId))
+				if err != nil {
+					return fmt.Errorf("store product %d not found: %w", *product.ProductId, err)
+				}
+				if existing.StoreID != storeID {
+					return fmt.Errorf("store product %d does not belong to the selected store", *product.ProductId)
+				}
+
+				quantity := existing.Quantity
+				if !recordStockMovement {
+					quantity = quantity.Add(product.Quantity)
+				}
+				shelfNumber := product.ShelfNumber
+				if shelfNumber == nil {
+					shelfNumber = existing.ShelfNumber
+				}
+				if err := tx.UpdateProduct(c.Request.Context(), db.UpdateProductParams{
+					ID:          existing.ID,
+					Quantity:    quantity,
+					Price:       existing.Price,
+					CostPrice:   product.CostPrice,
+					ShelfNumber: shelfNumber,
+				}); err != nil {
+					return fmt.Errorf("update store product %d: %w", existing.ID, err)
+				}
+				productID := existing.ID
+				inventoryProductID = &productID
+			} else {
+				quantity := decimal.Zero
+				if !recordStockMovement {
+					quantity = product.Quantity
+				}
+				result, err := tx.AddProduct(c.Request.Context(), db.AddProductParams{
+					ArticleID:   nil,
+					Quantity:    quantity,
+					Price:       product.Price,
+					CostPrice:   product.CostPrice,
+					ShelfNumber: product.ShelfNumber,
+					StoreID:     storeID,
+					Name:        &product.Name,
+				})
+				if err != nil {
+					return fmt.Errorf("create store product %q: %w", product.Name, err)
+				}
+				productID, err := result.LastInsertId()
+				if err != nil {
+					return err
+				}
+				id := uint64(productID)
+				inventoryProductID = &id
+			}
+		}
+
+		if err := tx.AddProductToBillPurchase(c.Request.Context(), db.AddProductToBillPurchaseParams{
+			ProductID:   inventoryProductID,
+			Name:        &product.Name,
 			Price:       product.Price,
 			CostPrice:   product.CostPrice,
 			ShelfNumber: product.ShelfNumber,
-			StoreID:     storeID,
-			Name:        &product.Name,
-		}
-		res, err := tx.AddProduct(c.Request.Context(), arg)
-
-		if err != nil {
-			return err
-		}
-
-		PID, err := res.LastInsertId()
-		pID := uint64(PID)
-
-		if err != nil {
-			return err
-		}
-
-		args := db.AddProductToBillPurchaseParams{
-			ProductID: &pID,
-			Name:      &product.Name,
-			Price:     product.Price,
-			Quantity:  product.Quantity,
-			BillID:    billId,
-		}
-		err = tx.AddProductToBillPurchase(c.Request.Context(), args)
-		if err != nil {
+			Quantity:    product.Quantity,
+			BillID:      billID,
+		}); err != nil {
 			return err
 		}
 	}

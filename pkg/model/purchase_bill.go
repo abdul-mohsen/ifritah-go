@@ -68,4 +68,5 @@ type PurchaseBillProduct struct {
 	CostPrice   decimal.Decimal `json:"cost_price" binding:"required"`
 	ShelfNumber *string         `json:"shelf_number"`
 	Quantity    decimal.Decimal `json:"quantity" binding:"required"`
+	TrackStock  bool            `json:"track_stock"`
 }

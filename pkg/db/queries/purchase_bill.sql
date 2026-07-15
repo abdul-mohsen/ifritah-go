@@ -64,7 +64,7 @@ insert into purchase_bill (effective_date, payment_due_date, state, discount, st
 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: AddProductToBillPurchase :exec
-insert into purchase_bill_product  (product_id, name, price, quantity, bill_id) values (?, ?, ?, ?, ?);
+insert into purchase_bill_product  (product_id, name, price, cost_price, shelf_number, quantity, bill_id) values (?, ?, ?, ?, ?, ?, ?);
 
 -- name: AddAttachmentsPurchaseBill :exec
 insert into purchase_bill_attachments  (purchase_bill_id, file_key) values (?, ?);

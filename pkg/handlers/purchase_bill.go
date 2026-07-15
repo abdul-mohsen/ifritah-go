@@ -71,224 +71,192 @@ func (h *handler) beginPurchaseBillTx(c *gin.Context, defaultState int32) (*purc
 	}, true
 }
 
-func (h *handler) UpdatePurchaseBill(c *gin.Context) {
-
-	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-
+func purchaseBillID(c *gin.Context) (uint64, bool) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
+		return 0, false
+	}
+	return uint64(id), true
+}
+
+func purchaseBillProducts(request *model.AddPurchaseBillRequest) []model.PurchaseBillProduct {
+	// The UI may send IDs for manually entered lines; they must never become
+	// inventory-linked or stock-tracked.
+	for i := range request.ManualProducts {
+		request.ManualProducts[i].ProductId = nil
+		request.ManualProducts[i].TrackStock = false
+	}
+	return append(request.Products, request.ManualProducts...)
+}
+
+func updatePurchaseBillError(c *gin.Context, err error) {
+	if IsDuplicate(err) {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"message": "Supplier bill number already exists for this supplier",
+		})
 		return
 	}
+	c.AbortWithError(http.StatusBadRequest, err)
+}
 
-	id := uint64(Id)
-
-	setup, ok := h.beginPurchaseBillTx(c, 3)
-	if !ok {
+func addPurchaseBillError(c *gin.Context, err error) {
+	log.Printf("AddPurchaseBill: %v", err)
+	if IsDuplicate(err) {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"message": "Supplier bill number already exists for this supplier",
+		})
 		return
 	}
-	request, userSession := setup.request, setup.session
-	paymentDueDate, effectiveDate := setup.paymentDueDate, setup.effectiveDate
-	tx, qtx := setup.tx, setup.qtx
+	c.Status(http.StatusBadRequest)
+}
 
-	defer tx.Rollback()
-	enforcement := h.getStockEnforcementMode(c)
-
-	args := db.UpdatePurchaseBillParams{
-		EffectiveDate:          effectiveDate,
-		PaymentDueDate:         paymentDueDate,
+func updatePurchaseBillParams(request model.AddPurchaseBillRequest, setup *purchaseBillSetup, id uint64) db.UpdatePurchaseBillParams {
+	return db.UpdatePurchaseBillParams{
+		EffectiveDate:          setup.effectiveDate,
+		PaymentDueDate:         setup.paymentDueDate,
 		State:                  request.State,
 		Discount:               request.Discount,
 		StoreID:                request.StoreId,
-		MerchantID:             int32(userSession.id),
+		MerchantID:             int32(setup.session.id),
 		SupplierID:             request.SupplierId,
 		SupplierSequenceNumber: &request.SupplierSequenceNumber,
 		ID:                     id,
 		PaymentMethod:          request.PaymentMethod,
 		DeliverDate:            request.DeliverDate,
 	}
-
-	err = qtx.UpdatePurchaseBill(c.Request.Context(), args)
-	if err != nil {
-		if IsDuplicate(err) {
-			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-				"message": "Supplier bill number already exists for this supplier",
-			})
-		} else {
-			c.AbortWithError(http.StatusBadRequest, err)
-		}
-
-		return
-	}
-
-	// ── Stock tracking: reverse old stock before deleting products ──
-	if enforcement != model.StockEnforcementDisable {
-		if err := h.reversePurchaseMovements(qtx, c, id, int32(userSession.id)); err != nil {
-			log.Printf("UpdatePurchaseBill: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{
-				"detail": err.Error(),
-				"type":   "stock_error",
-			})
-			return
-		}
-	}
-
-	if err = qtx.DeleteProductPurchaseBill(c.Request.Context(), id); err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
-		return
-	}
-
-	// TODO @ssda work around when the frontend send id when he should not
-	for i := range request.ManualProducts {
-		request.ManualProducts[i].ProductId = nil
-		request.ManualProducts[i].TrackStock = false
-	}
-
-	products := append(request.Products, request.ManualProducts...)
-
-	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId,
-		enforcement != model.StockEnforcementDisable && request.State > 0)
-	if err != nil {
-		log.Printf("UpdatePurchaseBill: %v", err)
-		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	if err := qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
-		log.Printf("UpdatePurchaseBill refresh totals: %v", err)
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	// ── Stock tracking: add new stock for updated products ──
-	if enforcement != model.StockEnforcementDisable && request.State > 0 {
-		if err := recordPurchaseMovements(
-			qtx, c, id, request.StoreId,
-			request.SupplierSequenceNumber,
-			enforcement, int32(userSession.id),
-		); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"detail": err.Error(),
-				"type":   "stock_error",
-			})
-			return
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	c.Status(http.StatusOK)
-
 }
 
-func (h *handler) AddPurchaseBill(c *gin.Context) {
-
-	setup, ok := h.beginPurchaseBillTx(c, 1)
-	if !ok {
-		return
-	}
-	request, userSession := setup.request, setup.session
-	paymentDueDate, effectiveDate := setup.paymentDueDate, setup.effectiveDate
-	tx, qtx := setup.tx, setup.qtx
-
-	defer tx.Rollback()
-	enforcement := h.getStockEnforcementMode(c)
-
-	args := db.AddPurchaseBillParams{
-		EffectiveDate:          effectiveDate,
-		PaymentDueDate:         paymentDueDate,
+func addPurchaseBillParams(request model.AddPurchaseBillRequest, setup *purchaseBillSetup) db.AddPurchaseBillParams {
+	return db.AddPurchaseBillParams{
+		EffectiveDate:          setup.effectiveDate,
+		PaymentDueDate:         setup.paymentDueDate,
 		State:                  request.State,
 		Discount:               request.Discount,
 		StoreID:                int32(request.StoreId),
-		MerchantID:             int32(userSession.id),
+		MerchantID:             int32(setup.session.id),
 		SupplierID:             request.SupplierId,
 		SupplierSequenceNumber: &request.SupplierSequenceNumber,
 		PdfLink:                request.PDFLink,
 		PaymentMethod:          request.PaymentMethod,
 		DeliverDate:            request.DeliverDate,
 	}
+}
 
-	res, err := qtx.AddPurchaseBill(c.Request.Context(), args)
-	if err != nil {
-		log.Printf("AddPurchaseBill: %v", err)
-		if IsDuplicate(err) {
-			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-				"message": "Supplier bill number already exists for this supplier",
-			})
-		} else {
-			c.Status(http.StatusBadRequest)
+func (h *handler) savePurchaseBillAttachments(id uint64, request model.AddPurchaseBillRequest) {
+	var attachments []string
+	for _, attachment := range request.Attachments {
+		attachments = append(attachments, attachment)
+	}
+	if request.PDFLink != nil {
+		_ = h.SavePurchaseBillAttachments(h.DB, id, *request.PDFLink, attachments)
+	}
+}
+
+func (h *handler) UpdatePurchaseBill(c *gin.Context) {
+	id, valid := purchaseBillID(c)
+	if !valid {
+		return
+	}
+	setup, ok := h.beginPurchaseBillTx(c, 3)
+	if !ok {
+		return
+	}
+	request := setup.request
+	defer setup.tx.Rollback()
+	enforcement := h.getStockEnforcementMode(c)
+
+	if err := setup.qtx.UpdatePurchaseBill(c.Request.Context(), updatePurchaseBillParams(request, setup, id)); err != nil {
+		updatePurchaseBillError(c, err)
+		return
+	}
+	if enforcement != model.StockEnforcementDisable {
+		if err := h.reversePurchaseMovements(setup.qtx, c, id, int32(setup.session.id)); err != nil {
+			log.Printf("UpdatePurchaseBill: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error(), "type": "stock_error"})
+			return
 		}
+	}
+	if err := setup.qtx.DeleteProductPurchaseBill(c.Request.Context(), id); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
+	if err := addProductToBillPurchase(setup.qtx, c, purchaseBillProducts(&request), id, request.StoreId,
+		enforcement != model.StockEnforcementDisable && request.State > 0); err != nil {
+		log.Printf("UpdatePurchaseBill: %v", err)
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	if err := setup.qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
+		log.Printf("UpdatePurchaseBill refresh totals: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	if enforcement != model.StockEnforcementDisable && request.State > 0 {
+		if err := recordPurchaseMovements(
+			setup.qtx, c, id, request.StoreId,
+			request.SupplierSequenceNumber,
+			enforcement, int32(setup.session.id),
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error(), "type": "stock_error"})
+			return
+		}
+	}
+	if err := setup.tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	c.Status(http.StatusOK)
+}
 
-	Id, err := res.LastInsertId()
-	id := uint64(Id)
+func (h *handler) AddPurchaseBill(c *gin.Context) {
+	setup, ok := h.beginPurchaseBillTx(c, 1)
+	if !ok {
+		return
+	}
+	request := setup.request
+	defer setup.tx.Rollback()
+	enforcement := h.getStockEnforcementMode(c)
 
+	res, err := setup.qtx.AddPurchaseBill(c.Request.Context(), addPurchaseBillParams(request, setup))
+	if err != nil {
+		addPurchaseBillError(c, err)
+		return
+	}
+	insertedID, err := res.LastInsertId()
 	if err != nil {
 		log.Printf("AddPurchaseBill: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
-
-	// TODO @ssda work around when the frontend send id when he should not
-	for i := range request.ManualProducts {
-		request.ManualProducts[i].ProductId = nil
-		request.ManualProducts[i].TrackStock = false
-	}
-
-	products := append(request.Products, request.ManualProducts...)
-
-	err = addProductToBillPurchase(qtx, c, products, id, request.StoreId,
-		enforcement != model.StockEnforcementDisable && request.State > 0)
-	if err != nil {
+	id := uint64(insertedID)
+	if err := addProductToBillPurchase(setup.qtx, c, purchaseBillProducts(&request), id, request.StoreId,
+		enforcement != model.StockEnforcementDisable && request.State > 0); err != nil {
 		log.Printf("AddPurchaseBill: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
-
-	if err := qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
+	if err := setup.qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
 		log.Printf("AddPurchaseBill refresh totals: %v", err)
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-
-	// ── Stock tracking: add stock for catalog products ──
 	if enforcement != model.StockEnforcementDisable && request.State > 0 {
 		if err := recordPurchaseMovements(
-			qtx, c, id, request.StoreId,
+			setup.qtx, c, id, request.StoreId,
 			request.SupplierSequenceNumber,
-			enforcement, int32(userSession.id),
+			enforcement, int32(setup.session.id),
 		); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"detail": err.Error(),
-				"type":   "stock_error",
-			})
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error(), "type": "stock_error"})
 			return
 		}
 	}
-
-	if err := tx.Commit(); err != nil {
+	if err := setup.tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-
-	var attachment []string
-	for _, a := range request.Attachments {
-		attachment = append(attachment, a)
-
-	}
-	if request.PDFLink != nil {
-		if err := h.SavePurchaseBillAttachments(h.DB, id, *request.PDFLink, attachment); err != nil {
-			// TODO @ssda review this to force pdf upload now it is blocked by the ui
-			// c.AbortWithError(http.StatusInternalServerError, err)
-			// log.Panic(err)
-		}
-	}
-
+	h.savePurchaseBillAttachments(id, request)
 	c.Status(http.StatusCreated)
-
 }
 
 func (h *handler) CheckPurchaseBillDuplicate(c *gin.Context) {
@@ -326,62 +294,10 @@ func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.P
 	billID uint64, storeID int32, recordStockMovement bool) error {
 
 	for _, product := range products {
-		var inventoryProductID *uint64
-		if product.TrackStock {
-			if product.ProductId != nil && *product.ProductId > 0 {
-				existing, err := tx.GetProduct(c.Request.Context(), uint64(*product.ProductId))
-				if err != nil {
-					return fmt.Errorf("store product %d not found: %w", *product.ProductId, err)
-				}
-				if existing.StoreID != storeID {
-					return fmt.Errorf("store product %d does not belong to the selected store", *product.ProductId)
-				}
-
-				quantity := existing.Quantity
-				if !recordStockMovement {
-					quantity = quantity.Add(product.Quantity)
-				}
-				shelfNumber := product.ShelfNumber
-				if shelfNumber == nil {
-					shelfNumber = existing.ShelfNumber
-				}
-				if err := tx.UpdateProduct(c.Request.Context(), db.UpdateProductParams{
-					ID:          existing.ID,
-					Quantity:    quantity,
-					Price:       existing.Price,
-					CostPrice:   product.CostPrice,
-					ShelfNumber: shelfNumber,
-				}); err != nil {
-					return fmt.Errorf("update store product %d: %w", existing.ID, err)
-				}
-				productID := existing.ID
-				inventoryProductID = &productID
-			} else {
-				quantity := decimal.Zero
-				if !recordStockMovement {
-					quantity = product.Quantity
-				}
-				result, err := tx.AddProduct(c.Request.Context(), db.AddProductParams{
-					ArticleID:   nil,
-					Quantity:    quantity,
-					Price:       product.Price,
-					CostPrice:   product.CostPrice,
-					ShelfNumber: product.ShelfNumber,
-					StoreID:     storeID,
-					Name:        &product.Name,
-				})
-				if err != nil {
-					return fmt.Errorf("create store product %q: %w", product.Name, err)
-				}
-				productID, err := result.LastInsertId()
-				if err != nil {
-					return err
-				}
-				id := uint64(productID)
-				inventoryProductID = &id
-			}
+		inventoryProductID, err := purchaseInventoryProduct(tx, c, product, storeID, recordStockMovement)
+		if err != nil {
+			return err
 		}
-
 		if err := tx.AddProductToBillPurchase(c.Request.Context(), db.AddProductToBillPurchaseParams{
 			ProductID:   inventoryProductID,
 			Name:        &product.Name,
@@ -395,6 +311,73 @@ func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.P
 		}
 	}
 	return nil
+}
+
+func purchaseInventoryProduct(tx *db.Queries, c *gin.Context, product model.PurchaseBillProduct,
+	storeID int32, recordStockMovement bool) (*uint64, error) {
+	if !product.TrackStock {
+		return nil, nil
+	}
+	if product.ProductId != nil && *product.ProductId > 0 {
+		return updatePurchaseInventoryProduct(tx, c, product, storeID, recordStockMovement)
+	}
+	return createPurchaseInventoryProduct(tx, c, product, storeID, recordStockMovement)
+}
+
+func updatePurchaseInventoryProduct(tx *db.Queries, c *gin.Context, product model.PurchaseBillProduct,
+	storeID int32, recordStockMovement bool) (*uint64, error) {
+	existing, err := tx.GetProduct(c.Request.Context(), uint64(*product.ProductId))
+	if err != nil {
+		return nil, fmt.Errorf("store product %d not found: %w", *product.ProductId, err)
+	}
+	if existing.StoreID != storeID {
+		return nil, fmt.Errorf("store product %d does not belong to the selected store", *product.ProductId)
+	}
+	quantity := existing.Quantity
+	if !recordStockMovement {
+		quantity = quantity.Add(product.Quantity)
+	}
+	shelfNumber := product.ShelfNumber
+	if shelfNumber == nil {
+		shelfNumber = existing.ShelfNumber
+	}
+	if err := tx.UpdateProduct(c.Request.Context(), db.UpdateProductParams{
+		ID:          existing.ID,
+		Quantity:    quantity,
+		Price:       existing.Price,
+		CostPrice:   product.CostPrice,
+		ShelfNumber: shelfNumber,
+	}); err != nil {
+		return nil, fmt.Errorf("update store product %d: %w", existing.ID, err)
+	}
+	productID := existing.ID
+	return &productID, nil
+}
+
+func createPurchaseInventoryProduct(tx *db.Queries, c *gin.Context, product model.PurchaseBillProduct,
+	storeID int32, recordStockMovement bool) (*uint64, error) {
+	quantity := decimal.Zero
+	if !recordStockMovement {
+		quantity = product.Quantity
+	}
+	result, err := tx.AddProduct(c.Request.Context(), db.AddProductParams{
+		ArticleID:   nil,
+		Quantity:    quantity,
+		Price:       product.Price,
+		CostPrice:   product.CostPrice,
+		ShelfNumber: product.ShelfNumber,
+		StoreID:     storeID,
+		Name:        &product.Name,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create store product %q: %w", product.Name, err)
+	}
+	productID, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	id := uint64(productID)
+	return &id, nil
 }
 
 const purchaseBillListSort = "-effective_date"

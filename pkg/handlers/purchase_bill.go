@@ -165,6 +165,30 @@ func recordPurchaseBillStockMovements(qtx *db.Queries, c *gin.Context, id uint64
 	)
 }
 
+func finalizePurchaseBill(c *gin.Context, setup *purchaseBillSetup, id uint64,
+	request model.AddPurchaseBillRequest, enforcement, operation string) bool {
+	if err := addProductToBillPurchase(setup.qtx, c, purchaseBillProducts(&request), id, request.StoreId,
+		enforcement != model.StockEnforcementDisable && request.State > 0); err != nil {
+		log.Printf("%s: %v", operation, err)
+		c.Status(http.StatusBadRequest)
+		return false
+	}
+	if err := setup.qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
+		log.Printf("%s refresh totals: %v", operation, err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return false
+	}
+	if err := recordPurchaseBillStockMovements(setup.qtx, c, id, request, enforcement, int32(setup.session.id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error(), "type": "stock_error"})
+		return false
+	}
+	if err := setup.tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return false
+	}
+	return true
+}
+
 func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 	id, valid := purchaseBillID(c)
 	if !valid {
@@ -193,23 +217,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
-	if err := addProductToBillPurchase(setup.qtx, c, purchaseBillProducts(&request), id, request.StoreId,
-		enforcement != model.StockEnforcementDisable && request.State > 0); err != nil {
-		log.Printf("UpdatePurchaseBill: %v", err)
-		c.Status(http.StatusBadRequest)
-		return
-	}
-	if err := setup.qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
-		log.Printf("UpdatePurchaseBill refresh totals: %v", err)
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-	if err := recordPurchaseBillStockMovements(setup.qtx, c, id, request, enforcement, int32(setup.session.id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error(), "type": "stock_error"})
-		return
-	}
-	if err := setup.tx.Commit(); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+	if !finalizePurchaseBill(c, setup, id, request, enforcement, "UpdatePurchaseBill") {
 		return
 	}
 	c.Status(http.StatusOK)
@@ -236,23 +244,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		return
 	}
 	id := uint64(insertedID)
-	if err := addProductToBillPurchase(setup.qtx, c, purchaseBillProducts(&request), id, request.StoreId,
-		enforcement != model.StockEnforcementDisable && request.State > 0); err != nil {
-		log.Printf("AddPurchaseBill: %v", err)
-		c.Status(http.StatusBadRequest)
-		return
-	}
-	if err := setup.qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
-		log.Printf("AddPurchaseBill refresh totals: %v", err)
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-	if err := recordPurchaseBillStockMovements(setup.qtx, c, id, request, enforcement, int32(setup.session.id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error(), "type": "stock_error"})
-		return
-	}
-	if err := setup.tx.Commit(); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+	if !finalizePurchaseBill(c, setup, id, request, enforcement, "AddPurchaseBill") {
 		return
 	}
 	h.savePurchaseBillAttachments(id, request)

@@ -402,7 +402,10 @@ func (h *handler) CreateCashVoucher(c *gin.Context) {
 		MerchantID:           merchantID,
 		BranchID:             &req.BranchID,
 		CreatedBy:            merchantID,
-		ApprovedBy:           &merchantID,
+		// ApprovedBy stays nil: a new voucher starts in Draft (state=0) and
+		// has not gone through ApproveCashVoucher yet, so there is no
+		// approver to record.
+		ApprovedBy: nil,
 	}
 	result, err := qtx.CreateCashVoucher(c.Request.Context(), arg)
 

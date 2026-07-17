@@ -65,6 +65,33 @@ const (
 	MaxFileSize = 10 << 20
 )
 
+// resolveUploadPath validates a client-supplied file key and returns the
+// absolute on-disk path of the corresponding file inside FilesUploadDir.
+// It rejects empty/"."/".." keys and any path-separator characters, then
+// verifies the resolved absolute path still lives within FilesUploadDir —
+// the pattern CodeQL's go/path-injection query recognizes as a safe barrier
+// against path traversal (CWE-22/23/36/73/99).
+func resolveUploadPath(fileKey string) (string, error) {
+	base := filepath.Base(fileKey)
+	if base == "" || base == "." || base == ".." ||
+		strings.ContainsAny(fileKey, "/\\") {
+		return "", fmt.Errorf("invalid file key")
+	}
+
+	uploadDir, err := filepath.Abs(FilesUploadDir)
+	if err != nil {
+		return "", err
+	}
+	absPath, err := filepath.Abs(filepath.Join(uploadDir, base))
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(absPath, uploadDir+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid file key")
+	}
+	return absPath, nil
+}
+
 // Allowed file extensions for upload.
 var allowedUploadExt = map[string]bool{
 	".pdf":  true,
@@ -260,16 +287,17 @@ func (h *handler) DownloadFile(c *gin.Context) {
 	fileKey := c.Param("key")
 
 	// Sanitize — prevent path traversal
-	fileKey = filepath.Base(fileKey)
-	if fileKey == "." || fileKey == ".." || strings.Contains(fileKey, "/") || strings.Contains(fileKey, "\\") {
+	filePath, err := resolveUploadPath(fileKey)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "معرف ملف غير صالح"})
 		return
 	}
+	fileKey = filepath.Base(fileKey)
 
 	// Look up in database
 	var originalName string
 	var mimeType sql.NullString
-	err := h.DB.QueryRow(`
+	err = h.DB.QueryRow(`
 		SELECT original_name, mime_type FROM uploaded_files WHERE file_key = ?
 	`, fileKey).Scan(&originalName, &mimeType)
 	if err != nil {
@@ -277,7 +305,6 @@ func (h *handler) DownloadFile(c *gin.Context) {
 		return
 	}
 
-	filePath := filepath.Join(FilesUploadDir, fileKey)
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "الملف غير موجود على الخادم"})
 		return
@@ -298,7 +325,13 @@ func (h *handler) DownloadFile(c *gin.Context) {
 //
 // Response 200: {"success": true, "message": "تم حذف الملف بنجاح"}
 func (h *handler) DeleteFile(c *gin.Context) {
-	fileKey := filepath.Base(c.Param("key"))
+	rawKey := c.Param("key")
+	filePath, err := resolveUploadPath(rawKey)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "معرف ملف غير صالح"})
+		return
+	}
+	fileKey := filepath.Base(rawKey)
 
 	result, err := h.DB.Exec(`DELETE FROM uploaded_files WHERE file_key = ?`, fileKey)
 	if err != nil {
@@ -311,7 +344,6 @@ func (h *handler) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	filePath := filepath.Join(FilesUploadDir, fileKey)
 	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
 		log.Printf("[UPLOAD] Warning: failed to delete file from disk: %v", err)
 	}
@@ -391,12 +423,12 @@ func (h *handler) SavePurchaseBillAttachments(db *sql.DB, billID uint64, pdfLink
 			billID, attKey,
 		)
 		if err != nil {
-			log.Printf("[ATTACHMENTS] Failed to insert attachment %s for bill %d: %v", attKey, billID, err)
+			log.Printf("[ATTACHMENTS] Failed to insert attachment %s for bill %d: %v", sanitizeForLog(attKey), billID, err)
 			// Don't fail the whole operation for optional attachments
 		}
 	}
 
-	log.Printf("[ATTACHMENTS] Linked bill %d: pdf=%s, %d attachments", billID, pdfKey, len(attachments))
+	log.Printf("[ATTACHMENTS] Linked bill %d: pdf=%s, %d attachments", billID, sanitizeForLog(pdfKey), len(attachments))
 	return nil
 }
 

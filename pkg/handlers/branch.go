@@ -363,8 +363,7 @@ func (h *handler) DeleteBranch(c *gin.Context) {
 // Returns config fields + status indicators, NOT actual credentials/private keys.
 
 func (h *handler) GetBranchZatcaConfig(c *gin.Context) {
-	BranchID, err := strconv.Atoi(c.Param("id"))
-	branchID := uint32(BranchID)
+	branchID, err := parseUint32Param(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid branch ID"})
 		return
@@ -386,8 +385,7 @@ func (h *handler) GetBranchZatcaConfig(c *gin.Context) {
 // Uses INSERT ... ON DUPLICATE KEY UPDATE for upsert.
 
 func (h *handler) UpdateBranchZatcaConfig(c *gin.Context) {
-	BranchID, err := strconv.Atoi(c.Param("id"))
-	branchID := uint32(BranchID)
+	branchID, err := parseUint32Param(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid branch ID"})
 		return
@@ -428,9 +426,7 @@ func (h *handler) UpdateBranchZatcaConfig(c *gin.Context) {
 }
 
 func (h *handler) OnboardBranchZatca(c *gin.Context) {
-	BranchID, err := strconv.Atoi(c.Param("id"))
-	branchID := uint32(BranchID)
-
+	branchID, err := parseUint32Param(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid branch ID"})
 		return

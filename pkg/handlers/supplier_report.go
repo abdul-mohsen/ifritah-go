@@ -81,7 +81,7 @@ import (
 //	  "payment_breakdown": { cash_total, bank_transfer_total }
 //	}
 func (h *handler) GetSupplierReport(c *gin.Context) {
-	supplierID, err := strconv.Atoi(c.Param("id"))
+	supplierID, err := parseInt32Param(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid supplier ID"})
 		return
@@ -125,7 +125,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 
 	// 2. Fetch bill summary (totals from purchase_bill_product GENERATED columns)
 	summary, err := h.queries.GetSupplierBillSummary(c.Request.Context(), db.GetSupplierBillSummaryParams{
-		SupplierID: int32(supplierID),
+		SupplierID: supplierID,
 		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,
@@ -136,7 +136,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 	}
 
 	// 3. Fetch payment summary from cash_voucher
-	supplierID32 := int32(supplierID)
+	supplierID32 := supplierID
 	paymentSummary, err := h.queries.GetSupplierPaymentSummary(c.Request.Context(), db.GetSupplierPaymentSummaryParams{
 		SupplierID: &supplierID32,
 		MerchantID: merchantID,
@@ -153,7 +153,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 
 	// 4. Fetch bills (with totals from purchase_bill_product GENERATED columns)
 	bills, err := h.queries.GetPurchaseBillsBySupplier(c.Request.Context(), db.GetPurchaseBillsBySupplierParams{
-		SupplierID: int32(supplierID),
+		SupplierID: supplierID,
 		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,
@@ -176,7 +176,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 
 	// 6. Fetch top items (from purchase_bill_product, NOT bill_product)
 	topItems, err := h.queries.GetTopPurchasedItems(c.Request.Context(), db.GetTopPurchasedItemsParams{
-		SupplierID: int32(supplierID),
+		SupplierID: supplierID,
 		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,
@@ -187,7 +187,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 
 	// 7. Fetch aging buckets (unpaid bills by overdue period)
 	aging, err := h.queries.GetSupplierAgingBuckets(c.Request.Context(), db.GetSupplierAgingBucketsParams{
-		SupplierID: int32(supplierID),
+		SupplierID: supplierID,
 		MerchantID: merchantID,
 	})
 	if err != nil {
@@ -196,7 +196,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 
 	// 8. Fetch monthly spending trend
 	monthlySpending, err := h.queries.GetSupplierMonthlySpending(c.Request.Context(), db.GetSupplierMonthlySpendingParams{
-		SupplierID: int32(supplierID),
+		SupplierID: supplierID,
 		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,

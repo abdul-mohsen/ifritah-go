@@ -160,13 +160,13 @@ func parseSubmissionFilters(c *gin.Context) (pendingFlag string, statusCode int,
 		case ZatcaLabelPending:
 			pendingFlag = zatcaPendingFlagOn
 		default:
-			n, err := strconv.Atoi(s)
+			n, err := strconv.ParseInt(s, 10, 8)
 			if err != nil {
 				log.Printf("ZatcaMonitorSubmissions: invalid status %q: %v", s, err)
 				c.JSON(http.StatusBadRequest, gin.H{"error": ErrZatcaInvalidStatus})
 				return "", 0, 0, false
 			}
-			statusCode = n
+			statusCode = int(n)
 		}
 	}
 	if bs := c.Query("branch_id"); bs != "" {
@@ -184,9 +184,9 @@ func parseSubmissionFilters(c *gin.Context) (pendingFlag string, statusCode int,
 // ZatcaMonitorSubmissions returns recent submissions, optionally filtered by
 // status (numeric or label) and branch_id, ordered by submitted_at DESC.
 func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", strconv.Itoa(zatcaSubmissionsHint)))
-	if limit <= 0 || limit > zatcaSubmissionsCap {
-		limit = zatcaSubmissionsHint
+	limit := zatcaSubmissionsHint
+	if v, err := strconv.ParseInt(c.DefaultQuery("limit", strconv.Itoa(zatcaSubmissionsHint)), 10, 32); err == nil && v > 0 && v <= int64(zatcaSubmissionsCap) {
+		limit = int(v)
 	}
 
 	pendingFlag, statusCode, branchID, ok := parseSubmissionFilters(c)

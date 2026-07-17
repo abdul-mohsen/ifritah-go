@@ -96,7 +96,7 @@ func (p *ZatcaPublisher) publish(msg Message) error {
 		return fmt.Errorf("publish to %s: %w", subject, err)
 	}
 	log.Print(ack)
-	log.Print(subject)
+	log.Print(sanitizeForLog(subject))
 	log.Print(msg)
 	return nil
 }

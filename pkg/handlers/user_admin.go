@@ -153,7 +153,7 @@ func (h *handler) ListUsers(c *gin.Context) {
 // ── GetUserByID ────────────────────────────────────────────────────────────
 
 func (h *handler) GetUserByID(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidUserID})
 		return
@@ -285,7 +285,7 @@ type adminUpdateUserRequest struct {
 }
 
 func (h *handler) UpdateUser(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidUserID})
 		return
@@ -376,7 +376,7 @@ func (h *handler) UpdateUser(c *gin.Context) {
 // ── DeleteUser ─────────────────────────────────────────────────────────────
 
 func (h *handler) DeleteUser(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidUserID})
 		return
@@ -425,7 +425,7 @@ type adminResetPasswordRequest struct {
 }
 
 func (h *handler) AdminResetUserPassword(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": ErrInvalidUserID})
 		return

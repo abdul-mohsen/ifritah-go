@@ -169,7 +169,7 @@ func finalizePurchaseBill(c *gin.Context, setup *purchaseBillSetup, id uint64,
 	request model.AddPurchaseBillRequest, enforcement, operation string) bool {
 	if err := addProductToBillPurchase(setup.qtx, c, purchaseBillProducts(&request), id, request.StoreId,
 		enforcement != model.StockEnforcementDisable && request.State > 0); err != nil {
-		log.Printf("%s: %v", operation, err)
+		log.Printf("%s: %s", operation, sanitizeForLog(err.Error()))
 		c.Status(http.StatusBadRequest)
 		return false
 	}

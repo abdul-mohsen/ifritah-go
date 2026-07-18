@@ -8,7 +8,6 @@ import (
 	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -88,20 +87,20 @@ func (h *handler) GetOrders(c *gin.Context) {
 
 // GetOrder returns a single order with its items (GET /api/v2/order/:id).
 func (h *handler) GetOrder(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := parseUint32Param(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid order ID"})
 		return
 	}
 
 	ctx := c.Request.Context()
-	o, err := h.queries.GetOrderByID(ctx, uint32(id))
+	o, err := h.queries.GetOrderByID(ctx, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "order not found"})
 		return
 	}
 
-	items, err := h.queries.GetOrderItemsByOrderID(ctx, uint32(id))
+	items, err := h.queries.GetOrderItemsByOrderID(ctx, id)
 	if err != nil || items == nil {
 		items = []db.GetOrderItemsByOrderIDRow{}
 	}
@@ -228,7 +227,7 @@ func (h *handler) CreateOrder(c *gin.Context) {
 
 // UpdateOrder modifies an order and replaces its items (PUT /api/v2/order/:id).
 func (h *handler) UpdateOrder(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := parseUint32Param(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid order ID"})
 		return
@@ -244,7 +243,7 @@ func (h *handler) UpdateOrder(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if _, err := h.queries.GetOrderForCompany(ctx, db.GetOrderForCompanyParams{
-		ID: uint32(id), CompanyID: int32(companyID),
+		ID: id, CompanyID: int32(companyID),
 	}); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "الطلب غير موجود"})
 		return
@@ -275,7 +274,7 @@ func (h *handler) UpdateOrder(c *gin.Context) {
 	}
 
 	dupCount, _ := h.queries.CountOrderBySequenceExcludingID(ctx, db.CountOrderBySequenceExcludingIDParams{
-		SequenceNumber: req.SequenceNumber, ID: uint32(id),
+		SequenceNumber: req.SequenceNumber, ID: id,
 	})
 	if dupCount > 0 {
 		c.JSON(http.StatusConflict, gin.H{"detail": "رقم الطلب مستخدم مسبقاً"})
@@ -301,20 +300,20 @@ func (h *handler) UpdateOrder(c *gin.Context) {
 		Status:         status,
 		Total:          total,
 		Note:           optionalString(req.Note),
-		ID:             uint32(id),
+		ID:             id,
 	}); err != nil {
 		log.Printf("UpdateOrder: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل تحديث الطلب"})
 		return
 	}
 
-	if err := qtx.DeleteOrderItemsByOrderID(ctx, uint32(id)); err != nil {
+	if err := qtx.DeleteOrderItemsByOrderID(ctx, id); err != nil {
 		log.Printf("UpdateOrder: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "internal error"})
 		return
 	}
 
-	if err := insertOrderItems(ctx, qtx, uint32(id), req.Items); err != nil {
+	if err := insertOrderItems(ctx, qtx, id, req.Items); err != nil {
 		log.Printf("UpdateOrder: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل تحديث عناصر الطلب"})
 		return
@@ -331,7 +330,7 @@ func (h *handler) UpdateOrder(c *gin.Context) {
 
 // DeleteOrder removes an order; order_items cascade via FK (DELETE /api/v2/order/:id).
 func (h *handler) DeleteOrder(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	id, err := parseUint32Param(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid order ID"})
 		return
@@ -340,13 +339,13 @@ func (h *handler) DeleteOrder(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if _, err := h.queries.GetOrderForCompany(ctx, db.GetOrderForCompanyParams{
-		ID: uint32(id), CompanyID: int32(companyID),
+		ID: id, CompanyID: int32(companyID),
 	}); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "الطلب غير موجود"})
 		return
 	}
 
-	res, err := h.queries.DeleteOrderByID(ctx, uint32(id))
+	res, err := h.queries.DeleteOrderByID(ctx, id)
 	if err != nil {
 		log.Printf("DeleteOrder: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل حذف الطلب"})

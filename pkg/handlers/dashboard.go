@@ -41,9 +41,9 @@ func (h *handler) GetDashboard(c *gin.Context) {
 	startDate := c.Query("start_date")
 	endDate := c.Query("end_date")
 	monthsParam := c.DefaultQuery("months", "6")
-	numMonths, _ := strconv.Atoi(monthsParam)
-	if numMonths < 1 || numMonths > 24 {
-		numMonths = 6
+	numMonths := 6
+	if v, err := strconv.ParseInt(monthsParam, 10, 32); err == nil && v >= 1 && v <= 24 {
+		numMonths = int(v)
 	}
 
 	now := time.Now()
@@ -394,9 +394,9 @@ func (h *handler) GetDashboardAnalytics(c *gin.Context) {
 	startDate := c.Query("start_date")
 	endDate := c.Query("end_date")
 	monthsParam := c.DefaultQuery("months", "6")
-	numMonths, _ := strconv.Atoi(monthsParam)
-	if numMonths < 1 || numMonths > 24 {
-		numMonths = 6
+	numMonths := 6
+	if v, err := strconv.ParseInt(monthsParam, 10, 32); err == nil && v >= 1 && v <= 24 {
+		numMonths = int(v)
 	}
 
 	now := time.Now()
@@ -848,6 +848,11 @@ func (h *handler) GetDashboardCompare(c *gin.Context) {
 // ── helpers ────────────────────────────────────────────────────────────────
 
 func buildMonthLabels(now time.Time, n int) []string {
+	if n < 1 {
+		n = 1
+	} else if n > 24 {
+		n = 24
+	}
 	out := make([]string, n)
 	for i := n - 1; i >= 0; i-- {
 		out[n-1-i] = now.AddDate(0, -i, 0).Format("01/2006")
@@ -861,7 +866,7 @@ func optInt32(s string) *int32 {
 	if s == "" {
 		return nil
 	}
-	v, err := strconv.Atoi(s)
+	v, err := strconv.ParseInt(s, 10, 32)
 	if err != nil {
 		return nil
 	}
@@ -973,7 +978,16 @@ func toInt64(v any) int64 {
 	return 0
 }
 
-func toInt(v any) int { return int(toInt64(v)) }
+func toInt(v any) int {
+	n := toInt64(v)
+	if n > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if n < math.MinInt32 {
+		return math.MinInt32
+	}
+	return int(n)
+}
 func toBool(v any) bool {
 	switch x := v.(type) {
 	case bool:

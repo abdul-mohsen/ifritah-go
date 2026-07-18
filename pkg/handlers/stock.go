@@ -512,14 +512,12 @@ func (h *handler) StockCheck(c *gin.Context) {
 // Paginated movement history for a product
 
 func (h *handler) GetStockMovements(c *gin.Context) {
-	ProductID, err := strconv.ParseInt(c.Param("product_id"), 10, 64)
+	productID, err := parseInt32Param(c.Param("product_id"))
 	if err != nil {
 		log.Printf("GetStockMovements: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid product_id"})
 		return
 	}
-
-	productID := uint64(ProductID)
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "0"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))
@@ -539,7 +537,7 @@ func (h *handler) GetStockMovements(c *gin.Context) {
 	           created_by, created_at
 	          FROM stock_movements
 	          WHERE product_id = ?`
-	args := []interface{}{int32(productID)}
+	args := []interface{}{productID}
 
 	if typeFilter != "" {
 		query += " AND movement_type = ?"
@@ -576,7 +574,7 @@ func (h *handler) GetStockMovements(c *gin.Context) {
 
 	// Get total count
 	countQuery := "SELECT COUNT(*) FROM stock_movements WHERE product_id = ?"
-	countArgs := []interface{}{int32(productID)}
+	countArgs := []interface{}{productID}
 	if typeFilter != "" {
 		countQuery += " AND movement_type = ?"
 		countArgs = append(countArgs, typeFilter)

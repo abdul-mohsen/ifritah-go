@@ -85,8 +85,10 @@ func (h *handler) CreditBill(c *gin.Context) {
 	}
 
 	branchID, err := qtx.GetBranchByBillID(c.Request.Context(), request.BillId)
-	if err := h.pub.SubmitCredit(CreditNoteID, int64(branchID)); err != nil {
-		log.Printf("zatca publish failed: %v", err)
+	if err != nil {
+		log.Printf("GetBranchByBillID failed for credit note %d: %s", CreditNoteID, sanitizeForLog(err.Error()))
+	} else if err := h.pub.SubmitCredit(CreditNoteID, int64(branchID)); err != nil {
+		log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
 	}
 
 	if err := tx.Commit(); err != nil {

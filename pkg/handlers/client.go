@@ -8,7 +8,6 @@ import (
 	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,15 +17,13 @@ import (
 
 func (h *handler) GetClient(c *gin.Context) {
 	// user := GetSessionInfo(c)
-	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, err := parseUint32Param(c.Param("id"))
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
 
-	id := uint64(Id)
-
-	res, err := h.queries.GetClientByID(c.Request.Context(), uint32(id))
+	res, err := h.queries.GetClientByID(c.Request.Context(), id)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
@@ -162,13 +159,11 @@ func (h *handler) CreateClient(c *gin.Context) {
 
 func (h *handler) UpdateClient(c *gin.Context) {
 
-	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, err := parseUint32Param(c.Param("id"))
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
-
-	id := uint64(Id)
 
 	var request CreateClientRequest
 	if err := c.BindJSON(&request); err != nil {
@@ -186,7 +181,7 @@ func (h *handler) UpdateClient(c *gin.Context) {
 		Address:                request.Address,
 		Phone:                  request.Phone,
 		VatNumber:              request.VatNumber,
-		ID:                     uint32(id),
+		ID:                     id,
 		Number:                 request.Number,
 		BankAccount:            request.BankAccount,
 		PreferredPaymentMethod: request.PreferredPaymentMethod,
@@ -206,15 +201,13 @@ func (h *handler) UpdateClient(c *gin.Context) {
 
 func (h *handler) DeleteClient(c *gin.Context) {
 	// user := GetSessionInfo(c)
-	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, err := parseUint32Param(c.Param("id"))
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
 
-	id := uint64(Id)
-
-	err = h.queries.DeleteClient(c.Request.Context(), uint32(id))
+	err = h.queries.DeleteClient(c.Request.Context(), id)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return

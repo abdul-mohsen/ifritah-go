@@ -278,7 +278,7 @@ func (h *handler) AddBill(c *gin.Context) {
 			enforcement, int32(userSession.id),
 		)
 		if err != nil {
-			log.Printf("AddBill: %v", err)
+			log.Printf("AddBill: %s", sanitizeForLog(err.Error()))
 			// enforce mode: block if insufficient stock
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
@@ -294,7 +294,7 @@ func (h *handler) AddBill(c *gin.Context) {
 
 	if request.State > 0 {
 		if err := h.pub.SubmitBill(id, int64(request.BranchID)); err != nil {
-			log.Printf("zatca publish failed: %v", err)
+			log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
 		}
 	}
 
@@ -419,7 +419,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 			enforcement, int32(userSession.id),
 		)
 		if err != nil {
-			log.Printf("SubmitDraftBill: %v", err)
+			log.Printf("SubmitDraftBill: %s", sanitizeForLog(err.Error()))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
 				"type":   "stock_insufficient",
@@ -433,7 +433,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 
 	if request.State > 0 {
 		if err := h.pub.SubmitBill(BillID, int64(request.BranchID)); err != nil {
-			log.Printf("zatca publish failed: %v", err)
+			log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
 		}
 	}
 

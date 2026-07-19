@@ -17,7 +17,7 @@ package handlers
 //
 // Settings are organized into 8 categories:
 //   1. company (9)    — company_name, company_vat, company_cr, etc.
-//   2. invoice (12)   — currency, vat_rate, invoice_prefix, etc.
+//   2. invoice (13)   — currency, vat_rate, invoice_prefix, etc.
 //   3. print (7)      — paper_size, print_copies, show_logo_print, etc.
 //   4. appearance (4) — theme, language, date_format, number_format
 //   5. notifications (5) — notif_invoices, notif_stock, etc.
@@ -56,7 +56,7 @@ var settingCategories = map[string]string{
 	"company_logo_url":    "company",
 	"company_description": "company",
 
-	// ── Section 2: Invoice & Tax (12 keys) ──
+	// ── Section 2: Invoice & Tax (13 keys) ──
 	"currency":           "invoice",
 	"vat_rate":           "invoice",
 	"invoice_prefix":     "invoice",
@@ -69,6 +69,7 @@ var settingCategories = map[string]string{
 	"show_vat_breakdown": "invoice",
 	"auto_calculate_vat": "invoice",
 	"prices_include_vat": "invoice",
+	"pb_pdf_required":    "invoice",
 
 	// ── Section 3: Print & PDF (7 keys) ──
 	"paper_size":              "print",
@@ -280,6 +281,7 @@ func (h *handler) UpdateSettings(c *gin.Context) {
 //   ('show_vat_breakdown',       'true',     'عرض تفاصيل الضريبة'),
 //   ('auto_calculate_vat',       'true',     'حساب الضريبة تلقائياً'),
 //   ('prices_include_vat',       'false',    'الأسعار شاملة الضريبة'),
+//   ('pb_pdf_required',          'required', 'إلزامية ملف PDF لفاتورة المشتريات'),
 //   -- Print & PDF
 //   ('paper_size',               'A4',       'حجم الورق'),
 //   ('print_copies',             '1',        'عدد النسخ'),

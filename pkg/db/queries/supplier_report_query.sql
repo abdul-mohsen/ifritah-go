@@ -176,6 +176,53 @@ WHERE cv.recipient_type = 'supplier'
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
+-- 4b. GENERAL LEDGER (chronological bill+payment entries, one or all suppliers)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- name: GetLedgerBillsForMerchant :many
+-- Purchase bills for the merchant, optionally restricted to one supplier,
+-- for the supplier general ledger. A bill increases what the merchant owes
+-- the supplier (a ledger "debit" from the merchant's payable perspective).
+SELECT
+    pb.id,
+    pb.supplier_id,
+    s.name AS supplier_name,
+    pb.supplier_sequence_number,
+    pb.effective_date,
+    CAST(COALESCE(SUM(pbp.total_including_vat), 0) AS DECIMAL(12,2)) AS total
+FROM purchase_bill pb
+JOIN supplier s ON s.id = pb.supplier_id
+LEFT JOIN purchase_bill_product pbp ON pbp.bill_id = pb.id
+WHERE pb.merchant_id = sqlc.arg('merchant_id')
+  AND (sqlc.narg('supplier_id') IS NULL OR pb.supplier_id = sqlc.narg('supplier_id'))
+  AND (sqlc.narg('date_from') IS NULL OR pb.effective_date >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to') IS NULL OR pb.effective_date <= sqlc.narg('date_to'))
+GROUP BY pb.id, pb.supplier_id, s.name, pb.supplier_sequence_number, pb.effective_date
+ORDER BY pb.effective_date;
+
+-- name: GetLedgerPaymentsForMerchant :many
+-- Supplier payments (approved/posted cash_voucher disbursements) for the
+-- merchant, optionally restricted to one supplier. A payment reduces what
+-- the merchant owes the supplier (a ledger "credit"). recipient_name is
+-- already denormalized on cash_voucher, so no supplier join is needed.
+SELECT
+    cv.id,
+    cv.recipient_id AS supplier_id,
+    cv.recipient_name AS supplier_name,
+    cv.voucher_number,
+    cv.effective_date,
+    cv.amount
+FROM cash_voucher cv
+WHERE cv.recipient_type = 'supplier'
+  AND cv.merchant_id = sqlc.arg('merchant_id')
+  AND cv.state >= 1
+  AND (sqlc.narg('supplier_id') IS NULL OR cv.recipient_id = sqlc.narg('supplier_id'))
+  AND (sqlc.narg('date_from') IS NULL OR cv.effective_date >= sqlc.narg('date_from'))
+  AND (sqlc.narg('date_to') IS NULL OR cv.effective_date <= sqlc.narg('date_to'))
+ORDER BY cv.effective_date;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
 -- 5. AGING ANALYSIS (overdue purchase bills)
 -- ═══════════════════════════════════════════════════════════════════════════
 

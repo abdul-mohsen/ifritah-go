@@ -69,4 +69,10 @@ type PurchaseBillProduct struct {
 	ShelfNumber *string         `json:"shelf_number"`
 	Quantity    decimal.Decimal `json:"quantity" binding:"required"`
 	TrackStock  bool            `json:"track_stock"`
+	// SellingPrice is an optional catalog selling-price override for
+	// TrackStock lines. Only admin/manager submissions may use it — see
+	// resolveInventorySellingPrice in purchase_bill.go. Employees never get
+	// to set this directly; their new products fall back to the store's
+	// default_markup_percentage setting applied to CostPrice.
+	SellingPrice *decimal.Decimal `json:"selling_price"`
 }

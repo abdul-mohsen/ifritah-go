@@ -67,3 +67,28 @@ func containsUpdatedOne(body string) bool {
 func containsInvoicePBPDFRequired(body string) bool {
 	return regexp.MustCompile(`"invoice"\s*:\s*{[^}]*"pb_pdf_required"\s*:\s*"optional"`).MatchString(body)
 }
+
+// TestUpdateSettingsPersistsDefaultMarkupPercentage is a regression test for
+// the same whitelist-drop bug pattern as pb_pdf_required: the purchase-bill
+// selling-price feature reads default_markup_percentage from the "inventory"
+// category, so it must be in settingCategories or UpdateSettings silently
+// drops it.
+func TestUpdateSettingsPersistsDefaultMarkupPercentage(t *testing.T) {
+	h, mock, cleanup := newPurchaseBillTestHandler(t)
+	defer cleanup()
+
+	mock.ExpectExec("INSERT INTO settings").
+		WithArgs("default_markup_percentage", "25", int32(7)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	body := `{"category":"inventory","settings":{"default_markup_percentage":"25"}}`
+	w := runPurchaseBillRequest(t, h.UpdateSettings, http.MethodPut, "/api/v2/settings", body)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if !containsUpdatedOne(w.Body.String()) {
+		t.Fatalf(`expected {"updated":1} (default_markup_percentage must be persisted), got: %s`, w.Body.String())
+	}
+	assertMockExpectations(t, mock)
+}

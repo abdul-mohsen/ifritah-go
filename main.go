@@ -178,6 +178,7 @@ func main() {
 
 		// ── Supplier Report ────────────────────────────────────────────
 		authorized.GET("supplier/:id/report", h.GetSupplierReport)
+		authorized.GET("supplier/report/multi", h.GetMultiSupplierReport)
 
 		// ── Purchase Bill Receipt Tracking (manager+) ──────────────────
 		authorized.PUT("purchase_bill/:id/received", mgr, h.MarkBillReceived)

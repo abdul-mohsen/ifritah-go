@@ -48,7 +48,7 @@ type userResponse struct {
 
 // fromListRow / fromAdminRow convert sqlc-generated row types to userResponse.
 // LastLogin is `interface{}` on ListUsersRow because the new keyset query
-// wraps DATE_FORMAT in CAST(COALESCE(..., '') AS CHAR(40)) — sqlc can't
+// wraps DATE_FORMAT in CAST(COALESCE(..., ”) AS CHAR(40)) — sqlc can't
 // statically prove the result is non-null without extra hints, so we
 // runtime-coerce here. NULL becomes "" which buildUserResponse maps back to
 // nil on the JSON side, preserving the wire shape.

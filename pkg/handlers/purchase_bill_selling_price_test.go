@@ -132,54 +132,40 @@ func TestUpdatePurchaseInventoryProductPriceOverride(t *testing.T) {
 	newProductID := int32(5)
 	newPrice := decimal.NewFromInt(199)
 
-	t.Run("admin/manager override updates catalog price", func(t *testing.T) {
-		h, mock, cleanup := newPurchaseBillTestHandler(t)
-		defer cleanup()
-		mock.ExpectQuery("select .* from product p where p\\.id = \\? and p\\.is_deleted").
-			WithArgs(uint64(5)).
-			WillReturnRows(sqlmock.NewRows(productCols).
-				AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget"))
-		mock.ExpectExec("update product").
-			WithArgs("199", "40", "A2", sqlmock.AnyArg(), uint64(5)).
-			WillReturnResult(sqlmock.NewResult(0, 1))
+	cases := []struct {
+		name               string
+		role               string
+		canOverridePrice   bool
+		wantPersistedPrice string
+	}{
+		{"admin/manager override updates catalog price", RoleAdmin, true, "199"},
+		{"employee cannot override catalog price", RoleEmployee, false, "80"},
+	}
 
-		product := model.PurchaseBillProduct{
-			ProductId: &newProductID, CostPrice: decimal.NewFromFloat(40), Quantity: decimal.NewFromInt(2),
-			ShelfNumber: strPtr("A2"), SellingPrice: &newPrice,
-		}
-		id, err := updatePurchaseInventoryProduct(h.queries, newRoleContext(RoleAdmin), product, 1, true, true)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if id == nil || *id != 5 {
-			t.Fatalf("productID = %v, want 5", id)
-		}
-		assertMockExpectations(t, mock)
-	})
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, mock, cleanup := newPurchaseBillTestHandler(t)
+			defer cleanup()
+			mock.ExpectQuery("select .* from product p where p\\.id = \\? and p\\.is_deleted").
+				WithArgs(uint64(5)).
+				WillReturnRows(sqlmock.NewRows(productCols).
+					AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget"))
+			mock.ExpectExec("update product").
+				WithArgs(tc.wantPersistedPrice, "40", "A2", sqlmock.AnyArg(), uint64(5)).
+				WillReturnResult(sqlmock.NewResult(0, 1))
 
-	t.Run("employee cannot override catalog price", func(t *testing.T) {
-		h, mock, cleanup := newPurchaseBillTestHandler(t)
-		defer cleanup()
-		mock.ExpectQuery("select .* from product p where p\\.id = \\? and p\\.is_deleted").
-			WithArgs(uint64(5)).
-			WillReturnRows(sqlmock.NewRows(productCols).
-				AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget"))
-		// Existing price (80.00) must be preserved, not the attempted override.
-		mock.ExpectExec("update product").
-			WithArgs("80", "40", "A2", sqlmock.AnyArg(), uint64(5)).
-			WillReturnResult(sqlmock.NewResult(0, 1))
-
-		product := model.PurchaseBillProduct{
-			ProductId: &newProductID, CostPrice: decimal.NewFromFloat(40), Quantity: decimal.NewFromInt(2),
-			ShelfNumber: strPtr("A2"), SellingPrice: &newPrice,
-		}
-		id, err := updatePurchaseInventoryProduct(h.queries, newRoleContext(RoleEmployee), product, 1, true, false)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if id == nil || *id != 5 {
-			t.Fatalf("productID = %v, want 5", id)
-		}
-		assertMockExpectations(t, mock)
-	})
+			product := model.PurchaseBillProduct{
+				ProductId: &newProductID, CostPrice: decimal.NewFromFloat(40), Quantity: decimal.NewFromInt(2),
+				ShelfNumber: strPtr("A2"), SellingPrice: &newPrice,
+			}
+			id, err := updatePurchaseInventoryProduct(h.queries, newRoleContext(tc.role), product, 1, true, tc.canOverridePrice)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if id == nil || *id != 5 {
+				t.Fatalf("productID = %v, want 5", id)
+			}
+			assertMockExpectations(t, mock)
+		})
+	}
 }

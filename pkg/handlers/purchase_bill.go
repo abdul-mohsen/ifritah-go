@@ -165,9 +165,9 @@ func recordPurchaseBillStockMovements(qtx *db.Queries, c *gin.Context, id uint64
 	)
 }
 
-func finalizePurchaseBill(c *gin.Context, setup *purchaseBillSetup, id uint64,
+func finalizePurchaseBill(h *handler, c *gin.Context, setup *purchaseBillSetup, id uint64,
 	request model.AddPurchaseBillRequest, enforcement, operation string) bool {
-	if err := addProductToBillPurchase(setup.qtx, c, purchaseBillProducts(&request), id, request.StoreId,
+	if err := addProductToBillPurchase(h, setup.qtx, c, purchaseBillProducts(&request), id, request.StoreId,
 		enforcement != model.StockEnforcementDisable && request.State > 0); err != nil {
 		log.Printf("%s: %s", operation, sanitizeForLog(err.Error()))
 		c.Status(http.StatusBadRequest)
@@ -217,7 +217,7 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
-	if !finalizePurchaseBill(c, setup, id, request, enforcement, "UpdatePurchaseBill") {
+	if !finalizePurchaseBill(h, c, setup, id, request, enforcement, "UpdatePurchaseBill") {
 		return
 	}
 	c.Status(http.StatusOK)
@@ -244,7 +244,7 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 		return
 	}
 	id := uint64(insertedID)
-	if !finalizePurchaseBill(c, setup, id, request, enforcement, "AddPurchaseBill") {
+	if !finalizePurchaseBill(h, c, setup, id, request, enforcement, "AddPurchaseBill") {
 		return
 	}
 	h.savePurchaseBillAttachments(id, request)
@@ -282,11 +282,13 @@ func (h *handler) CheckPurchaseBillDuplicate(c *gin.Context) {
 	})
 }
 
-func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.PurchaseBillProduct,
+func addProductToBillPurchase(h *handler, tx *db.Queries, c *gin.Context, products []model.PurchaseBillProduct,
 	billID uint64, storeID int32, recordStockMovement bool) error {
 
+	canOverridePrice := canOverrideSellingPrice(c)
+
 	for _, product := range products {
-		inventoryProductID, err := purchaseInventoryProduct(tx, c, product, storeID, recordStockMovement)
+		inventoryProductID, err := purchaseInventoryProduct(h, tx, c, product, storeID, recordStockMovement, canOverridePrice)
 		if err != nil {
 			return err
 		}
@@ -305,19 +307,56 @@ func addProductToBillPurchase(tx *db.Queries, c *gin.Context, products []model.P
 	return nil
 }
 
-func purchaseInventoryProduct(tx *db.Queries, c *gin.Context, product model.PurchaseBillProduct,
-	storeID int32, recordStockMovement bool) (*uint64, error) {
+// canOverrideSellingPrice reports whether the acting user is allowed to set
+// a catalog product's selling price directly from a purchase-bill line.
+// Employees never get this: their new products fall back to the store's
+// default_markup_percentage setting (see resolveNewProductSellingPrice).
+func canOverrideSellingPrice(c *gin.Context) bool {
+	role := c.GetString("user_role")
+	return role == RoleAdmin || role == RoleManager
+}
+
+// resolveNewProductSellingPrice decides the selling price for a brand-new
+// store product created from a purchase-bill line. admin/manager may supply
+// an explicit SellingPrice; anyone else (or an admin/manager who left it
+// blank) gets CostPrice marked up by the store's default_markup_percentage
+// setting.
+func (h *handler) resolveNewProductSellingPrice(c *gin.Context, product model.PurchaseBillProduct, canOverridePrice bool) decimal.Decimal {
+	if canOverridePrice && product.SellingPrice != nil {
+		return *product.SellingPrice
+	}
+	return product.CostPrice.Mul(decimal.NewFromInt(100).Add(h.getDefaultMarkupPercentage(c)).Div(decimal.NewFromInt(100)))
+}
+
+// getDefaultMarkupPercentage reads the owner-configured
+// default_markup_percentage inventory setting (a plain percentage, e.g. "20"
+// for 20%). Missing/invalid values fall back to 0% (selling price ==
+// cost price) rather than guessing a margin on the store's behalf.
+func (h *handler) getDefaultMarkupPercentage(c *gin.Context) decimal.Decimal {
+	raw, err := h.queries.GetSettingValue(c.Request.Context(), "default_markup_percentage")
+	if err != nil {
+		return decimal.Zero
+	}
+	pct, err := decimal.NewFromString(strings.TrimSpace(raw))
+	if err != nil || pct.IsNegative() {
+		return decimal.Zero
+	}
+	return pct
+}
+
+func purchaseInventoryProduct(h *handler, tx *db.Queries, c *gin.Context, product model.PurchaseBillProduct,
+	storeID int32, recordStockMovement bool, canOverridePrice bool) (*uint64, error) {
 	if !product.TrackStock {
 		return nil, nil
 	}
 	if product.ProductId != nil && *product.ProductId > 0 {
-		return updatePurchaseInventoryProduct(tx, c, product, storeID, recordStockMovement)
+		return updatePurchaseInventoryProduct(tx, c, product, storeID, recordStockMovement, canOverridePrice)
 	}
-	return createPurchaseInventoryProduct(tx, c, product, storeID, recordStockMovement)
+	return createPurchaseInventoryProduct(h, tx, c, product, storeID, recordStockMovement, canOverridePrice)
 }
 
 func updatePurchaseInventoryProduct(tx *db.Queries, c *gin.Context, product model.PurchaseBillProduct,
-	storeID int32, recordStockMovement bool) (*uint64, error) {
+	storeID int32, recordStockMovement bool, canOverridePrice bool) (*uint64, error) {
 	existing, err := tx.GetProduct(c.Request.Context(), uint64(*product.ProductId))
 	if err != nil {
 		return nil, fmt.Errorf("store product %d not found: %w", *product.ProductId, err)
@@ -333,10 +372,16 @@ func updatePurchaseInventoryProduct(tx *db.Queries, c *gin.Context, product mode
 	if shelfNumber == nil {
 		shelfNumber = existing.ShelfNumber
 	}
+	// The catalog selling price is preserved unless an admin/manager
+	// explicitly overrides it from the purchase-bill line.
+	price := existing.Price
+	if canOverridePrice && product.SellingPrice != nil {
+		price = *product.SellingPrice
+	}
 	if err := tx.UpdateProduct(c.Request.Context(), db.UpdateProductParams{
 		ID:          existing.ID,
 		Quantity:    quantity,
-		Price:       existing.Price,
+		Price:       price,
 		CostPrice:   product.CostPrice,
 		ShelfNumber: shelfNumber,
 	}); err != nil {
@@ -346,8 +391,8 @@ func updatePurchaseInventoryProduct(tx *db.Queries, c *gin.Context, product mode
 	return &productID, nil
 }
 
-func createPurchaseInventoryProduct(tx *db.Queries, c *gin.Context, product model.PurchaseBillProduct,
-	storeID int32, recordStockMovement bool) (*uint64, error) {
+func createPurchaseInventoryProduct(h *handler, tx *db.Queries, c *gin.Context, product model.PurchaseBillProduct,
+	storeID int32, recordStockMovement bool, canOverridePrice bool) (*uint64, error) {
 	quantity := decimal.Zero
 	if !recordStockMovement {
 		quantity = product.Quantity
@@ -355,7 +400,7 @@ func createPurchaseInventoryProduct(tx *db.Queries, c *gin.Context, product mode
 	result, err := tx.AddProduct(c.Request.Context(), db.AddProductParams{
 		ArticleID:   nil,
 		Quantity:    quantity,
-		Price:       product.Price,
+		Price:       h.resolveNewProductSellingPrice(c, product, canOverridePrice),
 		CostPrice:   product.CostPrice,
 		ShelfNumber: product.ShelfNumber,
 		StoreID:     storeID,

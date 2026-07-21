@@ -106,6 +106,10 @@ var settingCategories = map[string]string{
 	"allow_negative_stock": "inventory",
 	"show_cost_price":      "inventory",
 	"pagination_per_page":  "inventory",
+	// Default markup % applied to cost price when an employee (not
+	// admin/manager) creates a brand-new store product from a purchase
+	// bill line; see resolveInventorySellingPrice in purchase_bill.go.
+	"default_markup_percentage": "inventory",
 
 	// ── Stock enforcement (read by stock handlers, editable via inventory) ──
 	"stock_enforcement": "inventory",
@@ -313,5 +317,6 @@ func (h *handler) UpdateSettings(c *gin.Context) {
 //   ('allow_negative_stock',     'false',    'السماح بمخزون سالب'),
 //   ('show_cost_price',          'false',    'عرض سعر التكلفة'),
 //   ('pagination_per_page',      '20',       'عدد العناصر في الصفحة'),
-//   ('stock_enforcement',        'disable',  'وضع إنفاذ المخزون');
+//   ('stock_enforcement',        'disable',  'وضع إنفاذ المخزون'),
+//   ('default_markup_percentage','20',       'نسبة الهامش الافتراضية على سعر التكلفة لتحديد سعر البيع');
 //

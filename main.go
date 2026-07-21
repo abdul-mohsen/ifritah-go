@@ -54,6 +54,7 @@ func main() {
 		// ── Suppliers (employees can read/create, manager+ can edit/delete) ──
 		authorized.POST("supplier/all", h.GetAllSupplier)
 		authorized.GET("supplier/search", h.SearchSuppliers)
+		authorized.GET("supplier/ledger", h.GetSupplierLedger)
 		authorized.GET("supplier/:id", h.GetSupplier)
 		authorized.POST("supplier", h.AddSupplier)
 		authorized.PUT("supplier/:id", mgr, h.EditSupplier)

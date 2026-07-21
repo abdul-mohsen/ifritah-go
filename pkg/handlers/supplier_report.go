@@ -40,9 +40,12 @@ package handlers
 // ============================================================================
 
 import (
+	"context"
+	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -87,57 +90,185 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 		return
 	}
 
-	// Tenant isolation: merchant_id on purchase_bill / cash_voucher.
 	merchantID := int32(getMerchantID(c))
+	dateFrom, dateTo, err := parseSupplierReportDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		return
+	}
 
-	// Parse date range (default: last 12 months)
+	report, err := h.buildSupplierReport(c.Request.Context(), supplierID, merchantID, dateFrom, dateTo)
+	if err != nil {
+		c.JSON(supplierReportErrorStatus(err), gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, report)
+}
+
+// ── GET /api/v2/supplier/report/multi ───────────────────────────────────────
+// Combined ledger statement for two or more suppliers in a single request.
+// Query params:
+//
+//	ids:  comma-separated supplier IDs, e.g. "12,34,56" (required, max 50)
+//	from: start date (YYYY-MM-DD), optional — defaults to 12 months ago
+//	to:   end date (YYYY-MM-DD), optional — defaults to today
+//
+// Introduced so the frontend's multi-supplier ledger statement page doesn't
+// have to issue one HTTP round trip per selected supplier - it sends one
+// request here and the backend loops server-side (same per-supplier query
+// set as GetSupplierReport, just without the network round trip per
+// supplier). This does not batch the underlying SQL into a single IN(...)
+// query per metric - that would require reworking every query in this file
+// to group-by supplier_id and is a larger, separate change; this instead
+// eliminates the N-network-round-trips scalability problem the frontend
+// would otherwise have, which is the one actually visible to callers.
+//
+// Response: { "suppliers": [ <same shape as GetSupplierReport's body>, ... ] }
+// Suppliers that fail to resolve (not found, wrong tenant) are omitted from
+// the response rather than failing the whole request.
+func (h *handler) GetMultiSupplierReport(c *gin.Context) {
+	idsParam := c.Query("ids")
+	if idsParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "ids query parameter is required"})
+		return
+	}
+
+	supplierIDs, err := parseSupplierIDList(idsParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		return
+	}
+	if len(supplierIDs) > maxMultiSupplierReportIDs {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "too many supplier ids (max 50)"})
+		return
+	}
+
+	merchantID := int32(getMerchantID(c))
+	dateFrom, dateTo, err := parseSupplierReportDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		return
+	}
+
+	reports := make([]gin.H, 0, len(supplierIDs))
+	for _, supplierID := range supplierIDs {
+		report, err := h.buildSupplierReport(c.Request.Context(), supplierID, merchantID, dateFrom, dateTo)
+		if err != nil {
+			// Skip suppliers that don't resolve (not found / wrong tenant)
+			// rather than failing the whole combined statement.
+			continue
+		}
+		reports = append(reports, report)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"suppliers": reports})
+}
+
+// maxMultiSupplierReportIDs caps how many suppliers can be combined into one
+// GetMultiSupplierReport call, so a single request can't be used to force
+// the backend to build an unbounded number of per-supplier reports.
+const maxMultiSupplierReportIDs = 50
+
+// parseSupplierIDList parses a comma-separated list of supplier IDs,
+// de-duplicating and rejecting anything that isn't a positive integer.
+func parseSupplierIDList(raw string) ([]int32, error) {
+	parts := strings.Split(raw, ",")
+	ids := make([]int32, 0, len(parts))
+	seen := make(map[int32]bool, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		n, err := strconv.ParseInt(p, 10, 32)
+		if err != nil || n <= 0 {
+			return nil, fmt.Errorf("invalid supplier id %q in ids list", p)
+		}
+		id := int32(n)
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("ids list must contain at least one supplier id")
+	}
+	return ids, nil
+}
+
+// parseSupplierReportDateRange parses the shared from/to query params used by
+// both the single- and multi-supplier report endpoints (default: last 12
+// months).
+func parseSupplierReportDateRange(c *gin.Context) (time.Time, time.Time, error) {
 	now := time.Now()
 	fromStr := c.Query("from")
 	toStr := c.Query("to")
 
-	var dateFrom, dateTo time.Time
+	dateFrom := now.AddDate(-1, 0, 0)
+	dateTo := now
+
 	if fromStr != "" {
-		dateFrom, err = time.Parse("2006-01-02", fromStr)
+		parsed, err := time.Parse("2006-01-02", fromStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid 'from' date format, use YYYY-MM-DD"})
-			return
+			return time.Time{}, time.Time{}, fmt.Errorf("invalid 'from' date format, use YYYY-MM-DD")
 		}
-	} else {
-		dateFrom = now.AddDate(-1, 0, 0)
+		dateFrom = parsed
 	}
 	if toStr != "" {
-		dateTo, err = time.Parse("2006-01-02", toStr)
+		parsed, err := time.Parse("2006-01-02", toStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid 'to' date format, use YYYY-MM-DD"})
-			return
+			return time.Time{}, time.Time{}, fmt.Errorf("invalid 'to' date format, use YYYY-MM-DD")
 		}
-	} else {
-		dateTo = now
+		dateTo = parsed
 	}
+	return dateFrom, dateTo, nil
+}
 
+// supplierNotFoundError distinguishes a missing/wrong-tenant supplier (404)
+// from a real query failure (500) so buildSupplierReport's single error
+// return can still map to the right HTTP status for the single-supplier
+// endpoint, while the multi-supplier endpoint just skips either case.
+type supplierNotFoundError struct{}
+
+func (supplierNotFoundError) Error() string { return "supplier not found" }
+
+func supplierReportErrorStatus(err error) int {
+	if _, ok := err.(supplierNotFoundError); ok {
+		return http.StatusNotFound
+	}
+	return http.StatusInternalServerError
+}
+
+// buildSupplierReport runs the full set of per-supplier report queries
+// (summary, bills, payments, top items, aging, monthly spending) and returns
+// the same response shape GetSupplierReport has always returned. Shared by
+// both GetSupplierReport (one supplier) and GetMultiSupplierReport (a
+// combined statement over several suppliers), so the two endpoints can never
+// drift into returning different data for the same supplier.
+func (h *handler) buildSupplierReport(ctx context.Context, supplierID, merchantID int32, dateFrom, dateTo time.Time) (gin.H, error) {
 	// 1. Fetch supplier info
 	// Uses existing GetSupplier query (same as GET /api/v2/supplier/:id)
-	supplier, err := h.queries.GetSupplier(c.Request.Context(), int64(supplierID))
+	supplier, err := h.queries.GetSupplier(ctx, int64(supplierID))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"detail": "supplier not found"})
-		return
+		return nil, supplierNotFoundError{}
 	}
 
 	// 2. Fetch bill summary (totals from purchase_bill_product GENERATED columns)
-	summary, err := h.queries.GetSupplierBillSummary(c.Request.Context(), db.GetSupplierBillSummaryParams{
+	summary, err := h.queries.GetSupplierBillSummary(ctx, db.GetSupplierBillSummaryParams{
 		SupplierID: supplierID,
 		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to compute bill summary"})
-		return
+		return nil, fmt.Errorf("failed to compute bill summary: %w", err)
 	}
 
 	// 3. Fetch payment summary from cash_voucher
 	supplierID32 := supplierID
-	paymentSummary, err := h.queries.GetSupplierPaymentSummary(c.Request.Context(), db.GetSupplierPaymentSummaryParams{
+	paymentSummary, err := h.queries.GetSupplierPaymentSummary(ctx, db.GetSupplierPaymentSummaryParams{
 		SupplierID: &supplierID32,
 		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
@@ -152,19 +283,18 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 	closingBalance := summary.TotalSpent.Sub(paymentSummary.TotalPayments)
 
 	// 4. Fetch bills (with totals from purchase_bill_product GENERATED columns)
-	bills, err := h.queries.GetPurchaseBillsBySupplier(c.Request.Context(), db.GetPurchaseBillsBySupplierParams{
+	bills, err := h.queries.GetPurchaseBillsBySupplier(ctx, db.GetPurchaseBillsBySupplierParams{
 		SupplierID: supplierID,
 		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
 		DateTo:     &dateTo,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to fetch bills"})
-		return
+		return nil, fmt.Errorf("failed to fetch bills: %w", err)
 	}
 
 	// 5. Fetch payments (cash_voucher disbursements to supplier)
-	payments, err := h.queries.GetSupplierPayments(c.Request.Context(), db.GetSupplierPaymentsParams{
+	payments, err := h.queries.GetSupplierPayments(ctx, db.GetSupplierPaymentsParams{
 		SupplierID: &supplierID32,
 		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
@@ -175,7 +305,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 	}
 
 	// 6. Fetch top items (from purchase_bill_product, NOT bill_product)
-	topItems, err := h.queries.GetTopPurchasedItems(c.Request.Context(), db.GetTopPurchasedItemsParams{
+	topItems, err := h.queries.GetTopPurchasedItems(ctx, db.GetTopPurchasedItemsParams{
 		SupplierID: supplierID,
 		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
@@ -186,7 +316,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 	}
 
 	// 7. Fetch aging buckets (unpaid bills by overdue period)
-	aging, err := h.queries.GetSupplierAgingBuckets(c.Request.Context(), db.GetSupplierAgingBucketsParams{
+	aging, err := h.queries.GetSupplierAgingBuckets(ctx, db.GetSupplierAgingBucketsParams{
 		SupplierID: supplierID,
 		MerchantID: merchantID,
 	})
@@ -195,7 +325,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 	}
 
 	// 8. Fetch monthly spending trend
-	monthlySpending, err := h.queries.GetSupplierMonthlySpending(c.Request.Context(), db.GetSupplierMonthlySpendingParams{
+	monthlySpending, err := h.queries.GetSupplierMonthlySpending(ctx, db.GetSupplierMonthlySpendingParams{
 		SupplierID: supplierID,
 		MerchantID: merchantID,
 		DateFrom:   &dateFrom,
@@ -205,7 +335,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 		monthlySpending = nil // non-fatal
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	return gin.H{
 		"supplier": supplier,
 		"summary": gin.H{
 			"bill_count":       summary.BillCount,
@@ -230,7 +360,7 @@ func (h *handler) GetSupplierReport(c *gin.Context) {
 			"cash_total":          paymentSummary.CashTotal,
 			"bank_transfer_total": paymentSummary.BankTransferTotal,
 		},
-	})
+	}, nil
 }
 
 // ── PUT /api/v2/purchase_bill/:id/received ──────────────────────────────────

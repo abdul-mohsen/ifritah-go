@@ -45,16 +45,17 @@ const maskedWhatsAppAccessToken = "********"
 // settingCategories maps each setting_key to its category name.
 // Used by both GetSettings (to group) and UpdateSettings (to whitelist).
 var settingCategories = map[string]string{
-	// ── Section 1: Company Info (9 keys) ──
-	"company_name":        "company",
-	"company_name_en":     "company",
-	"company_vat":         "company",
-	"company_cr":          "company",
-	"company_address":     "company",
-	"company_phone":       "company",
-	"company_email":       "company",
-	"company_logo_url":    "company",
-	"company_description": "company",
+	// ── Section 1: Company Info (10 keys) ──
+	"company_name":         "company",
+	"company_name_en":      "company",
+	"company_vat":          "company",
+	"company_cr":           "company",
+	"company_address":      "company",
+	"company_phone":        "company",
+	"onboarding_completed": "company",
+	"company_email":        "company",
+	"company_logo_url":     "company",
+	"company_description":  "company",
 
 	// ── Section 2: Invoice & Tax (13 keys) ──
 	"currency":           "invoice",

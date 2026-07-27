@@ -221,6 +221,7 @@ func (h *handler) UpdateSettings(c *gin.Context) {
 	userID := int32(GetSessionInfo(c).id)
 
 	updated := 0
+	var firstErr error
 	for key, value := range req.Settings {
 		// Only allow keys that belong to the requested category (whitelist)
 		cat, known := settingCategories[key]
@@ -247,9 +248,17 @@ func (h *handler) UpdateSettings(c *gin.Context) {
 		})
 		if err != nil {
 			log.Printf("UpdateSettings: %v", err)
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		updated++
+	}
+
+	if firstErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to save settings"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{

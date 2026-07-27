@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"regexp"
 	"testing"
@@ -132,6 +133,23 @@ func TestUpdateSettingsPersistsDefaultMarkupPercentage(t *testing.T) {
 	}
 	if !containsUpdatedOne(w.Body.String()) {
 		t.Fatalf(`expected {"updated":1} (default_markup_percentage must be persisted), got: %s`, w.Body.String())
+	}
+	assertMockExpectations(t, mock)
+}
+
+func TestUpdateSettingsSurfacesPersistenceErrors(t *testing.T) {
+	h, mock, cleanup := newPurchaseBillTestHandler(t)
+	defer cleanup()
+
+	mock.ExpectExec("INSERT INTO settings").
+		WithArgs("pb_pdf_required", "optional", int32(7)).
+		WillReturnError(errors.New("database unavailable"))
+
+	body := `{"category":"invoice","settings":{"pb_pdf_required":"optional"}}`
+	w := runPurchaseBillRequest(t, h.UpdateSettings, http.MethodPut, "/api/v2/settings", body)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusInternalServerError, w.Body.String())
 	}
 	assertMockExpectations(t, mock)
 }

@@ -131,7 +131,7 @@ func TestAddPurchaseBillDuplicateConflictStillReturnsConflict(t *testing.T) {
 		WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry"})
 	mock.ExpectRollback()
 
-	body := `{"store_id":1,"products":[],"manual_products":[],"supplier_id":123,"supplier_sequence_number":456,"payment_method":10}`
+	body := `{"store_id":1,"products":[],"manual_products":[{"name":"Filter","price":"50","cost_price":"50","quantity":"1"}],"supplier_id":123,"supplier_sequence_number":456,"payment_method":10}`
 	w := runPurchaseBillRequest(t, h.AddPurchaseBill, http.MethodPost, "/api/v2/purchase_bill", body)
 
 	if w.Code != http.StatusConflict {

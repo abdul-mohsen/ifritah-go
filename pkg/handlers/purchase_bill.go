@@ -19,6 +19,25 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const purchaseBillZeroTotalMessage = "purchase bill total must be greater than zero"
+
+func purchaseBillRequestTotal(request model.AddPurchaseBillRequest) decimal.Decimal {
+	total := decimal.Zero
+	for _, product := range append(request.Products, request.ManualProducts...) {
+		beforeVAT := product.Price.Mul(product.Quantity).Round(2)
+		vat := beforeVAT.Mul(decimal.NewFromInt(15)).Div(decimal.NewFromInt(100)).Round(2)
+		total = total.Add(beforeVAT).Add(vat)
+	}
+	if request.Discount.IsPositive() {
+		total = total.Mul(decimal.NewFromInt(100).Sub(request.Discount)).Div(decimal.NewFromInt(100)).Round(2)
+	}
+	return total
+}
+
+func purchaseBillRequestHasPositiveTotal(request model.AddPurchaseBillRequest) bool {
+	return purchaseBillRequestTotal(request).IsPositive()
+}
+
 func (h *handler) getPurchaseBills(c *gin.Context, args db.GetAllPurchaseBillParams) ([]db.PurchaseBill, error) {
 	return h.queries.GetAllPurchaseBill(c.Request.Context(), args)
 }
@@ -50,6 +69,10 @@ func (h *handler) beginPurchaseBillTx(c *gin.Context, defaultState int32) (*purc
 	}
 	if !slices.Contains(h.getStoreIds(c), req.StoreId) {
 		c.Status(http.StatusBadRequest)
+		return nil, false
+	}
+	if !purchaseBillRequestHasPositiveTotal(req) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": purchaseBillZeroTotalMessage})
 		return nil, false
 	}
 	eff := time.Now()
@@ -176,6 +199,19 @@ func finalizePurchaseBill(h *handler, c *gin.Context, setup *purchaseBillSetup, 
 	if err := setup.qtx.RefreshPurchaseBillTotals(c.Request.Context(), id); err != nil {
 		log.Printf("%s refresh totals: %v", operation, err)
 		c.AbortWithError(http.StatusInternalServerError, err)
+		return false
+	}
+	bill, err := setup.qtx.GetPurchaseBillDetail(c.Request.Context(), db.GetPurchaseBillDetailParams{
+		ID:   int32(setup.session.id),
+		ID_2: id,
+	})
+	if err != nil {
+		log.Printf("%s read refreshed totals: %v", operation, err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return false
+	}
+	if !bill.Total.IsPositive() {
+		c.JSON(http.StatusBadRequest, gin.H{"message": purchaseBillZeroTotalMessage})
 		return false
 	}
 	if err := recordPurchaseBillStockMovements(setup.qtx, c, id, request, enforcement, int32(setup.session.id)); err != nil {

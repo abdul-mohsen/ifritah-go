@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"ifritah/web-service-gin/pkg/model"
 
@@ -127,7 +128,7 @@ func TestResolveNewProductSellingPrice(t *testing.T) {
 
 func TestUpdatePurchaseInventoryProductPriceOverride(t *testing.T) {
 	productCols := []string{"id", "article_id", "store_id", "status", "shelf_number", "min_stock",
-		"cost_price", "price", "quantity", "is_deleted", "name"}
+		"cost_price", "price", "quantity", "is_deleted", "name", "created_at", "updated_at"}
 
 	newProductID := int32(5)
 	newPrice := decimal.NewFromInt(199)
@@ -149,7 +150,7 @@ func TestUpdatePurchaseInventoryProductPriceOverride(t *testing.T) {
 			mock.ExpectQuery("select .* from product p where p\\.id = \\? and p\\.is_deleted").
 				WithArgs(uint64(5)).
 				WillReturnRows(sqlmock.NewRows(productCols).
-					AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget"))
+					AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget", time.Now(), time.Now()))
 			mock.ExpectExec("update product").
 				WithArgs(tc.wantPersistedPrice, "40", "A2", sqlmock.AnyArg(), uint64(5)).
 				WillReturnResult(sqlmock.NewResult(0, 1))

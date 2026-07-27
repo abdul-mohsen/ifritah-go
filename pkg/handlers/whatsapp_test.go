@@ -26,7 +26,7 @@ var (
 		"VALUES (?, ?, ?)\n" +
 		"ON DUPLICATE KEY UPDATE value = VALUES(value), updated_by = VALUES(updated_by)")
 	getBillPDFPattern      = regexp.QuoteMeta("SELECT b.id, b.effective_date, b.payment_due_date, b.state, b.discount, b.store_id, b.sequence_number, b.merchant_id, b.maintenance_cost, b.note, b.username, b.client_id, b.user_phone_number, b.qr_code, b.invoice_uuid, b.invoice_hash, b.branch_id, b.payment_method, b.deliver_date, b.invoice_xml_path, b.total_before_vat, b.total_vat, b.total, b.discount_amount, b.amount_paid, b.sequence_number_str,")
-	getBillProductsPattern = regexp.QuoteMeta("select id, product_id, bill_id, vat, price, quantity, name, part_name, type, discount, total_before_discount, total_before_vat, vat_total, total_including_vat from bill_product where bill_id = ?")
+	getBillProductsPattern = regexp.QuoteMeta("select id, product_id, bill_id, vat, price, quantity, name, part_name, type, discount, total_before_discount, total_before_vat, vat_total, total_including_vat, created_at, updated_at from bill_product where bill_id = ?")
 )
 
 type responseDetail struct {
@@ -129,6 +129,7 @@ func expectBillDetail(mock sqlmock.Sqlmock, id uint64, userPhone *string, userNa
 		"merchant_id", "maintenance_cost", "note", "username", "client_id", "user_phone_number", "qr_code",
 		"invoice_uuid", "invoice_hash", "branch_id", "payment_method", "deliver_date", "invoice_xml_path",
 		"total_before_vat", "total_vat", "total", "discount_amount", "amount_paid", "sequence_number_str",
+		"created_at", "updated_at",
 		"company_name", "vat_registration_number", "commercial_registration_number", "address_name", "store_name",
 		"credit_state", "credit_note", "credit_id",
 	}
@@ -160,6 +161,8 @@ func expectBillDetail(mock sqlmock.Sqlmock, id uint64, userPhone *string, userNa
 		"0.00",
 		"0.00",
 		&sequenceString,
+		time.Date(2026, 5, 18, 10, 0, 0, 0, time.UTC),
+		time.Date(2026, 5, 18, 10, 0, 0, 0, time.UTC),
 		"Ifritah",
 		nil,
 		nil,

@@ -30,6 +30,8 @@ CREATE TABLE `account` (
   `subtype` varchar(32) DEFAULT NULL,
   `parent_id` int DEFAULT NULL,
   `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_account_code` (`code`),
   KEY `idx_account_type_sub` (`type`,`subtype`),
@@ -52,6 +54,8 @@ CREATE TABLE `ambrand` (
   `brandName` varchar(250) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci DEFAULT NULL,
   `lang` varchar(5) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci DEFAULT NULL COMMENT 'hide',
   `articleCountry` varchar(50) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `amBrand_id_uindex` (`id`) USING BTREE,
   KEY `brandId` (`brandId`) USING BTREE,
@@ -91,6 +95,8 @@ CREATE TABLE `ambrandsaddress` (
   `zipSpecial` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `mailbox` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `street2` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=38299 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Main address of the data supplier';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -105,6 +111,8 @@ DROP TABLE IF EXISTS `article_car`;
 CREATE TABLE `article_car` (
   `vehicleModelSeriesId` bigint NOT NULL,
   `legacyArticleId` bigint NOT NULL COMMENT 'legacyArticleId',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`vehicleModelSeriesId`,`legacyArticleId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -119,6 +127,8 @@ DROP TABLE IF EXISTS `article_car_link`;
 CREATE TABLE `article_car_link` (
   `linkingTargetId` bigint NOT NULL,
   `legacyArticleId` bigint NOT NULL COMMENT 'legacyArticleId',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`linkingTargetId`,`legacyArticleId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -145,6 +155,8 @@ CREATE TABLE `articlecriteria` (
   `assemblyGroupNodeId` bigint DEFAULT NULL,
   `legacyArticleId` bigint DEFAULT NULL,
   `immediateDisplay` tinyint(1) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=27074084 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Article criteria';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -164,6 +176,8 @@ CREATE TABLE `articlecrosses` (
   `assemblyGroupNodeId` bigint DEFAULT NULL,
   `legacyArticleId` bigint DEFAULT NULL,
   `number` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   KEY `artcleId` (`legacyArticleId`)
 ) ENGINE=InnoDB AUTO_INCREMENT=30370792 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Cross-references';
@@ -186,6 +200,8 @@ CREATE TABLE `articledocs` (
   `docUrl` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `assemblyGroupNodeId` bigint DEFAULT NULL,
   `legacyArticleId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=8203512 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Articles documents';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -201,6 +217,8 @@ CREATE TABLE `articleean` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `legacyArticleId` bigint DEFAULT NULL,
   `eancode` varchar(25) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=4187238 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Spare parts EAN codes';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -218,6 +236,8 @@ CREATE TABLE `articlelinks` (
   `legacyArticleId` bigint DEFAULT NULL,
   `lang` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `description` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   KEY `legacyArticleId` (`legacyArticleId`) USING BTREE,
   KEY `lang` (`lang`) USING BTREE
@@ -235,6 +255,8 @@ CREATE TABLE `articlemain` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `mainArticleId` bigint DEFAULT NULL,
   `legacyArticleId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=2387976 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Main articles';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -257,6 +279,8 @@ CREATE TABLE `articlepdfs` (
   `typeKeyId` int DEFAULT NULL COMMENT 'hide',
   `headerKeyId` int DEFAULT NULL COMMENT 'hide',
   `lang` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `articlePdfs_id_uindex` (`id`) USING BTREE,
   UNIQUE KEY `articlePdfs_la_u_uindex` (`legacyArticleId`,`url`) USING BTREE,
@@ -289,6 +313,8 @@ CREATE TABLE `articles` (
   `genericArticleDescription` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `legacyArticleId` bigint unsigned DEFAULT NULL,
   `assemblyGroupNodeId` bigint unsigned DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   KEY `articleId_index` (`legacyArticleId`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=6893356 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Articles';
@@ -307,6 +333,8 @@ CREATE TABLE `articlesvehicletrees` (
   `assemblyGroupNodeId` bigint DEFAULT NULL,
   `linkingTargetId` bigint DEFAULT NULL,
   `linkingTargetType` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `legacyArticleId` (`legacyArticleId`,`assemblyGroupNodeId`,`linkingTargetId`,`linkingTargetType`) USING BTREE,
   KEY `legacyArticleId_3` (`legacyArticleId`) USING BTREE,
@@ -332,6 +360,8 @@ CREATE TABLE `articletext` (
   `assemblyGroupNodeId` bigint DEFAULT NULL,
   `legacyArticleId` bigint DEFAULT NULL,
   `isImmediateDisplay` tinyint(1) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=1607531 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Text information about spare parts';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -351,6 +381,8 @@ CREATE TABLE `assemblygroupnodenames` (
   `shortCutId` bigint DEFAULT NULL,
   `lang` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `parentNodeId` bigint DEFAULT '0',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `assemblyGroupName` (`assemblyGroupName`,`assemblyGroupNodeId`,`hasChilds`,`shortCutId`,`lang`,`parentNodeId`) USING BTREE,
   KEY `lang` (`lang`) USING BTREE,
@@ -374,6 +406,8 @@ CREATE TABLE `assemblygroupnodes` (
   `parentNodeId` bigint DEFAULT '0',
   `linkingTargetId` bigint DEFAULT NULL,
   `linkingTargetType` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `assemblyGroupNodeId` (`assemblyGroupNodeId`,`hasChilds`,`shortCutId`,`parentNodeId`,`linkingTargetId`,`linkingTargetType`) USING BTREE,
   KEY `linkingTargetId` (`linkingTargetId`,`linkingTargetType`) USING BTREE
@@ -391,6 +425,8 @@ CREATE TABLE `axlebodytype` (
   `bodyTypeName` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT '',
   `axleId` bigint DEFAULT NULL,
   `id` int NOT NULL AUTO_INCREMENT COMMENT 'hide',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   KEY `bodyTypeName` (`bodyTypeName`) USING BTREE,
   KEY `axleId` (`axleId`) USING BTREE
@@ -408,6 +444,8 @@ CREATE TABLE `axlebrakesizes` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'hide',
   `brakeSize` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT '',
   `brakeSizeId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `axleBrakeSizes_id_uindex` (`id`) USING BTREE,
   KEY `brakeSizeId` (`brakeSizeId`) USING BTREE,
@@ -446,6 +484,8 @@ CREATE TABLE `axledetails` (
   `driveHeightTo` bigint DEFAULT NULL,
   `trackGauge` bigint DEFAULT NULL,
   `lang` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=7012 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Axle details';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -460,6 +500,8 @@ DROP TABLE IF EXISTS `axles`;
 CREATE TABLE `axles` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'hide',
   `axleId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=7012 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Axles';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -498,6 +540,8 @@ CREATE TABLE `bill` (
   `discount_amount` decimal(12,2) NOT NULL DEFAULT '0.00',
   `amount_paid` decimal(14,2) NOT NULL DEFAULT '0.00',
   `sequence_number_str` varchar(32) GENERATED ALWAYS AS (cast(`sequence_number` as char)) VIRTUAL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `fk_bill_branch` (`branch_id`),
   KEY `idx_bill_merchant_date` (`merchant_id`,`effective_date`),
@@ -527,6 +571,7 @@ CREATE TABLE `bill_payment` (
   `recorded_by` int DEFAULT NULL,
   `note` varchar(255) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `fk_bill_payment_user` (`recorded_by`),
   KEY `idx_bill_payment_bill` (`bill_id`),
@@ -594,6 +639,8 @@ CREATE TABLE `bill_product` (
   `total_before_vat` decimal(12,2) GENERATED ALWAYS AS (round((`total_before_discount` - `discount`),2)) STORED,
   `vat_total` decimal(12,2) GENERATED ALWAYS AS (round(((`total_before_vat` * `vat`) / 100),2)) STORED,
   `total_including_vat` decimal(12,2) GENERATED ALWAYS AS (round((`total_before_vat` + `vat_total`),2)) STORED,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `fk_bill_product` (`bill_id`),
   KEY `fk_product_id` (`product_id`),
@@ -641,6 +688,8 @@ CREATE TABLE `bodymark` (
   `manuName` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `markId` bigint DEFAULT NULL,
   `markName` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `bodyMark_id_uindex` (`id`) USING BTREE,
   KEY `fk_bodyMark_bodyMarkCarIds_1` (`markId`) USING BTREE
@@ -659,6 +708,8 @@ CREATE TABLE `bodymarkcarids` (
   `carId` bigint DEFAULT NULL,
   `term` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `markId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `bodyMarkCarIds_id_uindex` (`id`) USING BTREE,
   KEY `fk_bodyMarkCarIds_cars_1` (`carId`) USING BTREE,
@@ -706,6 +757,8 @@ CREATE TABLE `branch_zatca_config` (
   `last_attempt_at` datetime DEFAULT NULL,
   `previous_invoice_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'base64(sha256(prev_signed_xml)); null = first document',
   `last_icv` bigint unsigned NOT NULL DEFAULT '0' COMMENT 'Strictly increasing per-EGS Invoice Counter Value (shared across bill/credit/debit)',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`branch_id`),
   CONSTRAINT `fk_bzc_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -747,6 +800,8 @@ DROP TABLE IF EXISTS `car_link`;
 CREATE TABLE `car_link` (
   `linkageTargetId` bigint NOT NULL,
   `vehicleModelSeriesId` bigint NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`linkageTargetId`,`vehicleModelSeriesId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -766,6 +821,8 @@ CREATE TABLE `cars` (
   `firstCountry` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `manuId` bigint DEFAULT NULL,
   `modId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   KEY `fk_cars_manufacturers_1` (`manuId`) USING BTREE,
   KEY `fk_cars_modelSeries_1` (`modId`) USING BTREE,
@@ -793,6 +850,8 @@ CREATE TABLE `cars_old` (
   `firstCountry` varchar(5) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci DEFAULT NULL,
   `manuId` bigint DEFAULT NULL,
   `modId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   KEY `fk_cars_manufacturers_1` (`manuId`) USING BTREE,
   KEY `fk_cars_modelSeries_1` (`modId`) USING BTREE,
@@ -819,6 +878,8 @@ CREATE TABLE `carsbodies` (
   `BodyId` bigint DEFAULT '0',
   `id` int NOT NULL AUTO_INCREMENT COMMENT 'hide',
   `carType` varchar(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   KEY `BodyId` (`BodyId`) USING BTREE,
   KEY `manuId` (`manuId`,`BodyId`) USING BTREE,
@@ -942,6 +1003,8 @@ CREATE TABLE `company` (
   `commercial_registration_number` varchar(10) DEFAULT NULL,
   `name_ar` varchar(255) DEFAULT NULL,
   `business_category` varchar(255) DEFAULT 'Supply activities',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   CONSTRAINT `chk_vat_registration_number` CHECK (regexp_like(`vat_registration_number`,_utf8mb4'^3[0-9]{13}3$'))
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -960,6 +1023,8 @@ CREATE TABLE `countries` (
   `countryName` text CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci,
   `usage` bigint DEFAULT NULL COMMENT 'hide',
   `lang` varchar(5) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `countries_id_uindex` (`id`) USING BTREE,
   KEY `countryCode` (`countryCode`) USING BTREE,
@@ -979,6 +1044,8 @@ CREATE TABLE `countrygroups` (
   `countryName` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `tecdocCode` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `lang` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `countryGroups_id_uindex` (`id`) USING BTREE,
   KEY `fk_countryGroups_countries_1` (`tecdocCode`) USING BTREE,
@@ -999,6 +1066,7 @@ CREATE TABLE `credit_note` (
   `state` int DEFAULT NULL,
   `NOTE` text,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `invoice_uuid` char(36) DEFAULT NULL,
   `invoice_hash` varchar(128) DEFAULT NULL,
   `invoice_qr` mediumtext,
@@ -1027,6 +1095,8 @@ CREATE TABLE `criteria` (
   `lang` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `criteriaUnit` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `successorId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='List of all criterias';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1053,6 +1123,8 @@ CREATE TABLE `dashboard_daily_rollup` (
   `input_vat` decimal(14,2) NOT NULL DEFAULT '0.00',
   `credit_note_count` int NOT NULL DEFAULT '0',
   `credit_note_total` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`merchant_id`,`store_id`,`bucket_date`),
   KEY `idx_rollup_merchant_date` (`merchant_id`,`bucket_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -1071,6 +1143,7 @@ CREATE TABLE `debit_note` (
   `state` int DEFAULT NULL COMMENT '1=pending, 3=submitted',
   `note` text COMMENT 'KSA-10 reason',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `invoice_uuid` char(36) DEFAULT NULL,
   `invoice_hash` varchar(128) DEFAULT NULL,
   `invoice_qr` mediumtext,
@@ -1100,6 +1173,7 @@ CREATE TABLE `expense` (
   `note` varchar(255) DEFAULT NULL,
   `created_by` int NOT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_expense_merchant_date` (`merchant_id`,`spent_at`),
   KEY `idx_expense_store_date` (`store_id`,`spent_at`),
@@ -1122,6 +1196,8 @@ CREATE TABLE `expense_category` (
   `id` int NOT NULL AUTO_INCREMENT,
   `code` varchar(32) NOT NULL,
   `name` varchar(64) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_expense_cat_code` (`code`)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -1137,6 +1213,8 @@ DROP TABLE IF EXISTS `genericarticles`;
 CREATE TABLE `genericarticles` (
   `articleId` bigint DEFAULT NULL,
   `genericArticleId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY `artcleIdIndex` (`articleId`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Generic articles';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1154,7 +1232,9 @@ CREATE TABLE `genericarticlesgroups` (
   `genericArticleId` bigint DEFAULT NULL,
   `masterDesignation` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `lang` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `usageDesignation` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `usageDesignation` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Generic articles groups';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1175,6 +1255,7 @@ CREATE TABLE `journal_entry` (
   `description` varchar(255) DEFAULT NULL,
   `created_by` int NOT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_je_merchant_date` (`merchant_id`,`posted_at`),
   KEY `idx_je_store_date` (`store_id`,`posted_at`),
@@ -1198,6 +1279,8 @@ CREATE TABLE `journal_line` (
   `account_id` int NOT NULL,
   `debit` decimal(14,2) NOT NULL DEFAULT '0.00',
   `credit` decimal(14,2) NOT NULL DEFAULT '0.00',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_jl_account` (`account_id`),
   KEY `idx_jl_entry` (`entry_id`),
@@ -1221,6 +1304,8 @@ CREATE TABLE `keyvalues` (
   `keyTableId` bigint DEFAULT NULL,
   `keyValue` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `lang` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='All values for criterias';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1237,6 +1322,8 @@ CREATE TABLE `languages` (
   `languageCode` varchar(5) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci DEFAULT NULL,
   `languageName` text CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci,
   `lang` varchar(5) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `languages_id_uindex` (`id`) USING BTREE,
   KEY `lang` (`lang`) USING BTREE,
@@ -1255,6 +1342,8 @@ CREATE TABLE `legacy2generic` (
   `legacyArticleId` bigint unsigned NOT NULL,
   `genericArticleId` bigint DEFAULT NULL,
   `id` int NOT NULL AUTO_INCREMENT COMMENT 'hide',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `legacyArticleId_2` (`legacyArticleId`,`genericArticleId`),
   KEY `legacyArticleId` (`legacyArticleId`) USING BTREE,
@@ -1332,6 +1421,8 @@ CREATE TABLE `linkagetargets` (
   `axleConfigurationKey` bigint NOT NULL,
   `axleConfiguration` text CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
   `axleLoadFromKg` bigint NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   KEY `linkageTargetId_2` (`linkageTargetId`,`linkageTargetType`,`lang`) USING BTREE,
   KEY `idx_model_en` (`vehicleModelSeriesId`,`lang`),
@@ -1353,6 +1444,8 @@ CREATE TABLE `manufacturermotorids` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `motorId` bigint DEFAULT NULL,
   `manuId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=33313 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Motor manufacturer IDs';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1369,6 +1462,8 @@ CREATE TABLE `manufacturers` (
   `manuId` bigint DEFAULT NULL,
   `manuName` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `linkingTargetType` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `manufacturers_id_uindex` (`id`) USING BTREE,
   KEY `manuId` (`manuId`) USING BTREE,
@@ -1395,6 +1490,8 @@ CREATE TABLE `modelseries` (
   `start_year` int DEFAULT NULL,
   `end_year` int DEFAULT NULL,
   `model_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `modelSeries_id_uindex` (`id`) USING BTREE,
   UNIQUE KEY `modelSeries_modelId_linkingTargetType_manuId_uindex` (`modelId`,`linkingTargetType`,`manuId`) USING BTREE,
@@ -1424,6 +1521,8 @@ CREATE TABLE `modelseries_old` (
   `yearOfConstrFrom` bigint DEFAULT NULL,
   `linkingTargetType` varchar(5) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci DEFAULT NULL,
   `manuId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `modelSeries_id_uindex` (`id`) USING BTREE,
   UNIQUE KEY `modelSeries_modelId_linkingTargetType_manuId_uindex` (`modelId`,`linkingTargetType`,`manuId`) USING BTREE,
@@ -1485,6 +1584,8 @@ CREATE TABLE `motordetails` (
   `litersTechTo` bigint DEFAULT NULL,
   `ccmTaxTo` bigint DEFAULT NULL,
   `litersTaxTo` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=33313 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Motor details';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1500,6 +1601,8 @@ CREATE TABLE `newarticles` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `articleId` bigint DEFAULT NULL,
   `articleNumber` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Unused info';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1544,6 +1647,7 @@ CREATE TABLE `notifications` (
   `message` text NOT NULL,
   `is_read` tinyint(1) NOT NULL DEFAULT '0',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `fk_notif_user` (`user_id`),
   CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
@@ -1562,6 +1666,8 @@ CREATE TABLE `oem_number` (
   `number` varchar(255) NOT NULL,
   `articleId` bigint DEFAULT NULL,
   `clean_number` varchar(255) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `id_UNIQUE` (`id`) /*!80000 INVISIBLE */,
   UNIQUE KEY `number_UNIQUE` (`number`) /*!80000 INVISIBLE */,
@@ -1588,6 +1694,8 @@ CREATE TABLE `oemnumbers` (
   `lang` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `referenceTypeKey` varchar(25) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `referenceTypeDescription` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `oemNumbers_id_uindex` (`id`) USING BTREE,
   UNIQUE KEY `articleNumber` (`articleNumber`,`mfrId`,`assemblyGroupNodeId`,`legacyArticleId`,`lang`,`referenceTypeKey`,`referenceTypeDescription`) USING BTREE,
@@ -1614,6 +1722,7 @@ CREATE TABLE `order_items` (
   `unit_price` decimal(12,2) NOT NULL DEFAULT '0.00',
   `line_total` decimal(12,2) NOT NULL DEFAULT '0.00',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_oi_order` (`order_id`),
   KEY `idx_oi_part` (`part_id`),
@@ -1678,6 +1787,8 @@ CREATE TABLE `product` (
   `quantity` decimal(10,3) NOT NULL,
   `is_deleted` tinyint(1) NOT NULL DEFAULT '0',
   `name` varchar(255) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `id_UNIQUE` (`article_id`,`store_id`) /*!80000 INVISIBLE */,
   KEY `idx_product_store_qty` (`store_id`,`quantity`),
@@ -1717,6 +1828,8 @@ CREATE TABLE `purchase_bill` (
   `amount_paid` decimal(14,2) NOT NULL DEFAULT '0.00',
   `sequence_number_str` varchar(32) GENERATED ALWAYS AS (cast(`sequence_number` as char)) VIRTUAL,
   `supplier_sequence_number_str` varchar(64) GENERATED ALWAYS AS (cast(`supplier_sequence_number` as char)) VIRTUAL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_pb_supplier_seq` (`supplier_id`,`supplier_sequence_number`),
   UNIQUE KEY `uq_pb_sequence` (`sequence_number`),
@@ -1739,6 +1852,7 @@ CREATE TABLE `purchase_bill_attachments` (
   `purchase_bill_id` bigint unsigned NOT NULL,
   `file_key` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_pba_file` (`purchase_bill_id`,`file_key`),
   KEY `fk_pba_file` (`file_key`),
@@ -1767,6 +1881,7 @@ CREATE TABLE `purchase_bill_payment` (
   `recorded_by` int DEFAULT NULL,
   `note` varchar(255) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `fk_pbp_pb_user` (`recorded_by`),
   KEY `idx_pbp_pb` (`purchase_bill_id`),
@@ -1805,6 +1920,8 @@ CREATE TABLE `purchase_bill_product` (
   `name` varchar(255) DEFAULT NULL,
   `shelf_number` varchar(45) DEFAULT NULL,
   `type` tinyint GENERATED ALWAYS AS ((case when (`product_id` is not null) then 0 else 1 end)) STORED NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `fk_pbp_product_id` (`product_id`),
   CONSTRAINT `fk_pbp_product_id` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`),
@@ -1837,6 +1954,7 @@ CREATE TABLE `refresh_token` (
   `revoked` tinyint(1) NOT NULL DEFAULT '0',
   `expires_at` datetime NOT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_rt_user` (`user_id`),
   KEY `idx_rt_hash` (`token_hash`),
@@ -1859,6 +1977,8 @@ CREATE TABLE `replacedbyarticles` (
   `mfrId` bigint DEFAULT NULL,
   `assemblyGroupNodeId` bigint DEFAULT NULL,
   `legacyArticleId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=229424 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Replaced by articles';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1877,6 +1997,8 @@ CREATE TABLE `replacesarticles` (
   `mfrId` bigint DEFAULT NULL,
   `assemblyGroupNodeId` bigint DEFAULT NULL,
   `legacyArticleId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=240835 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Replaces articles';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1892,6 +2014,8 @@ CREATE TABLE `searchindex` (
   `id` int NOT NULL AUTO_INCREMENT,
   `legacyArticleId` int unsigned DEFAULT NULL,
   `keywords` text CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `legacyArticleId` (`legacyArticleId`) USING BTREE,
   FULLTEXT KEY `keywords` (`keywords`)
@@ -1912,6 +2036,7 @@ CREATE TABLE `settings` (
   `description` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `updated_by` int DEFAULT NULL,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_settings_key` (`setting_key`),
   KEY `fk_settings_user` (`updated_by`),
@@ -1929,7 +2054,9 @@ DROP TABLE IF EXISTS `shortcuts`;
 CREATE TABLE `shortcuts` (
   `shortCutId` bigint DEFAULT NULL,
   `shortCutName` text CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci,
-  `linkingTargetType` varchar(5) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci DEFAULT NULL
+  `linkingTargetType` varchar(5) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Shortcuts to vehicles main parts';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1953,6 +2080,7 @@ CREATE TABLE `stock_movements` (
   `note` text COLLATE utf8mb4_unicode_ci COMMENT 'Free text note for adjustments',
   `created_by` int DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_sm_product` (`product_id`,`created_at`),
   KEY `idx_sm_store` (`store_id`,`created_at`),
@@ -2049,6 +2177,8 @@ CREATE TABLE `tradenumbers` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `tradeNumber` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `legacyArticleId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=1913184 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Spare Parts Trade Numbers';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -2068,6 +2198,7 @@ CREATE TABLE `uploaded_files` (
   `mime_type` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `uploaded_by` int DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_file_key` (`file_key`),
   KEY `idx_uploaded_by` (`uploaded_by`),
@@ -2114,6 +2245,8 @@ CREATE TABLE `user_permission` (
   `can_add` tinyint(1) NOT NULL DEFAULT '0',
   `can_edit` tinyint(1) NOT NULL DEFAULT '0',
   `can_delete` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_user_resource` (`user_id`,`resource`),
   CONSTRAINT `fk_perm_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE
@@ -2135,6 +2268,8 @@ CREATE TABLE `vehicleaxles` (
   `axlePosition` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `lang` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `carId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=55041 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Axles descriptions';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -2175,6 +2310,8 @@ CREATE TABLE `vehicledetails` (
   `axisConfiguration` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `tonnage` bigint DEFAULT NULL,
   `brakeSystem` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=64335 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Additional information about vehicle type';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -2190,6 +2327,8 @@ CREATE TABLE `vehiclemotorcodes` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `carId` bigint NOT NULL,
   `motorCode` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=76269 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Vehicle motor codes';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -2205,6 +2344,8 @@ CREATE TABLE `vehicleprototypes` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `carId` bigint DEFAULT NULL,
   `prototype` varchar(250) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=54616 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Vehicles prototypes';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -2221,6 +2362,8 @@ CREATE TABLE `vehiclesecondarytypes` (
   `subTypeDescription` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `subTypeId` bigint DEFAULT NULL,
   `carId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=2241 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Vehicle secondary types';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -2239,6 +2382,8 @@ CREATE TABLE `vehicletrees` (
   `sortNo` bigint DEFAULT NULL,
   `carId` bigint DEFAULT NULL,
   `linkingTargetType` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `vehicleTrees_id_uindex` (`id`) USING BTREE,
   UNIQUE KEY `assemblyGroupNodeId_2` (`assemblyGroupNodeId`,`parentNodeId`,`sortNo`,`carId`,`linkingTargetType`) USING BTREE,
@@ -2263,6 +2408,8 @@ CREATE TABLE `vehiclewheelbases` (
   `wheelbase` bigint DEFAULT NULL,
   `wheelbaseId` bigint DEFAULT NULL,
   `carId` bigint DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=99365 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Vehicle wheel bases';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -2278,6 +2425,8 @@ CREATE TABLE `vin_cache` (
   `id` int NOT NULL AUTO_INCREMENT,
   `vin` varchar(20) NOT NULL,
   `data` json NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `number_UNIQUE` (`vin`)
 ) ENGINE=InnoDB AUTO_INCREMENT=45 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

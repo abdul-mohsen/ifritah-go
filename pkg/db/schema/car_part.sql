@@ -26,6 +26,8 @@ CREATE TABLE `car_part`.`oem_number` (
   `number` varchar(255) NOT NULL,
   `articleId` bigint DEFAULT NULL,
   `clean_number` varchar(255) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `id_UNIQUE` (`id`) /*!80000 INVISIBLE */,
   UNIQUE KEY `number_UNIQUE` (`number`) /*!80000 INVISIBLE */,

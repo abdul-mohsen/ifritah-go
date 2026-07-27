@@ -6,6 +6,7 @@ CREATE TABLE `branch_sequence` (
   `scope`      VARCHAR(32)     NOT NULL,
   `last_value` BIGINT UNSIGNED NOT NULL DEFAULT 0,
   `updated_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`branch_id`, `scope`),
   CONSTRAINT `fk_bsq_branch` FOREIGN KEY (`branch_id`)
     REFERENCES `branches` (`id`) ON DELETE CASCADE

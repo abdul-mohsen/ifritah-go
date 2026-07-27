@@ -6,9 +6,40 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
+
+const (
+	notificationTypeSystem     int8 = 0
+	notificationTypeLowStock   int8 = 1
+	notificationTypePaymentDue int8 = 2
+	notificationTypeNewOrder   int8 = 3
+)
+
+type notificationConfigResponse struct {
+	UserID            int64  `json:"user_id"`
+	LowStockAlert     bool   `json:"low_stock_alert"`
+	LowStockThreshold uint32 `json:"low_stock_threshold"`
+	PendingDays       uint32 `json:"pending_invoice_days"`
+	NewOrderAlert     bool   `json:"new_order_alert"`
+	PaymentDueAlert   bool   `json:"payment_due_alert"`
+	DailySummary      bool   `json:"daily_summary"`
+	EmailEnabled      bool   `json:"email_enabled"`
+}
+
+func defaultNotificationConfig(userID int64) notificationConfigResponse {
+	return notificationConfigResponse{
+		UserID:            userID,
+		LowStockAlert:     true,
+		LowStockThreshold: 5,
+		PendingDays:       7,
+		NewOrderAlert:     true,
+		PaymentDueAlert:   true,
+	}
+}
 
 // ============================================================================
 // Notification Settings (per user)
@@ -33,15 +64,7 @@ import (
 func (h *handler) GetNotificationConfig(c *gin.Context) {
 	userID := c.GetInt64("userId")
 
-	var config struct {
-		LowStockAlert     bool   `json:"low_stock_alert"`
-		LowStockThreshold uint32 `json:"low_stock_threshold"`
-		PendingDays       uint32 `json:"pending_invoice_days"`
-		NewOrderAlert     bool   `json:"new_order_alert"`
-		PaymentDueAlert   bool   `json:"payment_due_alert"`
-		DailySummary      bool   `json:"daily_summary"`
-		EmailEnabled      bool   `json:"email_enabled"`
-	}
+	config := defaultNotificationConfig(userID)
 
 	err := h.DB.QueryRow(
 		`SELECT low_stock_alert, low_stock_threshold, pending_invoice_days,
@@ -52,12 +75,7 @@ func (h *handler) GetNotificationConfig(c *gin.Context) {
 		&config.NewOrderAlert, &config.PaymentDueAlert, &config.DailySummary, &config.EmailEnabled)
 
 	if err == sql.ErrNoRows {
-		// Return defaults
-		config.LowStockAlert = true
-		config.LowStockThreshold = 5
-		config.PendingDays = 7
-		config.NewOrderAlert = true
-		config.PaymentDueAlert = true
+		// Return defaults.
 	} else if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "database error"})
 		return
@@ -100,25 +118,60 @@ func (h *handler) UpdateNotificationConfig(c *gin.Context) {
 		return
 	}
 
-	// Upsert: insert if not exists, update if exists
+	config := defaultNotificationConfig(user.id)
+	err := h.DB.QueryRow(
+		`SELECT low_stock_alert, low_stock_threshold, pending_invoice_days,
+		        new_order_alert, payment_due_alert, daily_summary, email_enabled
+		 FROM notification_settings WHERE user_id = ?`,
+		user.id,
+	).Scan(&config.LowStockAlert, &config.LowStockThreshold, &config.PendingDays,
+		&config.NewOrderAlert, &config.PaymentDueAlert, &config.DailySummary, &config.EmailEnabled)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("UpdateNotificationConfig read existing: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to load notification config"})
+		return
+	}
+
+	if req.LowStockAlert != nil {
+		config.LowStockAlert = *req.LowStockAlert
+	}
+	if req.LowStockThreshold != nil {
+		config.LowStockThreshold = *req.LowStockThreshold
+	}
+	if req.PendingDays != nil {
+		config.PendingDays = *req.PendingDays
+	}
+	if req.NewOrderAlert != nil {
+		config.NewOrderAlert = *req.NewOrderAlert
+	}
+	if req.PaymentDueAlert != nil {
+		config.PaymentDueAlert = *req.PaymentDueAlert
+	}
+	if req.DailySummary != nil {
+		config.DailySummary = *req.DailySummary
+	}
+	if req.EmailEnabled != nil {
+		config.EmailEnabled = *req.EmailEnabled
+	}
+
 	args := db.UpsertNotificationSettingsParams{
 		UserID:             int32(user.id),
-		LowStockAlert:      boolDefault(req.LowStockAlert, true),
-		LowStockThreshold:  uint32Default(req.LowStockThreshold, 5),
-		PendingInvoiceDays: uint32Default(req.PendingDays, 7),
-		NewOrderAlert:      boolDefault(req.NewOrderAlert, true),
-		PaymentDueAlert:    boolDefault(req.PaymentDueAlert, true),
-		DailySummary:       boolDefault(req.DailySummary, false),
-		EmailEnabled:       boolDefault(req.EmailEnabled, false),
+		LowStockAlert:      config.LowStockAlert,
+		LowStockThreshold:  config.LowStockThreshold,
+		PendingInvoiceDays: config.PendingDays,
+		NewOrderAlert:      config.NewOrderAlert,
+		PaymentDueAlert:    config.PaymentDueAlert,
+		DailySummary:       config.DailySummary,
+		EmailEnabled:       config.EmailEnabled,
 	}
-	err := h.queries.UpsertNotificationSettings(c.Request.Context(), args)
+	err = h.queries.UpsertNotificationSettings(c.Request.Context(), args)
 	if err != nil {
 		log.Printf("UpdateNotificationConfig: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to save notification config"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"detail": "success"})
+	c.JSON(http.StatusOK, gin.H{"detail": "success", "data": config})
 }
 
 // ============================================================================
@@ -139,19 +192,33 @@ func (h *handler) UpdateNotificationConfig(c *gin.Context) {
 func (h *handler) GetNotifications(c *gin.Context) {
 	userID := c.GetInt64("userId")
 	limitStr := c.DefaultQuery("limit", "50")
-	limit, _ := strconv.Atoi(limitStr)
-	if limit <= 0 || limit > 100 {
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 || limit > 100 {
 		limit = 50
 	}
+	offset := 0
+	if cursor := c.Query("cursor"); cursor != "" {
+		if parsed, parseErr := strconv.Atoi(cursor); parseErr == nil && parsed > 0 {
+			offset = parsed
+		}
+	}
+	unreadOnly := c.Query("unread_only") == "1" || c.Query("unread_only") == "true"
 
-	rows, err := h.DB.Query(
-		`SELECT id, type, title, message, is_read, created_at
-		 FROM notifications
-		 WHERE user_id = ?
-		 ORDER BY created_at DESC
-		 LIMIT ?`,
-		userID, limit,
-	)
+	query := `SELECT id, type, title, message, is_read, created_at
+		FROM notifications
+		WHERE user_id = ?
+		ORDER BY created_at DESC, id DESC
+		LIMIT ? OFFSET ?`
+	args := []any{userID, limit + 1, offset}
+	if unreadOnly {
+		query = `SELECT id, type, title, message, is_read, created_at
+			FROM notifications
+			WHERE user_id = ? AND is_read = 0
+			ORDER BY created_at DESC, id DESC
+			LIMIT ? OFFSET ?`
+	}
+
+	rows, err := h.DB.Query(query, args...)
 	if err != nil {
 		log.Printf("GetNotifications: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to fetch notifications"})
@@ -171,16 +238,63 @@ func (h *handler) GetNotifications(c *gin.Context) {
 	var notifs []Notification
 	for rows.Next() {
 		var n Notification
-		if err := rows.Scan(&n.ID, &n.Type, &n.Title, &n.Message, &n.IsRead, &n.CreatedAt); err != nil {
-			continue
+		var typeCode int8
+		var createdAt time.Time
+		if err := rows.Scan(&n.ID, &typeCode, &n.Title, &n.Message, &n.IsRead, &createdAt); err != nil {
+			log.Printf("GetNotifications scan: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to read notifications"})
+			return
 		}
+		n.Type = notificationTypeLabel(typeCode)
+		n.CreatedAt = createdAt.Format(time.RFC3339)
 		notifs = append(notifs, n)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("GetNotifications rows: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to read notifications"})
+		return
 	}
 	if notifs == nil {
 		notifs = []Notification{}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": notifs})
+	hasMore := len(notifs) > limit
+	if hasMore {
+		notifs = notifs[:limit]
+	}
+	nextCursor := ""
+	if hasMore {
+		nextCursor = strconv.Itoa(offset + limit)
+	}
+	prevCursor := ""
+	if offset > 0 {
+		previous := offset - limit
+		if previous < 0 {
+			previous = 0
+		}
+		prevCursor = strconv.Itoa(previous)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items":       notifs,
+		"data":        notifs,
+		"next_cursor": nextCursor,
+		"prev_cursor": prevCursor,
+		"has_more":    hasMore,
+	})
+}
+
+// GetUnreadNotificationCount returns the unread notification count for the
+// current user.
+func (h *handler) GetUnreadNotificationCount(c *gin.Context) {
+	userID := c.GetInt64("userId")
+	count, err := h.queries.GetUnreadCount(c.Request.Context(), int32(userID))
+	if err != nil {
+		log.Printf("GetUnreadNotificationCount: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to count notifications"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"count": count})
 }
 
 // MarkNotificationRead marks a notification as read.
@@ -191,13 +305,23 @@ func (h *handler) MarkNotificationRead(c *gin.Context) {
 	userID := c.GetInt64("userId")
 	notifID := c.Param("id")
 
-	_, err := h.DB.Exec(
+	result, err := h.DB.Exec(
 		"UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
 		notifID, userID,
 	)
 	if err != nil {
 		log.Printf("MarkNotificationRead: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update"})
+		return
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("MarkNotificationRead rows affected: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update"})
+		return
+	}
+	if affected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"detail": "notification not found"})
 		return
 	}
 
@@ -211,9 +335,20 @@ func (h *handler) MarkNotificationRead(c *gin.Context) {
 func (h *handler) MarkAllNotificationsRead(c *gin.Context) {
 	userID := c.GetInt64("userId")
 
-	_, _ = h.DB.Exec("UPDATE notifications SET is_read = 1 WHERE user_id = ?", userID)
+	result, err := h.DB.Exec("UPDATE notifications SET is_read = 1 WHERE user_id = ?", userID)
+	if err != nil {
+		log.Printf("MarkAllNotificationsRead: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update"})
+		return
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("MarkAllNotificationsRead rows affected: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to update"})
+		return
+	}
 
-	c.JSON(http.StatusOK, gin.H{"detail": "success"})
+	c.JSON(http.StatusOK, gin.H{"detail": "success", "count": count})
 }
 
 // ============================================================================
@@ -248,6 +383,21 @@ func uint32Default(ptr *uint32, def uint32) uint32 {
 	return def
 }
 
+func notificationTypeLabel(typeCode int8) string {
+	switch typeCode {
+	case notificationTypeLowStock:
+		return "low_stock"
+	case notificationTypePaymentDue:
+		return "payment_due"
+	case notificationTypeNewOrder:
+		return "new_order"
+	case notificationTypeSystem:
+		return "system"
+	default:
+		return "system"
+	}
+}
+
 // ============================================================================
 // Low Stock Check — call this after any bill/sale that reduces inventory
 // ============================================================================
@@ -256,87 +406,62 @@ func uint32Default(ptr *uint32, def uint32) uint32 {
 // notifications for any that fell below the threshold.
 //
 // Flow:
-//  1. Read `low_stock_threshold` from system settings table
-//  2. For each product in the bill, check current stock
-//  3. If stock <= threshold, find users who have low_stock_alert enabled
-//  4. Insert a notification row for each such user
+//  1. For each product in the bill, check current stock
+//  2. Find users who have low_stock_alert enabled and their thresholds
+//  3. Insert a notification row for each user whose threshold is reached
 //
-// Called from: AddBill, UpdateBill (any handler that reduces stock)
+// Called after a successful stock-changing transaction.
 func (h *handler) CheckAndNotifyLowStock(productIDs []string) {
-	// 1. Get threshold from system settings (default 5)
-	var threshold int
-	err := h.DB.QueryRow(
-		"SELECT COALESCE(value, '5') FROM settings WHERE setting_key = 'low_stock_threshold'",
-	).Scan(&threshold)
-	if err != nil {
-		threshold = 5
-	}
-
-	// 2. Find products that are now at or below threshold
+	// Find products that are now at or below a subscriber's threshold.
 	for _, pid := range productIDs {
-		var productName string
-		var currentStock int
+		var productName sql.NullString
+		var currentStock decimal.Decimal
 		err := h.DB.QueryRow(
-			"SELECT name, stock FROM products WHERE id = ?", pid,
+			"SELECT name, quantity FROM product WHERE id = ?", pid,
 		).Scan(&productName, &currentStock)
-		if err != nil || currentStock > threshold {
-			continue // skip if not found or stock is fine
+		if err != nil {
+			log.Printf("CheckAndNotifyLowStock: load product %s: %v", pid, err)
+			continue
 		}
-
-		// 3. Find all users who have low_stock_alert = true
+		// Find all users who have low_stock_alert enabled and retain each
+		// user's persisted threshold.
 		rows, err := h.DB.Query(
-			"SELECT user_id FROM notification_settings WHERE low_stock_alert = 1",
+			"SELECT user_id, low_stock_threshold FROM notification_settings WHERE low_stock_alert = 1",
 		)
 		if err != nil {
+			log.Printf("CheckAndNotifyLowStock: load subscribers: %v", err)
 			continue
 		}
 
-		// 4. Insert a notification for each subscribed user
+		// Insert a notification for each subscribed user whose threshold is met.
 		for rows.Next() {
 			var userID int64
-			if rows.Scan(&userID) != nil {
+			var threshold uint32
+			if err := rows.Scan(&userID, &threshold); err != nil {
+				log.Printf("CheckAndNotifyLowStock: read subscriber: %v", err)
 				continue
 			}
-			h.DB.Exec(
+			if currentStock.GreaterThan(decimal.NewFromInt(int64(threshold))) {
+				continue
+			}
+			name := productName.String
+			if !productName.Valid {
+				name = pid
+			}
+			if _, err := h.DB.Exec(
 				`INSERT INTO notifications (user_id, type, title, message)
-				 VALUES (?, 'low_stock', ?, ?)`,
+				 VALUES (?, ?, ?, ?)`,
 				userID,
+				notificationTypeLowStock,
 				"مخزون منخفض", // "Low stock"
-				productName+" — الكمية المتبقية: "+strconv.Itoa(currentStock), // "Remaining qty: X"
-			)
+				name+" — الكمية المتبقية: "+currentStock.String(), // "Remaining qty"
+			); err != nil {
+				log.Printf("CheckAndNotifyLowStock: create notification for user %d: %v", userID, err)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("CheckAndNotifyLowStock: iterate subscribers: %v", err)
 		}
 		rows.Close()
 	}
 }
-
-// ============================================================================
-// Sample: How AddBill calls CheckAndNotifyLowStock
-// ============================================================================
-//
-// func (h *Handler) AddBill(c *gin.Context) {
-//     var req struct {
-//         Products []struct {
-//             ProductID string `json:"product_id"`
-//             Quantity  int    `json:"quantity"`
-//         } `json:"products"`
-//         // ... other bill fields ...
-//     }
-//     if err := c.ShouldBindJSON(&req); err != nil {
-//         c.JSON(400, gin.H{"detail": "invalid request"})
-//         return
-//     }
-//
-//     // ... create the bill, deduct stock per product ...
-//     // for _, p := range req.Products {
-//     //     h.DB.Exec("UPDATE products SET stock = stock - ? WHERE id = ?", p.Quantity, p.ProductID)
-//     // }
-//
-//     // After successful bill creation, check low stock
-//     var productIDs []string
-//     for _, p := range req.Products {
-//         productIDs = append(productIDs, p.ProductID)
-//     }
-//     go h.CheckAndNotifyLowStock(productIDs)  // async — don't block the response
-//
-//     c.JSON(201, gin.H{"detail": "bill created"})
-// }

@@ -142,6 +142,7 @@ func main() {
 
 		// ── Notifications (config writes admin-only) ───────────────────
 		authorized.GET("notification", h.GetNotifications)
+		authorized.GET("notification/unread-count", h.GetUnreadNotificationCount)
 		authorized.GET("notification/config", h.GetNotificationConfig)
 		authorized.PUT("notification/config", admin, h.UpdateNotificationConfig)
 		authorized.PUT("notification/:id/read", h.MarkNotificationRead)

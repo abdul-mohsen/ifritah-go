@@ -47,6 +47,23 @@ func (h *handler) checkBillStoreAccess(c *gin.Context, storeID int32) bool {
 	return true
 }
 
+func lowStockProductIDs(products []model.BillProduct) []string {
+	ids := make([]string, 0, len(products))
+	seen := make(map[string]struct{}, len(products))
+	for _, product := range products {
+		if product.ProductId == nil {
+			continue
+		}
+		id := strconv.FormatUint(*product.ProductId, 10)
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 // effectiveDateOr returns ed when supplied, otherwise time.Now().
 func effectiveDateOr(ed *time.Time) time.Time {
 	if ed != nil {
@@ -302,6 +319,9 @@ func (h *handler) AddBill(c *gin.Context) {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
+	if enforcement != model.StockEnforcementDisable && request.State > 0 {
+		h.CheckAndNotifyLowStock(lowStockProductIDs(request.Products))
+	}
 	c.JSON(http.StatusCreated, id)
 
 }
@@ -440,6 +460,9 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	if err := tx.Commit(); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
+	}
+	if enforcement != model.StockEnforcementDisable && request.State > 0 {
+		h.CheckAndNotifyLowStock(lowStockProductIDs(request.Products))
 	}
 
 	c.Status(http.StatusCreated)

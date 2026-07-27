@@ -32,6 +32,10 @@ func TestGetUnreadNotificationCount(t *testing.T) {
 	h, mock, cleanup := newPurchaseBillTestHandler(t)
 	defer cleanup()
 
+	mock.ExpectExec("INSERT INTO notifications").
+		WithArgs(int64(7), notificationTypeSystem, currentReleaseTitle, currentReleaseMessage,
+			int64(7), notificationTypeSystem, currentReleaseTitle, currentReleaseMessage).
+		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM notifications WHERE user_id = \\? AND is_read = 0").
 		WithArgs(int32(7)).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
@@ -55,6 +59,10 @@ func TestGetNotificationsReturnsFrontendEnvelope(t *testing.T) {
 	h, mock, cleanup := newPurchaseBillTestHandler(t)
 	defer cleanup()
 
+	mock.ExpectExec("INSERT INTO notifications").
+		WithArgs(int64(7), notificationTypeSystem, currentReleaseTitle, currentReleaseMessage,
+			int64(7), notificationTypeSystem, currentReleaseTitle, currentReleaseMessage).
+		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectQuery("SELECT id, type, title, message, is_read, created_at").
 		WithArgs(int64(7), 2, 0).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "type", "title", "message", "is_read", "created_at"}).
@@ -161,4 +169,27 @@ func TestLowStockProductIDsDeduplicatesCatalogProducts(t *testing.T) {
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("low-stock product IDs = %#v, want %#v", got, want)
 	}
+}
+
+func TestEnsureCurrentReleaseNotificationIsIdempotent(t *testing.T) {
+	h, mock, cleanup := newPurchaseBillTestHandler(t)
+	defer cleanup()
+
+	expect := func(rows int64) {
+		mock.ExpectExec("INSERT INTO notifications").
+			WithArgs(int64(7), notificationTypeSystem, currentReleaseTitle, currentReleaseMessage,
+				int64(7), notificationTypeSystem, currentReleaseTitle, currentReleaseMessage).
+			WillReturnResult(sqlmock.NewResult(1, rows))
+	}
+	expect(1)
+	expect(0)
+
+	if err := h.ensureCurrentReleaseNotification(7); err != nil {
+		t.Fatalf("first release notification ensure failed: %v", err)
+	}
+	if err := h.ensureCurrentReleaseNotification(7); err != nil {
+		t.Fatalf("second release notification ensure failed: %v", err)
+	}
+
+	assertMockExpectations(t, mock)
 }

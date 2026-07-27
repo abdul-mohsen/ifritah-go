@@ -191,6 +191,11 @@ func (h *handler) UpdateNotificationConfig(c *gin.Context) {
 //	}
 func (h *handler) GetNotifications(c *gin.Context) {
 	userID := c.GetInt64("userId")
+	if err := h.ensureCurrentReleaseNotification(userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to prepare notifications"})
+		return
+	}
+
 	limitStr := c.DefaultQuery("limit", "50")
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit <= 0 || limit > 100 {
@@ -288,6 +293,10 @@ func (h *handler) GetNotifications(c *gin.Context) {
 // current user.
 func (h *handler) GetUnreadNotificationCount(c *gin.Context) {
 	userID := c.GetInt64("userId")
+	if err := h.ensureCurrentReleaseNotification(userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to prepare notifications"})
+		return
+	}
 	count, err := h.queries.GetUnreadCount(c.Request.Context(), int32(userID))
 	if err != nil {
 		log.Printf("GetUnreadNotificationCount: %v", err)

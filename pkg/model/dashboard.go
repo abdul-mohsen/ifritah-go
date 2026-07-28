@@ -153,6 +153,10 @@ type DashboardFilters struct {
 	Months    int    `json:"months"`
 }
 
+type DashboardAvailableYearsResponse struct {
+	Years []int `json:"years"`
+}
+
 // ── /api/v2/dashboard/analytics ─────────────────────────────────────────────
 
 type DashboardAnalyticsResponse struct {

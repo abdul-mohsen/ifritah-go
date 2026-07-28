@@ -39,6 +39,20 @@ SELECT
         LEFT JOIN credit_note cn ON cn.bill_id = b.id
         WHERE b.state = 3 AND cn.id IS NULL)             AS issued_invoices;
 
+-- name: GetDashboardAvailableYears :many
+SELECT year_value
+FROM (
+    SELECT YEAR(b.effective_date) AS year_value
+    FROM bill b
+    WHERE b.effective_date IS NOT NULL
+    UNION
+    SELECT YEAR(pb.effective_date) AS year_value
+    FROM purchase_bill pb
+    WHERE pb.effective_date IS NOT NULL
+) AS report_years
+WHERE year_value IS NOT NULL
+ORDER BY year_value DESC;
+
 -- ── 2. sales KPIs (revenue / VAT / discount / status counts) ───────
 
 -- name: GetDashboardSalesKPIs :one

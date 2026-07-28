@@ -388,6 +388,23 @@ func (h *handler) GetDashboard(c *gin.Context) {
 	})
 }
 
+func (h *handler) GetDashboardAvailableYears(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	rows, err := h.queries.GetDashboardAvailableYears(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to load dashboard years"})
+		return
+	}
+
+	years := make([]int, 0, len(rows))
+	for _, year := range rows {
+		years = append(years, int(year))
+	}
+	c.JSON(http.StatusOK, model.DashboardAvailableYearsResponse{Years: years})
+}
+
 // ── GET /api/v2/dashboard/analytics ─────────────────────────────────────────
 
 func (h *handler) GetDashboardAnalytics(c *gin.Context) {

@@ -150,6 +150,7 @@ func main() {
 
 		// ── Dashboard (any auth, read-only) ────────────────────────────
 		authorized.GET("dashboard", h.GetDashboard)
+		authorized.GET("dashboard/available-years", h.GetDashboardAvailableYears)
 		authorized.GET("dashboard/analytics", h.GetDashboardAnalytics)
 		authorized.GET("dashboard/compare", h.GetDashboardCompare)
 

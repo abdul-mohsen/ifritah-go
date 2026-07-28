@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
@@ -34,6 +35,19 @@ type AddProduct struct {
 	Price       decimal.Decimal `json:"price" binding:"required"`
 	CostPrice   decimal.Decimal `json:"cost_price" binding:"required"`
 	ShelfNumber string          `json:"shelf_number"`
+	Name        string          `json:"name"`
+	PartName    string          `json:"part_name"`
+}
+
+func addProductName(product AddProduct) *string {
+	name := strings.TrimSpace(product.Name)
+	if name == "" {
+		name = strings.TrimSpace(product.PartName)
+	}
+	if name == "" {
+		return nil
+	}
+	return &name
 }
 
 func (h *handler) AddQuantity(c *gin.Context) {
@@ -65,6 +79,7 @@ func (h *handler) AddQuantity(c *gin.Context) {
 			CostPrice:   value.CostPrice,
 			ShelfNumber: &value.ShelfNumber,
 			StoreID:     request.StoreId,
+			Name:        addProductName(value),
 		}
 		if _, err := h.queries.AddProduct(c.Request.Context(), args); err != nil {
 			var mysqlErr *mysql.MySQLError

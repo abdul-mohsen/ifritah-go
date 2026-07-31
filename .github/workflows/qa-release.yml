@@ -1,0 +1,208 @@
+# Automatic QA release for non-main/non-dev branches; dispatch is the explicit fallback.
+# Existing production and development workflows remain unchanged.
+name: Backend QA Release
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Feature branch to build (without the refs/heads/ prefix)
+        required: true
+        type: string
+      schema_version:
+        description: QA release contract schema version
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build immutable backend image
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev') }}
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/ifritah-api
+      BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.ref_name }}
+      REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/heads/{0}', inputs.branch) || github.ref }}
+      QA_ENVIRONMENT_ID: ${{ vars.QA_ENVIRONMENT_ID }}
+      SCHEMA_VERSION: ${{ inputs.schema_version }}
+    outputs:
+      branch: ${{ steps.release.outputs.branch }}
+      ref: ${{ steps.release.outputs.ref }}
+      commit_sha: ${{ steps.release.outputs.commit_sha }}
+      image: ${{ steps.release.outputs.image }}
+      schema_version: ${{ steps.release.outputs.schema_version }}
+      resolved_at: ${{ steps.release.outputs.resolved_at }}
+    steps:
+      - name: Validate inputs and required secrets
+        shell: bash
+        env:
+          BRANCH: ${{ env.BRANCH }}
+          REF: ${{ env.REF }}
+          QA_ENVIRONMENT_ID: ${{ env.QA_ENVIRONMENT_ID }}
+          SCHEMA_VERSION: ${{ env.SCHEMA_VERSION }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          QA_DASHBOARD_URL: ${{ secrets.QA_DASHBOARD_URL }}
+          QA_RELEASE_TOKEN: ${{ secrets.QA_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          for name in \
+            BRANCH \
+            REF \
+            QA_ENVIRONMENT_ID \
+            DOCKERHUB_USERNAME \
+            DOCKERHUB_TOKEN \
+            QA_DASHBOARD_URL \
+            QA_RELEASE_TOKEN; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing required configuration: ${missing[*]}"
+            exit 1
+          fi
+
+          if [[ "$BRANCH" == main || "$BRANCH" == dev ]]; then
+            echo "::error::main and dev are not valid QA release branches"
+            exit 1
+          fi
+
+          if [[ "$BRANCH" == refs/* || "$BRANCH" == -* ]] ||
+            ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
+            echo "::error::branch must be a valid branch name without refs/heads/"
+            exit 1
+          fi
+
+          if [[ "$BRANCH" == *..* || "$BRANCH" == *//* || "$BRANCH" == *@{* ||
+            "$BRANCH" == *.lock || "$BRANCH" == *. || "$BRANCH" == */ ]]; then
+            echo "::error::branch contains an unsafe ref component"
+            exit 1
+          fi
+
+          if [[ "$REF" != "refs/heads/$BRANCH" ]]; then
+            echo "::error::ref must match the selected branch"
+            exit 1
+          fi
+
+          if [[ ! "$QA_ENVIRONMENT_ID" =~ ^[a-z][a-z0-9-]{0,31}$ ]]; then
+            echo "::error::environment_id contains unsupported characters"
+            exit 1
+          fi
+
+          if (( ${#SCHEMA_VERSION} > 128 )) ||
+            [[ "$SCHEMA_VERSION" == *$'\r'* || "$SCHEMA_VERSION" == *$'\n'* ]]; then
+            echo "::error::schema_version is invalid"
+            exit 1
+          fi
+
+          case "$QA_DASHBOARD_URL" in
+            https://*|http://localhost:*|http://127.0.0.1:*) ;;
+            *)
+              echo "::error::QA_DASHBOARD_URL must use HTTPS"
+              exit 1
+              ;;
+          esac
+
+      - name: Check out selected branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ env.REF }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Capture selected source
+        id: source
+        shell: bash
+        env:
+          BRANCH: ${{ env.BRANCH }}
+          REF: ${{ env.REF }}
+        run: |
+          set -euo pipefail
+
+          commit_sha="$(git rev-parse HEAD)"
+          if [[ ! "$commit_sha" =~ ^[0-9a-fA-F]{40,64}$ ]]; then
+            echo "::error::Checked-out source did not resolve to a commit"
+            exit 1
+          fi
+
+          printf 'branch=%s\n' "$BRANCH" >> "$GITHUB_OUTPUT"
+          printf 'ref=%s\n' "$REF" >> "$GITHUB_OUTPUT"
+          printf 'commit_sha=%s\n' "$commit_sha" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push immutable QA image
+        id: image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:qa-${{ steps.source.outputs.commit_sha }}
+          build-args: |
+            APP_VERSION=qa-${{ steps.source.outputs.commit_sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.source.outputs.commit_sha }}
+            org.opencontainers.image.version=qa-${{ steps.source.outputs.commit_sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Prepare QA release contract
+        id: release
+        shell: bash
+        env:
+          BRANCH: ${{ steps.source.outputs.branch }}
+          COMMIT_SHA: ${{ steps.source.outputs.commit_sha }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          REF: ${{ steps.source.outputs.ref }}
+          SCHEMA_VERSION: ${{ env.SCHEMA_VERSION }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[0-9a-fA-F]{64}$ ]]; then
+            echo "::error::Image push did not return an immutable digest"
+            exit 1
+          fi
+
+          resolved_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          printf 'branch=%s\n' "$BRANCH" >> "$GITHUB_OUTPUT"
+          printf 'ref=%s\n' "$REF" >> "$GITHUB_OUTPUT"
+          printf 'commit_sha=%s\n' "$COMMIT_SHA" >> "$GITHUB_OUTPUT"
+          printf 'image=%s@%s\n' "$IMAGE_NAME" "$IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
+          printf 'schema_version=%s\n' "$SCHEMA_VERSION" >> "$GITHUB_OUTPUT"
+          printf 'resolved_at=%s\n' "$resolved_at" >> "$GITHUB_OUTPUT"
+
+  invoke-resolver:
+    name: Resolve selected backend QA release
+    needs: build
+    permissions:
+      contents: read
+    uses: abdul-mohsen/deployment/.github/workflows/qa-release-resolver.yml@main
+    with:
+      environment_id: ${{ vars.QA_ENVIRONMENT_ID }}
+      side: backend
+      branch: ${{ needs.build.outputs.branch }}
+      ref: ${{ needs.build.outputs.ref }}
+      commit_sha: ${{ needs.build.outputs.commit_sha }}
+      image: ${{ needs.build.outputs.image }}
+      schema_version: ${{ needs.build.outputs.schema_version }}
+      resolved_at: ${{ needs.build.outputs.resolved_at }}
+    secrets:
+      qa_dashboard_url: ${{ secrets.QA_DASHBOARD_URL }}
+      qa_release_token: ${{ secrets.QA_RELEASE_TOKEN }}

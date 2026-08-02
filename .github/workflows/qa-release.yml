@@ -12,10 +12,14 @@ on:
         description: Feature branch to build (without the refs/heads/ prefix)
         required: true
         type: string
+      commit_sha:
+        description: Exact commit SHA to build
+        required: true
+        type: string
       schema_version:
         description: QA release contract schema version
         required: false
-        default: ''
+        default: qa-v1
         type: string
 
 permissions:
@@ -30,8 +34,8 @@ jobs:
       IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/ifritah-api
       BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.ref_name }}
       REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/heads/{0}', inputs.branch) || github.ref }}
-      QA_ENVIRONMENT_ID: ${{ vars.QA_ENVIRONMENT_ID }}
-      SCHEMA_VERSION: ${{ inputs.schema_version }}
+      REQUESTED_COMMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.commit_sha || '' }}
+      SCHEMA_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.schema_version || 'qa-v1' }}
     outputs:
       branch: ${{ steps.release.outputs.branch }}
       ref: ${{ steps.release.outputs.ref }}
@@ -45,7 +49,7 @@ jobs:
         env:
           BRANCH: ${{ env.BRANCH }}
           REF: ${{ env.REF }}
-          QA_ENVIRONMENT_ID: ${{ env.QA_ENVIRONMENT_ID }}
+          REQUESTED_COMMIT: ${{ env.REQUESTED_COMMIT }}
           SCHEMA_VERSION: ${{ env.SCHEMA_VERSION }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -58,7 +62,6 @@ jobs:
           for name in \
             BRANCH \
             REF \
-            QA_ENVIRONMENT_ID \
             DOCKERHUB_USERNAME \
             DOCKERHUB_TOKEN \
             QA_DASHBOARD_URL \
@@ -94,14 +97,15 @@ jobs:
             exit 1
           fi
 
-          if [[ ! "$QA_ENVIRONMENT_ID" =~ ^[a-z][a-z0-9-]{0,31}$ ]]; then
-            echo "::error::environment_id contains unsupported characters"
-            exit 1
-          fi
-
           if (( ${#SCHEMA_VERSION} > 128 )) ||
             [[ "$SCHEMA_VERSION" == *$'\r'* || "$SCHEMA_VERSION" == *$'\n'* ]]; then
             echo "::error::schema_version is invalid"
+            exit 1
+          fi
+
+          if [[ -n "$REQUESTED_COMMIT" ]] &&
+            ! [[ "$REQUESTED_COMMIT" =~ ^[0-9a-fA-F]{40,64}$ ]]; then
+            echo "::error::commit_sha must be a full commit SHA"
             exit 1
           fi
 
@@ -116,7 +120,7 @@ jobs:
       - name: Check out selected branch
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ env.REF }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.commit_sha || github.ref }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -126,12 +130,17 @@ jobs:
         env:
           BRANCH: ${{ env.BRANCH }}
           REF: ${{ env.REF }}
+          REQUESTED_COMMIT: ${{ env.REQUESTED_COMMIT }}
         run: |
           set -euo pipefail
 
           commit_sha="$(git rev-parse HEAD)"
           if [[ ! "$commit_sha" =~ ^[0-9a-fA-F]{40,64}$ ]]; then
             echo "::error::Checked-out source did not resolve to a commit"
+            exit 1
+          fi
+          if [[ -n "$REQUESTED_COMMIT" && "$commit_sha" != "$REQUESTED_COMMIT" ]]; then
+            echo "::error::Checked-out source does not match the requested commit"
             exit 1
           fi
 
@@ -195,7 +204,6 @@ jobs:
       contents: read
     uses: abdul-mohsen/deployment/.github/workflows/qa-release-resolver.yml@main
     with:
-      environment_id: ${{ vars.QA_ENVIRONMENT_ID }}
       side: backend
       branch: ${{ needs.build.outputs.branch }}
       ref: ${{ needs.build.outputs.ref }}

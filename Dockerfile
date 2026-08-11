@@ -54,7 +54,9 @@ USER app
 EXPOSE 8090
 
 # /healthz returns 200 OK from the Gin router as soon as the server is up.
+# Use GET (wget -O-) not HEAD (wget --spider): Gin only registers HEAD automatically
+# for routes that also have an explicit HEAD handler; our /healthz uses GET only.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -q --spider "http://localhost:${SERVER_PORT}/healthz" || exit 1
+    CMD wget -qO- "http://localhost:${SERVER_PORT}/healthz" | grep -q "ok" || exit 1
 
 ENTRYPOINT ["/app/ifritah"]

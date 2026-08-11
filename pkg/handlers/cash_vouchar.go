@@ -715,11 +715,10 @@ func (h *handler) GetCashVoucherSummary(c *gin.Context) {
 
 // validateCashVoucherRequest validates the create/update request fields.
 func validateCashVoucherRequest(req *cashVoucherCreateRequest) error {
-	// Amount
-	// TODO @ssda please fix this
-	// if req.Amount <= 0 {
-	// 	return &validationError{"المبلغ يجب أن يكون أكبر من صفر"}
-	// }
+	// Amount must be strictly positive.
+	if req.Amount.LessThanOrEqual(decimal.Zero) {
+		return &validationError{"المبلغ يجب أن يكون أكبر من صفر"}
+	}
 
 	// Voucher type
 	if req.VoucherType != "disbursement" && req.VoucherType != "receipt" && req.VoucherType != "cash_box" {

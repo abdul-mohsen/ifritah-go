@@ -1,0 +1,70 @@
+# =============================================================================
+# branch-image.yml — Build & push a Docker image tagged with the PR branch name
+# when a PR is opened or a new commit is pushed to a PR branch.
+#
+# Tag format: branch name with "/" replaced by "-", e.g.
+#   feature/my-thing  →  feature-my-thing
+#
+# Image: $DOCKERHUB_USERNAME/ifritah-api:<branch-tag>
+#
+# This tag is picked up by the deployment dashboard's image search so the team
+# can select and deploy the exact branch build to a QA tenant before merging.
+#
+# NOTE: This workflow intentionally skips VERSION file validation.
+# Branch images are ephemeral QA builds, not releases. Production releases
+# still go through deploy.yml which validates and bumps VERSION.
+#
+# Required GitHub Secrets:
+#   DOCKERHUB_USERNAME
+#   DOCKERHUB_TOKEN
+# =============================================================================
+
+name: Branch Image (PR)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/ifritah-api
+
+jobs:
+  build-branch-image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Compute branch tag
+        id: branch_tag
+        shell: bash
+        run: |
+          raw="${{ github.head_ref }}"
+          # Replace '/' with '-'; strip leading/trailing hyphens; lowercase
+          tag="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's/^-//;s/-$//')"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Branch tag: ${tag}"
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ steps.branch_tag.outputs.tag }}
+          build-args: |
+            APP_VERSION=${{ steps.branch_tag.outputs.tag }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.created=${{ github.event.pull_request.updated_at }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

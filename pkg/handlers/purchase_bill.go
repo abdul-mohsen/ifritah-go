@@ -272,7 +272,9 @@ func (h *handler) CheckPurchaseBillDuplicate(c *gin.Context) {
 		}
 
 		log.Printf("CheckPurchaseBillDuplicate: %v", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "unable to verify duplicate purchase bill",
+		})
 		return
 	}
 

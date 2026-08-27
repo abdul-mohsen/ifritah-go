@@ -60,12 +60,55 @@ func TestGetSettingsGroupsPBPDFRequiredUnderInvoice(t *testing.T) {
 	assertMockExpectations(t, mock)
 }
 
+func TestGetSettingsGroupsOnboardingCompletedUnderCompany(t *testing.T) {
+	h, mock, cleanup := newPurchaseBillTestHandler(t)
+	defer cleanup()
+
+	mock.ExpectQuery("SELECT setting_key, COALESCE").
+		WillReturnRows(sqlmock.NewRows([]string{"setting_key", "value"}).
+			AddRow("onboarding_completed", "true"))
+
+	w := runPurchaseBillRequest(t, h.GetSettings, http.MethodGet, "/api/v2/settings", "")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if !containsCompanyOnboardingCompleted(w.Body.String()) {
+		t.Fatalf(`expected settings response to include "onboarding_completed":"true" under the "company" category, got: %s`, w.Body.String())
+	}
+	assertMockExpectations(t, mock)
+}
+
 func containsUpdatedOne(body string) bool {
 	return regexp.MustCompile(`"updated"\s*:\s*1`).MatchString(body)
 }
 
 func containsInvoicePBPDFRequired(body string) bool {
 	return regexp.MustCompile(`"invoice"\s*:\s*{[^}]*"pb_pdf_required"\s*:\s*"optional"`).MatchString(body)
+}
+
+func containsCompanyOnboardingCompleted(body string) bool {
+	return regexp.MustCompile(`"company"\s*:\s*{[^}]*"onboarding_completed"\s*:\s*"true"`).MatchString(body)
+}
+
+func TestUpdateSettingsPersistsOnboardingCompleted(t *testing.T) {
+	h, mock, cleanup := newPurchaseBillTestHandler(t)
+	defer cleanup()
+
+	mock.ExpectExec("INSERT INTO settings").
+		WithArgs("onboarding_completed", "true", int32(7)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	body := `{"category":"company","settings":{"onboarding_completed":"true"}}`
+	w := runPurchaseBillRequest(t, h.UpdateSettings, http.MethodPut, "/api/v2/settings", body)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if !containsUpdatedOne(w.Body.String()) {
+		t.Fatalf(`expected {"updated":1}, got: %s`, w.Body.String())
+	}
+	assertMockExpectations(t, mock)
 }
 
 // TestUpdateSettingsPersistsDefaultMarkupPercentage is a regression test for

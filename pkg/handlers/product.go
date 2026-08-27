@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
@@ -29,7 +30,8 @@ type UpdateProductRequest struct {
 	ShelfNumber string          `json:"shelf_number"`
 }
 type AddProduct struct {
-	Id          int32           `json:"product_id" binding:"required"`
+	Id          int32           `json:"product_id"`
+	Name        string          `json:"name"`
 	Quantity    decimal.Decimal `json:"quantity" binding:"required"`
 	Price       decimal.Decimal `json:"price" binding:"required"`
 	CostPrice   decimal.Decimal `json:"cost_price" binding:"required"`
@@ -57,20 +59,37 @@ func (h *handler) AddQuantity(c *gin.Context) {
 	}
 
 	for _, value := range request.Products {
+		name := strings.TrimSpace(value.Name)
+		if value.Id <= 0 && name == "" {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("ERR: product id or name is required"))
+			return
+		}
+
+		var articleID *int32
+		if value.Id > 0 {
+			articleID = &value.Id
+		}
+		var productName *string
+		if name != "" {
+			productName = &name
+		}
 
 		args := db.AddProductParams{
-			ArticleID:   &value.Id,
+			ArticleID:   articleID,
 			Quantity:    value.Quantity,
 			Price:       value.Price,
 			CostPrice:   value.CostPrice,
 			ShelfNumber: &value.ShelfNumber,
 			StoreID:     request.StoreId,
+			Name:        productName,
 		}
 		if _, err := h.queries.AddProduct(c.Request.Context(), args); err != nil {
 			var mysqlErr *mysql.MySQLError
 			if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
 				c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Product already exists in this store"))
+				return
 			}
+			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 	}

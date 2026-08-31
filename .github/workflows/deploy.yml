@@ -1,8 +1,15 @@
 # =============================================================================
 # Backend image build & push to Docker Hub
 # =============================================================================
-# VERSION is the release source of truth. Each image is pushed as:
-#   :$(cat VERSION) and :<short-sha>
+# Tag scheme:
+#   :$(cat VERSION)  - production release tag (both main and dev)
+#   :<short-sha>     - immutable per-commit tag (rollback / debug)
+#   :dev             - moving alias to the latest dev build
+#                      (published only when github.ref == refs/heads/dev)
+#
+# Dev tenants poll the :dev tag via scripts/auto-pull.sh in the deployment
+# repo. Production tenants pin to a specific :vX.Y.Z tag and are updated
+# manually via scripts/update-tenant.sh.
 #
 # Required GitHub Secrets:
 #   DOCKERHUB_USERNAME
@@ -25,6 +32,9 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      short_sha: ${{ steps.version.outputs.short_sha }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -62,3 +72,22 @@ jobs:
             APP_VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  publish-dev-alias:
+    needs: build-and-push
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Publish :dev alias from the immutable short-sha tag
+        env:
+          SOURCE_IMAGE: ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.short_sha }}
+          DEV_IMAGE: ${{ env.IMAGE_NAME }}:dev
+        # imagetools create attaches an additional tag to an already-pushed
+        # image without rebuilding. This lets dev tenants track :dev while
+        # every merge still leaves an immutable :<short-sha> pin.
+        run: docker buildx imagetools create --tag "$DEV_IMAGE" "$SOURCE_IMAGE"

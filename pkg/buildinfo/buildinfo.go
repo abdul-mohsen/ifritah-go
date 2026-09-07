@@ -16,6 +16,7 @@ var (
 	Commit      = "unknown"
 	CommitShort = ""
 	WorkflowRun = ""
+	WorkflowURL = ""
 	Source      = ""
 	BuiltAt     = ""
 	ImageRef    = ""
@@ -26,12 +27,13 @@ type Identity struct {
 	Version     string `json:"version"`
 	Channel     string `json:"channel"`
 	Commit      string `json:"commit"`
-	CommitShort string `json:"commit_short"`
+	CommitShort string `json:"short_commit,omitempty"`
 	WorkflowRun string `json:"workflow_run,omitempty"`
+	WorkflowURL string `json:"workflow_run_url,omitempty"`
 	Source      string `json:"source,omitempty"`
 	BuiltAt     string `json:"built_at,omitempty"`
 	ImageRef    string `json:"image_ref,omitempty"`
-	ImageDigest string `json:"image_digest,omitempty"`
+	ImageDigest string `json:"digest,omitempty"`
 }
 
 func Current() Identity {
@@ -43,12 +45,13 @@ func Current() Identity {
 
 	return Identity{
 		Version:     localVersion(),
-		Channel:     value(Channel, "APP_CHANNEL"),
+		Channel:     valueFrom(Channel, "APP_BUILD_CHANNEL", "APP_CHANNEL"),
 		Commit:      commit,
 		CommitShort: commitShort,
-		WorkflowRun: value(WorkflowRun, "APP_WORKFLOW_RUN"),
-		Source:      value(Source, "APP_SOURCE"),
-		BuiltAt:     value(BuiltAt, "APP_CREATED"),
+		WorkflowRun: valueFrom(WorkflowRun, "APP_BUILD_WORKFLOW_RUN", "APP_WORKFLOW_RUN"),
+		WorkflowURL: valueFrom(WorkflowURL, "APP_BUILD_WORKFLOW_URL", "APP_WORKFLOW_URL"),
+		Source:      valueFrom(Source, "APP_BUILD_SOURCE", "APP_SOURCE"),
+		BuiltAt:     valueFrom(BuiltAt, "APP_BUILT_AT", "APP_BUILD_AT", "APP_CREATED"),
 		ImageRef:    value(ImageRef, "APP_IMAGE_REF"),
 		ImageDigest: value(ImageDigest, "APP_IMAGE_DIGEST"),
 	}
@@ -85,7 +88,19 @@ func value(defaultValue, environmentName string) string {
 	return defaultValue
 }
 
+func valueFrom(defaultValue string, environmentNames ...string) string {
+	for _, environmentName := range environmentNames {
+		if environmentValue := strings.TrimSpace(os.Getenv(environmentName)); environmentValue != "" {
+			return environmentValue
+		}
+	}
+	return defaultValue
+}
+
 func shortCommit(commit string) string {
+	if commit == "" || commit == "unknown" {
+		return ""
+	}
 	if len(commit) > 7 {
 		return commit[:7]
 	}

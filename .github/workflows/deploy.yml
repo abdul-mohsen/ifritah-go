@@ -60,7 +60,8 @@ jobs:
             echo "channel=${channel}"
             echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
-            echo "workflow_run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "workflow_run=${GITHUB_RUN_ID}"
+            echo "workflow_run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             if [[ "${channel}" == "dev" ]]; then
               echo "image_ref=${IMAGE_NAME}:dev"
             else
@@ -82,13 +83,24 @@ jobs:
           tags: |
             type=raw,value=${{ steps.version.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=${{ github.sha }}
+            type=raw,value=${{ steps.version.outputs.short_sha }}
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
           labels: |
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=${{ steps.build.outputs.source }}
             org.opencontainers.image.created=${{ steps.build.outputs.created }}
-            org.opencontainers.image.ref.name=${{ steps.version.outputs.version }}
+            org.opencontainers.image.ref.name=${{ steps.build.outputs.image_ref }}
+            org.opencontainers.image.channel=${{ steps.build.outputs.channel }}
+            org.opencontainers.image.workflow.run=${{ steps.build.outputs.workflow_run }}
+            com.ifritah.build.channel=${{ steps.build.outputs.channel }}
+            com.ifritah.build.commit=${{ github.sha }}
+            com.ifritah.build.commit_short=${{ steps.version.outputs.short_sha }}
+            com.ifritah.build.workflow_run=${{ steps.build.outputs.workflow_run }}
+            com.ifritah.build.workflow_url=${{ steps.build.outputs.workflow_run_url }}
+            com.ifritah.build.image_ref=${{ steps.build.outputs.image_ref }}
+            com.ifritah.build.built_at=${{ steps.build.outputs.created }}
+            com.ifritah.build.digest=
 
       - uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
@@ -99,11 +111,14 @@ jobs:
           build-args: |
             APP_VERSION=${{ steps.version.outputs.version }}
             APP_COMMIT=${{ github.sha }}
-            APP_CHANNEL=${{ steps.build.outputs.channel }}
-            APP_SOURCE=${{ steps.build.outputs.source }}
-            APP_CREATED=${{ steps.build.outputs.created }}
-            APP_WORKFLOW_RUN=${{ steps.build.outputs.workflow_run }}
+            APP_COMMIT_SHORT=${{ steps.version.outputs.short_sha }}
+            APP_BUILD_CHANNEL=${{ steps.build.outputs.channel }}
+            APP_BUILD_SOURCE=${{ steps.build.outputs.source }}
+            APP_BUILT_AT=${{ steps.build.outputs.created }}
+            APP_BUILD_WORKFLOW_RUN=${{ steps.build.outputs.workflow_run }}
+            APP_BUILD_WORKFLOW_URL=${{ steps.build.outputs.workflow_run_url }}
             APP_IMAGE_REF=${{ steps.build.outputs.image_ref }}
+            APP_IMAGE_DIGEST=
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

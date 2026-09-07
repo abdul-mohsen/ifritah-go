@@ -7,8 +7,22 @@
 
 # ---- Build stage ----
 ARG APP_VERSION=v0.0.1
+ARG APP_COMMIT=unknown
+ARG APP_CHANNEL=dev
+ARG APP_SOURCE=
+ARG APP_CREATED=
+ARG APP_WORKFLOW_RUN=
+ARG APP_IMAGE_REF=
+ARG APP_IMAGE_DIGEST=
 FROM golang:1.25-bookworm AS builder
 ARG APP_VERSION
+ARG APP_COMMIT
+ARG APP_CHANNEL
+ARG APP_SOURCE
+ARG APP_CREATED
+ARG APP_WORKFLOW_RUN
+ARG APP_IMAGE_REF
+ARG APP_IMAGE_DIGEST
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -26,15 +40,39 @@ COPY main.go ./
 COPY pkg ./pkg
 COPY fonts ./fonts
 COPY sqlc.yaml ./
+COPY VERSION ./VERSION
 RUN sqlc generate
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/ifritah .
+RUN set -eu; \
+    test -n "$APP_VERSION"; \
+    test "$APP_VERSION" != "v0.0.0"; \
+    case "$APP_CHANNEL" in dev|release) ;; *) echo "APP_CHANNEL must be dev or release" >&2; exit 1 ;; esac; \
+    commit_short="$(printf '%s' "$APP_COMMIT" | cut -c1-7)"; \
+    ldflags="-s -w -X ifritah/web-service-gin/pkg/buildinfo.Version=$APP_VERSION -X ifritah/web-service-gin/pkg/buildinfo.Channel=$APP_CHANNEL -X ifritah/web-service-gin/pkg/buildinfo.Commit=$APP_COMMIT -X ifritah/web-service-gin/pkg/buildinfo.CommitShort=$commit_short -X ifritah/web-service-gin/pkg/buildinfo.WorkflowRun=$APP_WORKFLOW_RUN -X ifritah/web-service-gin/pkg/buildinfo.Source=$APP_SOURCE -X ifritah/web-service-gin/pkg/buildinfo.BuiltAt=$APP_CREATED -X ifritah/web-service-gin/pkg/buildinfo.ImageRef=$APP_IMAGE_REF -X ifritah/web-service-gin/pkg/buildinfo.ImageDigest=$APP_IMAGE_DIGEST"; \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="$ldflags" -o /out/ifritah .
 
 # ---- Runtime stage ----
 FROM alpine:3.20
 ARG APP_VERSION
+ARG APP_COMMIT
+ARG APP_CHANNEL
+ARG APP_SOURCE
+ARG APP_CREATED
+ARG APP_WORKFLOW_RUN
+ARG APP_IMAGE_REF
+ARG APP_IMAGE_DIGEST
 
 ENV APP_VERSION=${APP_VERSION}
+ENV APP_COMMIT=${APP_COMMIT}
+ENV APP_CHANNEL=${APP_CHANNEL}
+ENV APP_SOURCE=${APP_SOURCE}
+ENV APP_CREATED=${APP_CREATED}
+ENV APP_WORKFLOW_RUN=${APP_WORKFLOW_RUN}
+ENV APP_IMAGE_REF=${APP_IMAGE_REF}
+ENV APP_IMAGE_DIGEST=${APP_IMAGE_DIGEST}
 LABEL org.opencontainers.image.version=${APP_VERSION}
+LABEL org.opencontainers.image.revision=${APP_COMMIT}
+LABEL org.opencontainers.image.source=${APP_SOURCE}
+LABEL org.opencontainers.image.created=${APP_CREATED}
 
 RUN apk add --no-cache ca-certificates tzdata wget \
     && addgroup -S app && adduser -S app -G app

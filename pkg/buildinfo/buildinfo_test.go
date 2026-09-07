@@ -51,6 +51,11 @@ func TestCurrentPrefersCanonicalRuntimeEnvironment(t *testing.T) {
 
 	Version, Channel, Commit = "v1.2.3", "dev", "linked-commit"
 	t.Setenv("APP_BUILD_CHANNEL", "release")
+	t.Setenv("APP_IMAGE_VERSION", "v9.8.7")
+	t.Setenv("APP_IMAGE_COMMIT", "canonical-commit")
+	t.Setenv("APP_IMAGE_CHANNEL", "canonical-channel")
+	t.Setenv("APP_WORKFLOW_RUN_ID", "456")
+	t.Setenv("APP_WORKFLOW_RUN_URL", "https://example.test/actions/runs/456")
 	t.Setenv("APP_BUILD_WORKFLOW_RUN", "123")
 	t.Setenv("APP_BUILD_WORKFLOW_URL", "https://example.test/runs/123")
 	t.Setenv("APP_BUILT_AT", "2026-09-07T10:00:00Z")
@@ -58,7 +63,8 @@ func TestCurrentPrefersCanonicalRuntimeEnvironment(t *testing.T) {
 	t.Setenv("APP_IMAGE_DIGEST", "sha256:abc")
 
 	got := Current()
-	if got.Channel != "release" || got.WorkflowRun != "123" || got.WorkflowURL == "" {
+	if got.Version != "v9.8.7" || got.Commit != "canonical-commit" ||
+		got.Channel != "canonical-channel" || got.WorkflowRun != "456" || got.WorkflowURL == "" {
 		t.Fatalf("canonical runtime metadata = %#v", got)
 	}
 	if got.BuiltAt == "" || got.ImageRef == "" || got.ImageDigest == "" {
@@ -110,6 +116,8 @@ func clearEnvironment(t *testing.T) {
 	t.Helper()
 	for _, name := range []string{
 		"APP_VERSION", "APP_CHANNEL", "APP_COMMIT", "APP_COMMIT_SHORT",
+		"APP_IMAGE_VERSION", "APP_IMAGE_COMMIT", "APP_IMAGE_COMMIT_SHORT",
+		"APP_IMAGE_CHANNEL", "APP_WORKFLOW_RUN_ID", "APP_WORKFLOW_RUN_URL",
 		"APP_BUILD_CHANNEL", "APP_BUILD_SOURCE", "APP_BUILD_WORKFLOW_RUN",
 		"APP_BUILD_WORKFLOW_URL", "APP_BUILT_AT", "APP_BUILD_AT",
 		"APP_WORKFLOW_RUN", "APP_WORKFLOW_URL", "APP_SOURCE", "APP_CREATED",

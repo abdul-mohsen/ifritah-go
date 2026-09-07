@@ -37,19 +37,19 @@ type Identity struct {
 }
 
 func Current() Identity {
-	commit := value(Commit, "APP_COMMIT")
-	commitShort := value(CommitShort, "APP_COMMIT_SHORT")
+	commit := valueFrom(Commit, "APP_IMAGE_COMMIT", "APP_COMMIT")
+	commitShort := valueFrom(CommitShort, "APP_IMAGE_COMMIT_SHORT", "APP_COMMIT_SHORT")
 	if commitShort == "" {
 		commitShort = shortCommit(commit)
 	}
 
 	return Identity{
 		Version:     localVersion(),
-		Channel:     valueFrom(Channel, "APP_BUILD_CHANNEL", "APP_CHANNEL"),
+		Channel:     valueFrom(Channel, "APP_IMAGE_CHANNEL", "APP_BUILD_CHANNEL", "APP_CHANNEL"),
 		Commit:      commit,
 		CommitShort: commitShort,
-		WorkflowRun: valueFrom(WorkflowRun, "APP_BUILD_WORKFLOW_RUN", "APP_WORKFLOW_RUN"),
-		WorkflowURL: valueFrom(WorkflowURL, "APP_BUILD_WORKFLOW_URL", "APP_WORKFLOW_URL"),
+		WorkflowRun: valueFrom(WorkflowRun, "APP_WORKFLOW_RUN_ID", "APP_BUILD_WORKFLOW_RUN", "APP_WORKFLOW_RUN"),
+		WorkflowURL: valueFrom(WorkflowURL, "APP_WORKFLOW_RUN_URL", "APP_BUILD_WORKFLOW_URL", "APP_WORKFLOW_URL"),
 		Source:      valueFrom(Source, "APP_BUILD_SOURCE", "APP_SOURCE"),
 		BuiltAt:     valueFrom(BuiltAt, "APP_BUILT_AT", "APP_BUILD_AT", "APP_CREATED"),
 		ImageRef:    value(ImageRef, "APP_IMAGE_REF"),
@@ -58,7 +58,7 @@ func Current() Identity {
 }
 
 func localVersion() string {
-	version := value(Version, "APP_VERSION")
+	version := valueFrom(Version, "APP_IMAGE_VERSION", "APP_VERSION")
 	if version != "" && version != "dev" {
 		return version
 	}

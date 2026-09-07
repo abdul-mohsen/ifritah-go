@@ -94,8 +94,11 @@ jobs:
             org.opencontainers.image.channel=${{ steps.build.outputs.channel }}
             org.opencontainers.image.workflow.run=${{ steps.build.outputs.workflow_run }}
             com.ifritah.build.channel=${{ steps.build.outputs.channel }}
+            com.ifritah.build.version=${{ steps.version.outputs.version }}
             com.ifritah.build.commit=${{ github.sha }}
             com.ifritah.build.commit_short=${{ steps.version.outputs.short_sha }}
+            com.ifritah.build.workflow_run_id=${{ steps.build.outputs.workflow_run }}
+            com.ifritah.build.workflow_run_url=${{ steps.build.outputs.workflow_run_url }}
             com.ifritah.build.workflow_run=${{ steps.build.outputs.workflow_run }}
             com.ifritah.build.workflow_url=${{ steps.build.outputs.workflow_run_url }}
             com.ifritah.build.image_ref=${{ steps.build.outputs.image_ref }}
@@ -111,12 +114,17 @@ jobs:
           build-args: |
             APP_VERSION=${{ steps.version.outputs.version }}
             APP_COMMIT=${{ github.sha }}
+            APP_IMAGE_VERSION=${{ steps.version.outputs.version }}
+            APP_IMAGE_COMMIT=${{ github.sha }}
+            APP_IMAGE_CHANNEL=${{ steps.build.outputs.channel }}
             APP_COMMIT_SHORT=${{ steps.version.outputs.short_sha }}
             APP_BUILD_CHANNEL=${{ steps.build.outputs.channel }}
             APP_BUILD_SOURCE=${{ steps.build.outputs.source }}
             APP_BUILT_AT=${{ steps.build.outputs.created }}
             APP_BUILD_WORKFLOW_RUN=${{ steps.build.outputs.workflow_run }}
             APP_BUILD_WORKFLOW_URL=${{ steps.build.outputs.workflow_run_url }}
+            APP_WORKFLOW_RUN_ID=${{ steps.build.outputs.workflow_run }}
+            APP_WORKFLOW_RUN_URL=${{ steps.build.outputs.workflow_run_url }}
             APP_IMAGE_REF=${{ steps.build.outputs.image_ref }}
             APP_IMAGE_DIGEST=
           cache-from: type=gha

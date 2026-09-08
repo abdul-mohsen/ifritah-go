@@ -43,15 +43,6 @@ jobs:
       short_sha: ${{ steps.version.outputs.short_sha }}
       digest: ${{ steps.build_image.outputs.digest }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Validate VERSION
-        id: version
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/validate-version.sh
-
       - name: Validate Docker image config
         shell: bash
         env:
@@ -68,6 +59,15 @@ jobs:
             echo "IMAGE_NAME must be derived from DOCKERHUB_USERNAME." >&2
             exit 1
           fi
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Validate VERSION
+        id: version
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/validate-version.sh
 
       - name: Set build metadata
         id: build

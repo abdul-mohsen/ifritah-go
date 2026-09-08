@@ -39,6 +39,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Validate Docker image config
+        id: image_config
         shell: bash
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -46,14 +47,16 @@ jobs:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
         run: |
           if [[ -z "${DOCKERHUB_USERNAME}" || -z "${DOCKERHUB_TOKEN}" ]]; then
-            echo "DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets are required." >&2
-            exit 1
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets are required for a push; they are unavailable for this fork PR, so the optional image push is skipped."
+            exit 0
           fi
           expected="${DOCKERHUB_USERNAME}/ifritah-api"
           if [[ -z "${IMAGE_NAME}" || "${IMAGE_NAME}" != "${expected}" ]]; then
             echo "IMAGE_NAME must be derived from DOCKERHUB_USERNAME." >&2
             exit 1
           fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
 
       - name: Compute branch tag
         id: branch_tag
@@ -70,13 +73,16 @@ jobs:
           echo "Branch tag: ${tag}"
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        if: steps.image_config.outputs.available == 'true'
 
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        if: steps.image_config.outputs.available == 'true'
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        if: steps.image_config.outputs.available == 'true'
         with:
           context: .
           push: true

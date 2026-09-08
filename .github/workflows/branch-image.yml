@@ -48,7 +48,7 @@ jobs:
         run: |
           if [[ -z "${DOCKERHUB_USERNAME}" || -z "${DOCKERHUB_TOKEN}" ]]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets are required for a push; they are unavailable for this fork PR, so the optional image push is skipped."
+            echo "DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets are required. They are unavailable for this fork PR, so the optional image push is skipped."
             exit 0
           fi
           expected="${DOCKERHUB_USERNAME}/ifritah-api"

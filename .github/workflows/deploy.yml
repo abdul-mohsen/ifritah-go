@@ -10,6 +10,8 @@
 # Dev tenants poll the :dev tag via scripts/auto-pull.sh in the deployment
 # repo. Production tenants pin to a specific :vX.Y.Z tag and are updated
 # manually via scripts/update-tenant.sh.
+# VERSION is the release source of truth. Release images are published with
+# the semantic version and immutable commit tag. Dev images also get :dev.
 #
 # Required GitHub Secrets:
 #   DOCKERHUB_USERNAME
@@ -45,6 +47,28 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: bash .github/scripts/validate-version.sh
 
+      - name: Set build metadata
+        id: build
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/dev" ]]; then
+            channel=dev
+          else
+            channel=release
+          fi
+          {
+            echo "channel=${channel}"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+            echo "workflow_run=${GITHUB_RUN_ID}"
+            echo "workflow_run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [[ "${channel}" == "dev" ]]; then
+              echo "image_ref=${IMAGE_NAME}:dev"
+            else
+              echo "image_ref=${IMAGE_NAME}:${{ steps.version.outputs.version }}"
+            fi
+          } >> "$GITHUB_OUTPUT"
+
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -57,10 +81,29 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ github.sha }}
             type=raw,value=${{ steps.version.outputs.short_sha }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
           labels: |
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ steps.build.outputs.source }}
+            org.opencontainers.image.created=${{ steps.build.outputs.created }}
+            org.opencontainers.image.ref.name=${{ steps.build.outputs.image_ref }}
+            org.opencontainers.image.channel=${{ steps.build.outputs.channel }}
+            org.opencontainers.image.workflow.run=${{ steps.build.outputs.workflow_run }}
+            com.ifritah.build.channel=${{ steps.build.outputs.channel }}
+            com.ifritah.build.version=${{ steps.version.outputs.version }}
+            com.ifritah.build.commit=${{ github.sha }}
+            com.ifritah.build.commit_short=${{ steps.version.outputs.short_sha }}
+            com.ifritah.build.workflow_run_id=${{ steps.build.outputs.workflow_run }}
+            com.ifritah.build.workflow_run_url=${{ steps.build.outputs.workflow_run_url }}
+            com.ifritah.build.workflow_run=${{ steps.build.outputs.workflow_run }}
+            com.ifritah.build.workflow_url=${{ steps.build.outputs.workflow_run_url }}
+            com.ifritah.build.image_ref=${{ steps.build.outputs.image_ref }}
+            com.ifritah.build.built_at=${{ steps.build.outputs.created }}
+            com.ifritah.build.digest=
 
       - uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
@@ -70,6 +113,20 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             APP_VERSION=${{ steps.version.outputs.version }}
+            APP_COMMIT=${{ github.sha }}
+            APP_IMAGE_VERSION=${{ steps.version.outputs.version }}
+            APP_IMAGE_COMMIT=${{ github.sha }}
+            APP_IMAGE_CHANNEL=${{ steps.build.outputs.channel }}
+            APP_COMMIT_SHORT=${{ steps.version.outputs.short_sha }}
+            APP_BUILD_CHANNEL=${{ steps.build.outputs.channel }}
+            APP_BUILD_SOURCE=${{ steps.build.outputs.source }}
+            APP_BUILT_AT=${{ steps.build.outputs.created }}
+            APP_BUILD_WORKFLOW_RUN=${{ steps.build.outputs.workflow_run }}
+            APP_BUILD_WORKFLOW_URL=${{ steps.build.outputs.workflow_run_url }}
+            APP_WORKFLOW_RUN_ID=${{ steps.build.outputs.workflow_run }}
+            APP_WORKFLOW_RUN_URL=${{ steps.build.outputs.workflow_run_url }}
+            APP_IMAGE_REF=${{ steps.build.outputs.image_ref }}
+            APP_IMAGE_DIGEST=
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

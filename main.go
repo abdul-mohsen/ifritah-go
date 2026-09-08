@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ifritah/web-service-gin/pkg/buildinfo"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/handlers"
 
@@ -43,6 +44,7 @@ func main() {
 	router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
+	router.GET("/version", gin.WrapF(buildinfo.Handler()))
 
 	authorized := router.Group(os.Getenv("BASEURL"))
 	authorized.Use(handlers.JWTVerifyMiddleware)

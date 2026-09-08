@@ -60,9 +60,29 @@ services:
       - nats-data:/data
 
   app:
+    # Compose supplies a traceable local image identity. Override the APP_*
+    # values in .env when reproducing a specific build; CI continues to pass
+    # its own immutable provenance arguments through the workflow.
+    image: "${BACKEND_IMAGE:-local/ifritah-api}:${APP_IMAGE_TAG:-dev}"
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APP_VERSION: "${APP_VERSION:-v0.0.2}"
+        APP_COMMIT: "${APP_COMMIT:-0000000000000000000000000000000000000000}"
+        APP_IMAGE_VERSION: "${APP_IMAGE_VERSION:-${APP_VERSION:-v0.0.2}}"
+        APP_IMAGE_COMMIT: "${APP_IMAGE_COMMIT:-${APP_COMMIT:-0000000000000000000000000000000000000000}}"
+        APP_BUILD_CHANNEL: "${APP_BUILD_CHANNEL:-dev}"
+        APP_IMAGE_CHANNEL: "${APP_IMAGE_CHANNEL:-${APP_BUILD_CHANNEL:-dev}}"
+        APP_IMAGE_TAG: "${APP_IMAGE_TAG:-dev}"
+        APP_BUILD_SOURCE: "${APP_BUILD_SOURCE:-local}"
+        APP_BUILT_AT: "${APP_BUILT_AT:-1970-01-01T00:00:00Z}"
+        APP_BUILD_WORKFLOW_RUN: "${APP_BUILD_WORKFLOW_RUN:-0}"
+        APP_BUILD_WORKFLOW_URL: "${APP_BUILD_WORKFLOW_URL:-https://local.invalid/actions/runs/0}"
+        APP_WORKFLOW_RUN_ID: "${APP_WORKFLOW_RUN_ID:-${APP_BUILD_WORKFLOW_RUN:-0}}"
+        APP_WORKFLOW_RUN_URL: "${APP_WORKFLOW_RUN_URL:-${APP_BUILD_WORKFLOW_URL:-https://local.invalid/actions/runs/0}}"
+        APP_COMMIT_SHORT: "${APP_COMMIT_SHORT:-0000000}"
+        APP_IMAGE_REF: "${APP_IMAGE_REF:-${BACKEND_IMAGE:-local/ifritah-api}:${APP_IMAGE_TAG:-dev}}"
     restart: unless-stopped
     env_file: .env
     environment:

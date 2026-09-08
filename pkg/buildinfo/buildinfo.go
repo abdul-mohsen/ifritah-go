@@ -27,19 +27,20 @@ var (
 )
 
 type Identity struct {
-	Version       string `json:"version"`
-	Tag           string `json:"tag,omitempty"`
-	Ref           string `json:"ref,omitempty"`
-	ImageRef      string `json:"image_ref,omitempty"`
-	Digest        string `json:"digest,omitempty"`
-	Channel       string `json:"channel"`
-	Commit        string `json:"commit"`
-	CommitShort   string `json:"short_commit,omitempty"`
-	WorkflowRunID string `json:"workflow_run_id,omitempty"`
-	WorkflowRun   string `json:"workflow_run,omitempty"`
-	WorkflowURL   string `json:"workflow_run_url,omitempty"`
-	Source        string `json:"source,omitempty"`
-	BuiltAt       string `json:"built_at,omitempty"`
+	Version         string `json:"version"`
+	SemanticVersion string `json:"semantic_version"`
+	Tag             string `json:"tag,omitempty"`
+	Ref             string `json:"ref,omitempty"`
+	ImageRef        string `json:"image_ref,omitempty"`
+	Digest          string `json:"digest,omitempty"`
+	Channel         string `json:"channel"`
+	Commit          string `json:"commit"`
+	CommitShort     string `json:"short_commit,omitempty"`
+	WorkflowRunID   string `json:"workflow_run_id,omitempty"`
+	WorkflowRun     string `json:"workflow_run,omitempty"`
+	WorkflowURL     string `json:"workflow_run_url,omitempty"`
+	Source          string `json:"source,omitempty"`
+	BuiltAt         string `json:"built_at,omitempty"`
 }
 
 func Current() Identity {
@@ -58,20 +59,22 @@ func Current() Identity {
 		workflowRunID = WorkflowRun
 	}
 
+	version := localVersion()
 	return Identity{
-		Version:       localVersion(),
-		Tag:           tag,
-		Ref:           ref,
-		ImageRef:      ref,
-		Digest:        valueFrom(ImageDigest, "APP_IMAGE_DIGEST", "APP_DIGEST"),
-		Channel:       valueFrom(Channel, "APP_IMAGE_CHANNEL", "APP_BUILD_CHANNEL", "APP_CHANNEL"),
-		Commit:        commit,
-		CommitShort:   commitShort,
-		WorkflowRunID: workflowRunID,
-		WorkflowRun:   workflowRunID,
-		WorkflowURL:   valueFrom(WorkflowURL, "APP_WORKFLOW_RUN_URL", "APP_BUILD_WORKFLOW_URL", "APP_WORKFLOW_URL"),
-		Source:        valueFrom(Source, "APP_BUILD_SOURCE", "APP_SOURCE"),
-		BuiltAt:       valueFrom(BuiltAt, "APP_BUILT_AT", "APP_BUILD_AT", "APP_CREATED"),
+		Version:         version,
+		SemanticVersion: version,
+		Tag:             tag,
+		Ref:             ref,
+		ImageRef:        ref,
+		Digest:          valueFrom(ImageDigest, "APP_IMAGE_DIGEST", "APP_DIGEST"),
+		Channel:         valueFrom(Channel, "APP_IMAGE_CHANNEL", "APP_BUILD_CHANNEL", "APP_CHANNEL"),
+		Commit:          commit,
+		CommitShort:     commitShort,
+		WorkflowRunID:   workflowRunID,
+		WorkflowRun:     workflowRunID,
+		WorkflowURL:     valueFrom(WorkflowURL, "APP_WORKFLOW_RUN_URL", "APP_BUILD_WORKFLOW_URL", "APP_WORKFLOW_URL"),
+		Source:          valueFrom(Source, "APP_BUILD_SOURCE", "APP_SOURCE"),
+		BuiltAt:         valueFrom(BuiltAt, "APP_BUILT_AT", "APP_BUILD_AT", "APP_CREATED"),
 	}
 }
 

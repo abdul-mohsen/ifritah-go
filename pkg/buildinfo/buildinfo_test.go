@@ -24,7 +24,7 @@ func TestCurrentLoadsBuildMetadata(t *testing.T) {
 	BuiltAt = "2026-09-07T10:00:00Z"
 
 	got := Current()
-	if got.Version != "v1.2.3" || got.Channel != "release" {
+	if got.Version != "v1.2.3" || got.SemanticVersion != "v1.2.3" || got.Channel != "release" {
 		t.Fatalf("identity version/channel = %#v", got)
 	}
 	if got.Commit != "0123456789abcdef" || got.CommitShort != "0123456" {
@@ -59,7 +59,7 @@ func TestCurrentPrefersCanonicalRuntimeEnvironment(t *testing.T) {
 	t.Setenv("APP_IMAGE_DIGEST", "sha256:abc")
 
 	got := Current()
-	if got.Version != "v9.8.7" || got.Commit != "canonical-commit" ||
+	if got.Version != "v9.8.7" || got.SemanticVersion != "v9.8.7" || got.Commit != "canonical-commit" ||
 		got.Channel != "canonical-channel" || got.Tag != "dev" ||
 		got.WorkflowRunID != "456" || got.WorkflowRun != "456" || got.WorkflowURL == "" {
 		t.Fatalf("canonical runtime metadata = %#v", got)

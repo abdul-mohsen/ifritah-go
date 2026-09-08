@@ -3,9 +3,11 @@ set -euo pipefail
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 dockerfile="$root/Dockerfile"
+compose="$root/docker-compose.yml"
 workflow="$root/.github/workflows/deploy.yml"
 branch_workflow="$root/.github/workflows/branch-image.yml"
 main="$root/main.go"
+compose_version="$(tr -d '[:space:]' < "$root/VERSION")"
 
 require_text() {
 	local file="$1" text="$2"
@@ -86,3 +88,12 @@ if grep -Fq 'com.ifritah.build.digest=' "$workflow" "$branch_workflow" "$dockerf
 	echo "build metadata must not bake an empty/self-referential manifest digest label" >&2
 	exit 1
 fi
+require_text "$compose" 'image: "${BACKEND_IMAGE:-local/ifritah-api}:${APP_IMAGE_TAG:-dev}"'
+require_text "$compose" "        APP_VERSION: \"\${APP_VERSION:-$compose_version}\""
+for compose_arg in \
+	APP_VERSION APP_COMMIT APP_IMAGE_VERSION APP_IMAGE_COMMIT \
+	APP_BUILD_CHANNEL APP_IMAGE_CHANNEL APP_IMAGE_TAG APP_BUILD_SOURCE \
+	APP_BUILT_AT APP_BUILD_WORKFLOW_RUN APP_BUILD_WORKFLOW_URL \
+	APP_WORKFLOW_RUN_ID APP_WORKFLOW_RUN_URL APP_COMMIT_SHORT APP_IMAGE_REF; do
+	require_text "$compose" "        ${compose_arg}:"
+done

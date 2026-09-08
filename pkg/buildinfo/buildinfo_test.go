@@ -95,6 +95,19 @@ func TestCurrentDoesNotUseV000Fallback(t *testing.T) {
 	}
 }
 
+func TestCurrentUsesRuntimeDigestAlias(t *testing.T) {
+	clearEnvironment(t)
+	restoreBuildVars(t)
+
+	ImageDigest = ""
+	t.Setenv("APP_DIGEST", "sha256:runtime")
+
+	got := Current()
+	if got.Digest != "sha256:runtime" {
+		t.Fatalf("runtime digest = %#v", got)
+	}
+}
+
 func TestHandlerReturnsIdentityJSON(t *testing.T) {
 	clearEnvironment(t)
 	restoreBuildVars(t)

@@ -11,7 +11,7 @@ MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-root}"
 database="ifritah_migration_test"
 
 mysql_client() {
-	docker run --rm --network host \
+	docker run --rm -i --network host \
 		-e "MYSQL_PWD=${MYSQL_ROOT_PASSWORD}" \
 		"$MYSQL_IMAGE" \
 		mysql --protocol=TCP \

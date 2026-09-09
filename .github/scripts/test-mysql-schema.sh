@@ -51,7 +51,9 @@ verify_deployment_database_sql() {
 		return 1
 	}
 	setup_sql="$(printf '%s\n' "$setup_sql" |
-		sed "s/\${MYSQL_MASTER_DB}/${master_db}/g")"
+		sed \
+			-e "s/\${MYSQL_MASTER_DB}/${master_db}/g" \
+			-e 's/\\`/`/g')"
 	printf '%s\n' "$setup_sql" | mysql_client
 
 	# Exercise the same compatibility helpers used by setup.sh and the
@@ -74,7 +76,8 @@ verify_deployment_database_sql() {
 			-e "s/\${TENANT_DB_NAME}/${tenant_db}/g" \
 			-e "s/\${TENANT_DB_USER}/${tenant_user}/g" \
 			-e "s/\${MYSQL_TENANT_HOST}/${tenant_host}/g" \
-			-e "s/\${TENANT_DB_PASS}/${tenant_password}/g")"
+			-e "s/\${TENANT_DB_PASS}/${tenant_password}/g" \
+			-e 's/\\`/`/g')"
 	if printf '%s\n' "$create_sql" | grep -Fq '${'; then
 		echo "Unresolved shell variables remain in create-tenant database SQL." >&2
 		return 1

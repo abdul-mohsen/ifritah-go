@@ -1,7 +1,10 @@
 -- 0005_branch_sequence_counters.sql
 -- Per-branch monotonic sequence allocator. Idempotent.
 
-CREATE TABLE `branch_sequence` (
+-- CREATE TABLE IF NOT EXISTS is supported by the legacy MySQL versions used
+-- by existing tenants. The unsupported syntax in this project is the
+-- conditional ALTER form, which is avoided by the later index guard.
+CREATE TABLE IF NOT EXISTS `branch_sequence` (
   `branch_id`  INT UNSIGNED    NOT NULL,
   `scope`      VARCHAR(32)     NOT NULL,
   `last_value` BIGINT UNSIGNED NOT NULL DEFAULT 0,

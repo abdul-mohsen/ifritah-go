@@ -129,6 +129,24 @@ type cashVoucherDetail struct {
 
 const cashVoucherListSort = "-effective_date"
 
+const cashVoucherListQuery = `
+	SELECT id, voucher_number, voucher_type, effective_date, amount,
+	       payment_method, state, reference_type, reference_id,
+	       recipient_type, recipient_id, recipient_name,
+	       description, store_id, merchant_id, created_by, created_at
+	FROM cash_voucher
+	WHERE merchant_id = ?
+	  AND (? = '' OR voucher_type = ?)
+	  AND (? < 0 OR state = ?)
+	  AND (? = '' OR (recipient_name LIKE ? OR description LIKE ? OR note LIKE ?))
+	  AND (? = '' OR CAST(voucher_number AS CHAR) LIKE ?)
+	  AND (? IS NULL
+	       OR effective_date < ?
+	       OR (effective_date = ? AND id < ?))
+	ORDER BY effective_date DESC, id DESC
+	LIMIT ?
+`
+
 // validVoucherTypes is the closed set of voucher_type values that
 // the FE filter accepts. Anything else gets a 400 — silently
 // degrading to "no filter" would mask a typo at the client.
@@ -141,49 +159,50 @@ var validVoucherTypes = map[string]struct{}{
 // cashVoucherSortCmp removed: sort over the current page is now
 // FE-driven (BE returns rows in canonical keyset order only).
 
-// buildCashVoucherWhere assembles the dynamic WHERE clause + bound
-// args for the cash_voucher list. Returned err is non-nil only when
-// the caller supplied an invalid filter value (mapped to 400).
-func buildCashVoucherWhere(req cashVoucherListRequest, merchantID int64, cursorDate *time.Time, cursorID *uint64) (string, []any, error) {
-	where := "WHERE merchant_id = ?"
-	args := []any{merchantID}
-
+// buildCashVoucherListArgs validates filters and returns arguments for the
+// static cashVoucherListQuery. Empty values activate the corresponding
+// sentinel predicates, so user input never changes the SQL text.
+func buildCashVoucherListArgs(req cashVoucherListRequest, merchantID int64, cursorDate *time.Time, cursorID *uint64, limit int) ([]any, error) {
 	if req.VoucherType != "" {
 		if _, ok := validVoucherTypes[req.VoucherType]; !ok {
-			return "", nil, errInvalidVoucherType
+			return nil, errInvalidVoucherType
 		}
-		where += " AND voucher_type = ?"
-		args = append(args, req.VoucherType)
 	}
 
-	// State filter (FE §3). Skip when nil or negative ("any state").
+	state := -1
 	if req.State != nil && *req.State >= 0 {
-		where += " AND state = ?"
-		args = append(args, *req.State)
+		state = *req.State
 	}
 
+	queryLike := ""
 	if req.Query != "" {
-		where += " AND (recipient_name LIKE ? OR description LIKE ? OR note LIKE ?)"
-		q := "%" + req.Query + "%"
-		args = append(args, q, q, q)
+		queryLike = "%" + req.Query + "%"
 	}
 
-	// Typed filter sequence_number → prefix LIKE on voucher_number.
+	sequencePrefix := ""
 	if vp := buildPlainPrefixFilter(req.SequenceNumber); vp != nil {
-		where += " AND CAST(voucher_number AS CHAR) LIKE ?"
-		args = append(args, *vp)
+		sequencePrefix = *vp
 	}
 
-	// Seek predicate (skip on first page).
+	var cursorDateArg any
+	var cursorIDArg any
 	if cursorDate != nil && cursorID != nil {
-		where += " AND (effective_date < ? OR (effective_date = ? AND id < ?))"
-		args = append(args, *cursorDate, *cursorDate, *cursorID)
+		cursorDateArg = *cursorDate
+		cursorIDArg = *cursorID
 	}
 
-	return where, args, nil
+	return []any{
+		merchantID,
+		req.VoucherType, req.VoucherType,
+		state, state,
+		req.Query, queryLike, queryLike, queryLike,
+		sequencePrefix, sequencePrefix,
+		cursorDateArg, cursorDateArg, cursorDateArg, cursorIDArg,
+		limit + 1,
+	}, nil
 }
 
-// errInvalidVoucherType is returned by buildCashVoucherWhere when
+// errInvalidVoucherType is returned by buildCashVoucherListArgs when
 // the FE supplies a voucher_type outside validVoucherTypes. It's a
 // sentinel — handlers map it to a 400 with the localised message.
 var errInvalidVoucherType = errors.New("invalid voucher type")
@@ -223,26 +242,13 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 	limit := listReq.EffectiveLimit()
 	merchantID := getMerchantID(c)
 
-	where, args, err := buildCashVoucherWhere(req, merchantID, cursorDate, cursorID)
+	args, err := buildCashVoucherListArgs(req, merchantID, cursorDate, cursorID, limit)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "نوع السند غير صالح"})
 		return
 	}
 
-	// +1 row trick for has_more.
-	args = append(args, limit+1)
-
-	dataSQL := `
-		SELECT id, voucher_number, voucher_type, effective_date, amount,
-		       payment_method, state, reference_type, reference_id,
-		       recipient_type, recipient_id, recipient_name,
-		       description, store_id, merchant_id, created_by, created_at
-		FROM cash_voucher ` + where + `
-		ORDER BY effective_date DESC, id DESC
-		LIMIT ?
-	`
-
-	rows, err := h.DB.Query(dataSQL, args...)
+	rows, err := h.DB.Query(cashVoucherListQuery, args...)
 	if err != nil {
 		log.Printf("ERROR ListCashVouchers query: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "خطأ في قراءة البيانات"})

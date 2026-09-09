@@ -69,19 +69,14 @@ func (h *handler) ListBranches(c *gin.Context) {
 		q = *req.Query
 	}
 	qLike := "%" + q + "%"
-	phonePrefix := buildPlainPrefixFilter(req.Phone)
-
-	where := "WHERE (? = '' OR b.name LIKE ? OR COALESCE(b.address,'') LIKE ? OR COALESCE(b.phone,'') LIKE ?)"
-	args := []any{q, qLike, qLike, qLike}
-	if phonePrefix != nil {
-		where += " AND b.phone COLLATE utf8mb4_unicode_ci LIKE ?"
-		args = append(args, *phonePrefix)
+	phonePrefix := ""
+	if prefix := buildPlainPrefixFilter(req.Phone); prefix != nil {
+		phonePrefix = *prefix
 	}
+	cursorValue := uint64(0)
 	if cursorID != nil {
-		where += " AND b.id > ?"
-		args = append(args, *cursorID)
+		cursorValue = *cursorID
 	}
-	args = append(args, limit+1)
 
 	rows, err := h.DB.Query(`
 		SELECT b.id, b.name, COALESCE(b.address,''), COALESCE(b.city,''),
@@ -95,10 +90,17 @@ func (h *handler) ListBranches(c *gin.Context) {
 		       END) AS zatca_status
 		FROM branches b
 		LEFT JOIN branch_zatca_config bzc ON bzc.branch_id = b.id
-		`+where+`
+		WHERE (? = '' OR b.name LIKE ? OR COALESCE(b.address,'') LIKE ? OR COALESCE(b.phone,'') LIKE ?)
+		  AND (? = '' OR b.phone COLLATE utf8mb4_unicode_ci LIKE ?)
+		  AND (? = 0 OR b.id > ?)
 		ORDER BY b.id
 		LIMIT ?
-	`, args...)
+	`,
+		q, qLike, qLike, qLike,
+		phonePrefix, phonePrefix,
+		cursorValue, cursorValue,
+		limit+1,
+	)
 	if err != nil {
 		log.Printf("ERROR ListBranches: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to fetch branches"})
@@ -443,8 +445,14 @@ func (h *handler) OnboardBranchZatca(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "OTP must be 6 numbers"})
 		return
 	}
+	for _, digit := range otp {
+		if digit < '0' || digit > '9' {
+			c.JSON(http.StatusBadRequest, gin.H{"detail": "OTP must be 6 numbers"})
+			return
+		}
+	}
 
-	if err := h.pub.OnboadBranch(int64(branchID), req.OTP); err != nil {
+	if err := h.pub.OnboadBranch(int64(branchID), otp); err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
 	}

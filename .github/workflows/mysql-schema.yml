@@ -1,0 +1,57 @@
+name: MySQL schema and migration compatibility
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mysql-schema:
+    name: MySQL ${{ matrix.mysql }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 8.0.28 reproduces the legacy server class that rejected
+        # ALTER TABLE ... ADD COLUMN IF NOT EXISTS. Keep a current 8.0
+        # release and 8.4 in the matrix as well.
+        mysql: ["8.0.28", "8.0.44", "8.4"]
+
+    services:
+      mysql:
+        image: mysql:${{ matrix.mysql }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+          --health-start-period=30s
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Check out deployment database scripts
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: abdul-mohsen/deployment
+          ref: main
+          path: deployment
+          persist-credentials: false
+
+      - name: Validate schema and migration replay
+        env:
+          DEPLOYMENT_DIR: deployment
+          MYSQL_IMAGE: mysql:${{ matrix.mysql }}
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_ROOT_PASSWORD: root
+        run: bash .github/scripts/test-mysql-schema.sh

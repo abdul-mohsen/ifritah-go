@@ -20,6 +20,9 @@ jobs:
       - name: Validate build identity contract
         run: bash .github/scripts/validate-build-contract.sh
 
+      - name: Validate migration contract
+        run: bash .github/scripts/validate-migration-contract.sh
+
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:

@@ -86,7 +86,10 @@ func resolveUploadPath(fileKey string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !strings.HasPrefix(absPath, uploadDir+string(os.PathSeparator)) {
+	relativePath, err := filepath.Rel(uploadDir, absPath)
+	if err != nil || relativePath == ".." ||
+		strings.HasPrefix(relativePath, ".."+string(os.PathSeparator)) ||
+		filepath.IsAbs(relativePath) {
 		return "", fmt.Errorf("invalid file key")
 	}
 	return absPath, nil
@@ -225,6 +228,11 @@ func (h *handler) UploadFile(c *gin.Context) {
 
 	// Generate unique file key: 16 random hex bytes + extension
 	fileKey := generateFileKey(ext)
+	dstPath, err := resolveUploadPath(fileKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل في تحديد مسار الملف"})
+		return
+	}
 
 	// Ensure upload directory exists
 	if err := os.MkdirAll(FilesUploadDir, 0750); err != nil {
@@ -234,7 +242,6 @@ func (h *handler) UploadFile(c *gin.Context) {
 	}
 
 	// Save file to disk
-	dstPath := filepath.Join(FilesUploadDir, fileKey)
 	dst, err := os.Create(dstPath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل في حفظ الملف"})
@@ -588,9 +595,17 @@ func (h *handler) CleanupOrphanFiles() {
 	}
 
 	for _, key := range keys {
-		filePath := filepath.Join(FilesUploadDir, key)
-		os.Remove(filePath)
-		h.DB.Exec("DELETE FROM uploaded_files WHERE file_key = ?", key)
+		filePath, err := resolveUploadPath(key)
+		if err != nil {
+			log.Printf("[CLEANUP] Skipping invalid file key %q", sanitizeForLog(key))
+			continue
+		}
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			log.Printf("[CLEANUP] Failed to remove %q: %v", sanitizeForLog(key), err)
+		}
+		if _, err := h.DB.Exec("DELETE FROM uploaded_files WHERE file_key = ?", key); err != nil {
+			log.Printf("[CLEANUP] Failed to remove database record for %q: %v", sanitizeForLog(key), err)
+		}
 	}
 
 	if len(keys) > 0 {

@@ -43,11 +43,10 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
-# pkg/db/gen is gitignored and produced by `sqlc generate`. Bake the
-# generation step into the image so the build does not depend on local
-# state — pkg/db/gen is .dockerignore'd because it is .gitignore'd, so
-# without this step CI fails with "package .../pkg/db/gen is not in std".
-RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0
+# pkg/db/gen is gitignored and produced by `sqlc generate`. Copy the
+# version-pinned, standalone sqlc binary instead of resolving an
+# untracked dependency graph during the application build.
+COPY --from=sqlc/sqlc:1.27.0 /workspace/sqlc /usr/local/bin/sqlc
 
 # Copy only the inputs needed to build the binary. Avoids a recursive
 # `COPY . .` which can leak local state into the image (Sonar docker:S6470).
@@ -71,13 +70,30 @@ RUN set -eu; \
     test -n "$image_commit"; \
     printf '%s' "$image_commit" | grep -Eq '^[0-9a-f]{40}$'; \
     case "$image_channel" in dev|release) ;; *) echo "APP_IMAGE_CHANNEL must be dev or release" >&2; exit 1 ;; esac; \
-    if [ -z "$image_tag" ]; then if [ "$image_channel" = "dev" ]; then image_tag="dev"; else image_tag="$image_version"; fi; fi; \
+    if [ -z "$image_tag" ]; then \
+        if [ "$image_channel" = "dev" ]; then \
+            image_tag="dev"; \
+        else \
+            image_tag="$image_version"; \
+        fi; \
+    fi; \
     test -n "$workflow_run_id"; \
     printf '%s' "$workflow_run_id" | grep -Eq '^[0-9]+$'; \
     test -n "$workflow_run_url"; \
     commit_short="$APP_COMMIT_SHORT"; \
     test -n "$commit_short" && test "$commit_short" = "$(printf '%s' "$image_commit" | cut -c1-7)" || commit_short="$(printf '%s' "$image_commit" | cut -c1-7)"; \
-    ldflags="-s -w -X ifritah/web-service-gin/pkg/buildinfo.Version=$image_version -X ifritah/web-service-gin/pkg/buildinfo.Channel=$image_channel -X ifritah/web-service-gin/pkg/buildinfo.Commit=$image_commit -X ifritah/web-service-gin/pkg/buildinfo.CommitShort=$commit_short -X ifritah/web-service-gin/pkg/buildinfo.ImageTag=$image_tag -X ifritah/web-service-gin/pkg/buildinfo.WorkflowRunID=$workflow_run_id -X ifritah/web-service-gin/pkg/buildinfo.WorkflowRun=$workflow_run_id -X ifritah/web-service-gin/pkg/buildinfo.WorkflowURL=$workflow_run_url -X ifritah/web-service-gin/pkg/buildinfo.Source=$APP_BUILD_SOURCE -X ifritah/web-service-gin/pkg/buildinfo.BuiltAt=$image_built_at -X ifritah/web-service-gin/pkg/buildinfo.ImageRef=$APP_IMAGE_REF"; \
+    ldflags="-s -w"; \
+    ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.Version=$image_version"; \
+    ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.Channel=$image_channel"; \
+    ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.Commit=$image_commit"; \
+    ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.CommitShort=$commit_short"; \
+    ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.ImageTag=$image_tag"; \
+    ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.WorkflowRunID=$workflow_run_id"; \
+    ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.WorkflowRun=$workflow_run_id"; \
+    ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.WorkflowURL=$workflow_run_url"; \
+    ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.Source=$APP_BUILD_SOURCE"; \
+    ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.BuiltAt=$image_built_at"; \
+    ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.ImageRef=$APP_IMAGE_REF"; \
     CGO_ENABLED=0 GOOS=linux go build -ldflags="$ldflags" -o /out/ifritah .
 
 # ---- Runtime stage ----

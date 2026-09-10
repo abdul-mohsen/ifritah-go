@@ -66,8 +66,9 @@ jobs:
           # Replace '/' with '-'; strip leading/trailing hyphens; lowercase
           tag="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's/^-//;s/-$//')"
           version="$(tr -d '[:space:]' < VERSION)"
-          short_sha="${GITHUB_SHA:0:7}"
+          short_sha="${GITHUB_SHA:0:12}"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "immutable_tag=${tag}-${short_sha}" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
           echo "Branch tag: ${tag}"
@@ -86,7 +87,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ env.IMAGE_NAME }}:${{ steps.branch_tag.outputs.tag }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.branch_tag.outputs.tag }}
+            ${{ env.IMAGE_NAME }}:${{ steps.branch_tag.outputs.immutable_tag }}
           build-args: |
             APP_VERSION=${{ steps.branch_tag.outputs.version }}
             APP_COMMIT=${{ github.sha }}

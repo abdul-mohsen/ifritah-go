@@ -169,3 +169,140 @@ func TestUpdatePurchaseInventoryProductPriceOverride(t *testing.T) {
 		})
 	}
 }
+
+func TestPurchaseBillProductsPromotesCatalogRowsToInventory(t *testing.T) {
+	productID := int32(42)
+	request := model.AddPurchaseBillRequest{
+		Products: []model.PurchaseBillProduct{{
+			ProductId:  &productID,
+			TrackStock: false,
+			Name:       "Widget",
+		}},
+		ManualProducts: []model.PurchaseBillProduct{{
+			ProductId:  &productID,
+			TrackStock: true,
+			Name:       "Service",
+		}},
+	}
+
+	got := purchaseBillProducts(&request)
+	if len(got) != 2 {
+		t.Fatalf("purchaseBillProducts() returned %d rows, want 2", len(got))
+	}
+	if !got[0].TrackStock || got[0].ProductId == nil || *got[0].ProductId != productID {
+		t.Fatalf("catalog row was not promoted to inventory: %+v", got[0])
+	}
+	if got[1].TrackStock || got[1].ProductId != nil {
+		t.Fatalf("explicit manual row was not kept manual: %+v", got[1])
+	}
+}
+
+func TestPurchaseInventoryProductReusesExistingNameAndUpdatesCost(t *testing.T) {
+	h, mock, cleanup := newPurchaseBillTestHandler(t)
+	defer cleanup()
+
+	productCols := []string{"id", "article_id", "store_id", "status", "shelf_number", "min_stock",
+		"cost_price", "price", "quantity", "is_deleted", "name"}
+	mock.ExpectQuery("select id from store where id = \\? for update").
+		WithArgs(int32(1)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+	mock.ExpectQuery("select p\\.id, p\\.article_id, p\\.store_id.*from product p").
+		WithArgs(int32(1), "Widget").
+		WillReturnRows(sqlmock.NewRows(productCols).
+			AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget"))
+	mock.ExpectQuery("select p\\.id, p\\.article_id, p\\.store_id.*from product p where p\\.id = \\?").
+		WithArgs(uint64(5)).
+		WillReturnRows(sqlmock.NewRows(productCols).
+			AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget"))
+	mock.ExpectExec("update product").
+		WithArgs("80", "40", "A2", "12", uint64(5)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	product := model.PurchaseBillProduct{
+		Name:        "Widget",
+		CostPrice:   decimal.NewFromInt(40),
+		Quantity:    decimal.NewFromInt(2),
+		ShelfNumber: strPtr("A2"),
+		TrackStock:  true,
+	}
+	id, err := purchaseInventoryProduct(h, h.queries, newRoleContext(RoleEmployee), product, 1, false, false)
+	if err != nil {
+		t.Fatalf("purchaseInventoryProduct() error: %v", err)
+	}
+	if id == nil || *id != 5 {
+		t.Fatalf("resolved product id = %v, want 5", id)
+	}
+	assertMockExpectations(t, mock)
+}
+
+func TestPurchaseInventoryProductCreatesMissingName(t *testing.T) {
+	h, mock, cleanup := newPurchaseBillTestHandler(t)
+	defer cleanup()
+
+	mock.ExpectQuery("select id from store where id = \\? for update").
+		WithArgs(int32(1)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+	mock.ExpectQuery("select p\\.id, p\\.article_id, p\\.store_id.*from product p").
+		WithArgs(int32(1), "New Widget").
+		WillReturnError(sql.ErrNoRows)
+	mock.ExpectExec("INSERT INTO product").
+		WithArgs(nil, "2", "120", "40", "B2", int32(1), "New Widget").
+		WillReturnResult(sqlmock.NewResult(42, 1))
+
+	sellingPrice := decimal.NewFromInt(120)
+	product := model.PurchaseBillProduct{
+		Name:         "New Widget",
+		CostPrice:    decimal.NewFromInt(40),
+		Quantity:     decimal.NewFromInt(2),
+		ShelfNumber:  strPtr("B2"),
+		SellingPrice: &sellingPrice,
+		TrackStock:   true,
+	}
+	id, err := purchaseInventoryProduct(h, h.queries, newRoleContext(RoleAdmin), product, 1, false, true)
+	if err != nil {
+		t.Fatalf("purchaseInventoryProduct() error: %v", err)
+	}
+	if id == nil || *id != 42 {
+		t.Fatalf("created product id = %v, want 42", id)
+	}
+	assertMockExpectations(t, mock)
+}
+
+func TestAddProductToBillPurchasePersistsResolvedProductID(t *testing.T) {
+	h, mock, cleanup := newPurchaseBillTestHandler(t)
+	defer cleanup()
+
+	productCols := []string{"id", "article_id", "store_id", "status", "shelf_number", "min_stock",
+		"cost_price", "price", "quantity", "is_deleted", "name"}
+	mock.ExpectQuery("select id from store where id = \\? for update").
+		WithArgs(int32(1)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+	mock.ExpectQuery("select p\\.id, p\\.article_id, p\\.store_id.*from product p").
+		WithArgs(int32(1), "Widget").
+		WillReturnRows(sqlmock.NewRows(productCols).
+			AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget"))
+	mock.ExpectQuery("select p\\.id, p\\.article_id, p\\.store_id.*from product p where p\\.id = \\?").
+		WithArgs(uint64(5)).
+		WillReturnRows(sqlmock.NewRows(productCols).
+			AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget"))
+	mock.ExpectExec("update product").
+		WithArgs("80", "50", "A2", "12", uint64(5)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("insert into purchase_bill_product").
+		WithArgs(uint64(5), "Widget", "50", "50", "A2", "2", uint64(99)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	product := model.PurchaseBillProduct{
+		Name:        " Widget ",
+		Price:       decimal.NewFromInt(50),
+		CostPrice:   decimal.Zero,
+		Quantity:    decimal.NewFromInt(2),
+		ShelfNumber: strPtr("A2"),
+		TrackStock:  true,
+	}
+	err := addProductToBillPurchase(h, h.queries, newRoleContext(RoleEmployee), []model.PurchaseBillProduct{product}, 99, 1, false)
+	if err != nil {
+		t.Fatalf("addProductToBillPurchase() error: %v", err)
+	}
+	assertMockExpectations(t, mock)
+}

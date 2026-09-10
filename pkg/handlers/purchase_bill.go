@@ -81,13 +81,23 @@ func purchaseBillID(c *gin.Context) (uint64, bool) {
 }
 
 func purchaseBillProducts(request *model.AddPurchaseBillRequest) []model.PurchaseBillProduct {
-	// The UI may send IDs for manually entered lines; they must never become
-	// inventory-linked or stock-tracked.
+	// Rows in products[] represent catalog items, even when the user typed a
+	// new name instead of selecting an existing dropdown result. The resolver
+	// below will match that name or create the product in the selected store.
+	products := make([]model.PurchaseBillProduct, 0, len(request.Products)+len(request.ManualProducts))
+	for _, product := range request.Products {
+		product.TrackStock = true
+		products = append(products, product)
+	}
+
+	// manual_products[] remains the explicit escape hatch for non-inventory
+	// lines sent by older clients or integrations.
 	for i := range request.ManualProducts {
 		request.ManualProducts[i].ProductId = nil
 		request.ManualProducts[i].TrackStock = false
+		products = append(products, request.ManualProducts[i])
 	}
-	return append(request.Products, request.ManualProducts...)
+	return products
 }
 
 func updatePurchaseBillError(c *gin.Context, err error) {
@@ -288,6 +298,15 @@ func addProductToBillPurchase(h *handler, tx *db.Queries, c *gin.Context, produc
 	canOverridePrice := canOverrideSellingPrice(c)
 
 	for _, product := range products {
+		if product.TrackStock {
+			product.Name = strings.TrimSpace(product.Name)
+			if product.Name == "" {
+				return errors.New("inventory purchase item name cannot be empty")
+			}
+			if product.CostPrice.IsZero() && product.Price.GreaterThan(decimal.Zero) {
+				product.CostPrice = product.Price
+			}
+		}
 		inventoryProductID, err := purchaseInventoryProduct(h, tx, c, product, storeID, recordStockMovement, canOverridePrice)
 		if err != nil {
 			return err
@@ -352,12 +371,27 @@ func purchaseInventoryProduct(h *handler, tx *db.Queries, c *gin.Context, produc
 	if product.ProductId != nil && *product.ProductId > 0 {
 		return updatePurchaseInventoryProduct(tx, c, product, storeID, recordStockMovement, canOverridePrice)
 	}
+	if _, err := tx.LockStoreForProductSync(c.Request.Context(), storeID); err != nil {
+		return nil, fmt.Errorf("lock store %d for product sync: %w", storeID, err)
+	}
+	existing, err := tx.GetProductByStoreAndName(c.Request.Context(), db.GetProductByStoreAndNameParams{
+		StoreID: storeID,
+		Name:    &product.Name,
+	})
+	if err == nil {
+		existingID := int32(existing.ID)
+		product.ProductId = &existingID
+		return updatePurchaseInventoryProduct(tx, c, product, storeID, recordStockMovement, canOverridePrice)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("find store product %q: %w", product.Name, err)
+	}
 	return createPurchaseInventoryProduct(h, tx, c, product, storeID, recordStockMovement, canOverridePrice)
 }
 
 func updatePurchaseInventoryProduct(tx *db.Queries, c *gin.Context, product model.PurchaseBillProduct,
 	storeID int32, recordStockMovement bool, canOverridePrice bool) (*uint64, error) {
-	existing, err := tx.GetProduct(c.Request.Context(), uint64(*product.ProductId))
+	existing, err := tx.GetProductForUpdate(c.Request.Context(), uint64(*product.ProductId))
 	if err != nil {
 		return nil, fmt.Errorf("store product %d not found: %w", *product.ProductId, err)
 	}

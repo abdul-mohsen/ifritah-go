@@ -197,10 +197,7 @@ func TestPurchaseBillProductsPromotesCatalogRowsToInventory(t *testing.T) {
 	}
 }
 
-func TestPurchaseInventoryProductReusesExistingNameAndUpdatesCost(t *testing.T) {
-	h, mock, cleanup := newPurchaseBillTestHandler(t)
-	defer cleanup()
-
+func expectExistingPurchaseProduct(mock sqlmock.Sqlmock, costPrice string) {
 	productCols := []string{"id", "article_id", "store_id", "status", "shelf_number", "min_stock",
 		"cost_price", "price", "quantity", "is_deleted", "name"}
 	mock.ExpectQuery("select id from store where id = \\? for update").
@@ -215,8 +212,15 @@ func TestPurchaseInventoryProductReusesExistingNameAndUpdatesCost(t *testing.T) 
 		WillReturnRows(sqlmock.NewRows(productCols).
 			AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget"))
 	mock.ExpectExec("update product").
-		WithArgs("80", "40", "A2", "12", uint64(5)).
+		WithArgs("80", costPrice, "A2", "12", uint64(5)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+}
+
+func TestPurchaseInventoryProductReusesExistingNameAndUpdatesCost(t *testing.T) {
+	h, mock, cleanup := newPurchaseBillTestHandler(t)
+	defer cleanup()
+
+	expectExistingPurchaseProduct(mock, "40")
 
 	product := model.PurchaseBillProduct{
 		Name:        "Widget",
@@ -272,22 +276,7 @@ func TestAddProductToBillPurchasePersistsResolvedProductID(t *testing.T) {
 	h, mock, cleanup := newPurchaseBillTestHandler(t)
 	defer cleanup()
 
-	productCols := []string{"id", "article_id", "store_id", "status", "shelf_number", "min_stock",
-		"cost_price", "price", "quantity", "is_deleted", "name"}
-	mock.ExpectQuery("select id from store where id = \\? for update").
-		WithArgs(int32(1)).
-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
-	mock.ExpectQuery("select p\\.id, p\\.article_id, p\\.store_id.*from product p").
-		WithArgs(int32(1), "Widget").
-		WillReturnRows(sqlmock.NewRows(productCols).
-			AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget"))
-	mock.ExpectQuery("select p\\.id, p\\.article_id, p\\.store_id.*from product p where p\\.id = \\?").
-		WithArgs(uint64(5)).
-		WillReturnRows(sqlmock.NewRows(productCols).
-			AddRow(5, nil, int32(1), 0, "A1", 5, "50.00", "80.00", "10.000", false, "Widget"))
-	mock.ExpectExec("update product").
-		WithArgs("80", "50", "A2", "12", uint64(5)).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+	expectExistingPurchaseProduct(mock, "50")
 	mock.ExpectExec("insert into purchase_bill_product").
 		WithArgs(uint64(5), "Widget", "50", "50", "A2", "2", uint64(99)).
 		WillReturnResult(sqlmock.NewResult(0, 1))

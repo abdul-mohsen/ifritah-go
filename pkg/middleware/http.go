@@ -52,6 +52,9 @@ func RequestCompletion(config Config) gin.HandlerFunc {
 				route = "unmatched"
 			}
 			method := boundedMethod(c.Request.Method)
+			requestID = strings.ReplaceAll(strings.ReplaceAll(requestID, "\r", " "), "\n", " ")
+			method = strings.ReplaceAll(strings.ReplaceAll(method, "\r", " "), "\n", " ")
+			route = strings.ReplaceAll(strings.ReplaceAll(route, "\r", " "), "\n", " ")
 
 			attrs := []slog.Attr{
 				slog.String("request_id", requestID),
@@ -65,21 +68,23 @@ func RequestCompletion(config Config) gin.HandlerFunc {
 			}
 			if serverContext, ok := logging.ServerContextFromContext(c.Request.Context()); ok {
 				if serverContext.Tenant != "" {
-					attrs = append(attrs, slog.String("tenant", serverContext.Tenant))
-					attrs = append(attrs, slog.String("tenant_id", serverContext.Tenant))
+					tenant := strings.ReplaceAll(strings.ReplaceAll(serverContext.Tenant, "\r", " "), "\n", " ")
+					attrs = append(attrs, slog.String("tenant", tenant))
+					attrs = append(attrs, slog.String("tenant_id", tenant))
 				}
 				if serverContext.CompanyID != "" {
-					attrs = append(attrs, slog.String("company_id", serverContext.CompanyID))
+					companyID := strings.ReplaceAll(strings.ReplaceAll(serverContext.CompanyID, "\r", " "), "\n", " ")
+					attrs = append(attrs, slog.String("company_id", companyID))
 				}
 			}
 
 			switch {
 			case status >= http.StatusInternalServerError:
-				logger.LogAttrs(c.Request.Context(), slog.LevelError, "http.request.completed", attrs...) // lgtm[go/log-injection]
+				logger.LogAttrs(c.Request.Context(), slog.LevelError, "http.request.completed", attrs...)
 			case status >= http.StatusBadRequest:
-				logger.LogAttrs(c.Request.Context(), slog.LevelWarn, "http.request.completed", attrs...) // lgtm[go/log-injection]
+				logger.LogAttrs(c.Request.Context(), slog.LevelWarn, "http.request.completed", attrs...)
 			default:
-				logger.LogAttrs(c.Request.Context(), slog.LevelInfo, "http.request.completed", attrs...) // lgtm[go/log-injection]
+				logger.LogAttrs(c.Request.Context(), slog.LevelInfo, "http.request.completed", attrs...)
 			}
 
 			if config.Metrics != nil {

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -43,6 +44,8 @@ type BaseModel struct {
 	Model string
 	Year  string
 }
+
+var vinPattern = regexp.MustCompile(`^[A-HJ-NPR-Z0-9]{17}$`)
 
 type CarModel struct {
 	Id           int    `json:"id"`
@@ -190,16 +193,7 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 }
 
 func isValidVIN(value string) bool {
-	if len(value) != 17 {
-		return false
-	}
-	const allowed = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789"
-	for _, character := range value {
-		if !strings.ContainsRune(allowed, character) {
-			return false
-		}
-	}
-	return true
+	return vinPattern.MatchString(value)
 }
 
 func getYear(c string) string {
@@ -293,7 +287,7 @@ func getBody(ctx context.Context, url string) ([]byte, error) {
 
 	// Create an HTTP client and perform the request
 	client := &http.Client{}
-	resp, err := client.Do(req) // lgtm[go/request-forgery]
+	resp, err := client.Do(req)
 	if err != nil {
 		telemetry.RecordError(spanCtx, err, "vehicle_database.request")
 		log.LogError(spanCtx, "vin.request_failed", err)

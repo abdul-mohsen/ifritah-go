@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,6 +47,11 @@ const (
 	maxHeaderValueLen = 1024
 	maxValueLen       = 128
 	maxOperationLen   = 64
+
+	maxResourceAttributesBytes   = 4096
+	maxResourceAttributeCount    = 32
+	maxResourceAttributeKeyLen   = 128
+	maxResourceAttributeValueLen = 256
 )
 
 // Config contains the bounded OTLP trace exporter settings used by the
@@ -53,12 +59,13 @@ const (
 // authentication or stream identity); they are never populated from request
 // headers. Tracing is disabled unless Enabled is true and Endpoint is set.
 type Config struct {
-	Enabled        bool
-	Endpoint       string
-	Headers        map[string]string
-	Insecure       bool
-	ServiceName    string
-	ServiceVersion string
+	Enabled            bool
+	Endpoint           string
+	Headers            map[string]string
+	Insecure           bool
+	ServiceName        string
+	ServiceVersion     string
+	ResourceAttributes map[string]string
 
 	BatchTimeout  time.Duration
 	ExportTimeout time.Duration
@@ -141,11 +148,22 @@ func newRuntimeWithExporter(
 		logger = slog.Default()
 	}
 
-	serviceAttrs := []attribute.KeyValue{
-		attribute.String("service.name", cfg.ServiceName),
+	resourceValues := make(map[string]string, len(cfg.ResourceAttributes)+2)
+	for key, value := range cfg.ResourceAttributes {
+		resourceValues[key] = value
 	}
+	resourceValues["service.name"] = cfg.ServiceName
 	if cfg.ServiceVersion != "" {
-		serviceAttrs = append(serviceAttrs, attribute.String("service.version", cfg.ServiceVersion))
+		resourceValues["service.version"] = cfg.ServiceVersion
+	}
+	resourceKeys := make([]string, 0, len(resourceValues))
+	for key := range resourceValues {
+		resourceKeys = append(resourceKeys, key)
+	}
+	sort.Strings(resourceKeys)
+	serviceAttrs := make([]attribute.KeyValue, 0, len(resourceKeys))
+	for _, key := range resourceKeys {
+		serviceAttrs = append(serviceAttrs, attribute.String(key, resourceValues[key]))
 	}
 	telemetryResource, err := resource.New(ctx, resource.WithAttributes(serviceAttrs...))
 	if err != nil {
@@ -275,10 +293,16 @@ func loadConfigFromEnv() (Config, error) {
 		ExportTimeout: parseMilliseconds(firstNonEmpty(
 			os.Getenv("OTEL_EXPORTER_OTLP_TRACES_TIMEOUT"),
 			os.Getenv("OTEL_EXPORTER_OTLP_TIMEOUT"),
+			os.Getenv("OTEL_BSP_EXPORT_TIMEOUT"),
 		), defaultExportTimeout, maxExportTimeout),
 		QueueSize: parseBoundedInt(os.Getenv("OTEL_BSP_MAX_QUEUE_SIZE"), defaultQueueSize, 1, maxQueueSize),
 		BatchSize: parseBoundedInt(os.Getenv("OTEL_BSP_MAX_EXPORT_BATCH_SIZE"), defaultBatchSize, 1, maxBatchSize),
 	}
+	resourceAttributes, err := parseResourceAttributes(os.Getenv("OTEL_RESOURCE_ATTRIBUTES"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.ResourceAttributes = resourceAttributes
 
 	if exporterMode != "" && exporterMode != "otlp" && exporterMode != "none" {
 		return Config{}, fmt.Errorf("unsupported trace exporter mode %q", exporterMode)
@@ -337,6 +361,11 @@ func normalizeConfig(cfg Config) (Config, error) {
 	if cfg.Headers == nil {
 		cfg.Headers = map[string]string{}
 	}
+	resourceAttributes, err := normalizeResourceAttributes(cfg.ResourceAttributes)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.ResourceAttributes = resourceAttributes
 	return cfg, nil
 }
 
@@ -403,6 +432,75 @@ func parseHeaders(raw string) (map[string]string, error) {
 		headers[key] = value
 	}
 	return headers, nil
+}
+
+func parseResourceAttributes(raw string) (map[string]string, error) {
+	if len(raw) > maxResourceAttributesBytes {
+		return nil, errors.New("resource attributes exceed the configured size limit")
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]string{}, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	if len(parts) > maxResourceAttributeCount {
+		return nil, errors.New("resource attributes exceed the configured count limit")
+	}
+	attributes := make(map[string]string, len(parts))
+	for _, part := range parts {
+		keyValue := strings.SplitN(strings.TrimSpace(part), "=", 2)
+		if len(keyValue) != 2 {
+			return nil, errors.New("resource attribute is missing an equals sign")
+		}
+		key := strings.TrimSpace(keyValue[0])
+		value := strings.TrimSpace(keyValue[1])
+		if !validResourceAttributeKey(key) ||
+			len(key) > maxResourceAttributeKeyLen ||
+			len(value) > maxResourceAttributeValueLen ||
+			strings.ContainsAny(value, "\r\n\t") ||
+			logging.IsSensitiveKey(key) {
+			return nil, errors.New("resource attribute is invalid or sensitive")
+		}
+		attributes[key] = value
+	}
+	return attributes, nil
+}
+
+func normalizeResourceAttributes(values map[string]string) (map[string]string, error) {
+	if len(values) > maxResourceAttributeCount {
+		return nil, errors.New("resource attributes exceed the configured count limit")
+	}
+	normalized := make(map[string]string, len(values))
+	for key, value := range values {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if !validResourceAttributeKey(key) ||
+			len(key) > maxResourceAttributeKeyLen ||
+			len(value) > maxResourceAttributeValueLen ||
+			strings.ContainsAny(value, "\r\n\t") ||
+			logging.IsSensitiveKey(key) {
+			return nil, errors.New("resource attribute is invalid or sensitive")
+		}
+		normalized[key] = value
+	}
+	return normalized, nil
+}
+
+func validResourceAttributeKey(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, character := range value {
+		if (character >= 'a' && character <= 'z') ||
+			(character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9') ||
+			strings.ContainsRune("._/-", character) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func validateHeaders(headers map[string]string) error {
@@ -494,11 +592,20 @@ func StartProducerSpan(ctx context.Context, name string) (context.Context, trace
 	return StartSpan(ctx, name, trace.SpanKindProducer)
 }
 
+func StartProducerSpanWithLinks(ctx context.Context, name string, links ...trace.Link) (context.Context, trace.Span) {
+	return StartSpanWithLinks(ctx, name, trace.SpanKindProducer, links...)
+}
+
 func StartSpan(ctx context.Context, name string, kind trace.SpanKind) (context.Context, trace.Span) {
+	return StartSpanWithLinks(ctx, name, kind)
+}
+
+func StartSpanWithLinks(ctx context.Context, name string, kind trace.SpanKind, links ...trace.Link) (context.Context, trace.Span) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return otel.Tracer(instrumentationName).Start(ctx, safeOperation(name), trace.WithSpanKind(kind))
+	return otel.Tracer(instrumentationName).Start(ctx, safeOperation(name),
+		trace.WithSpanKind(kind), trace.WithLinks(links...))
 }
 
 // InjectHTTP adds W3C trace context only when a valid local span exists. This
@@ -537,9 +644,23 @@ func SetHTTPClientResponse(ctx context.Context, status, bodyBytes int) {
 		attribute.Int("http.response.status_code", status),
 		attribute.Int("http.response.body.size", bodyBytes),
 	)
-	if status >= http.StatusInternalServerError {
+	if status < http.StatusOK || status >= http.StatusMultipleChoices {
 		span.SetStatus(codes.Error, "upstream request failed")
 	}
+}
+
+func SetDatabaseAttributes(ctx context.Context, system, operation string) {
+	if ctx == nil {
+		return
+	}
+	span := trace.SpanFromContext(ctx)
+	if span == nil || !span.IsRecording() {
+		return
+	}
+	span.SetAttributes(
+		attribute.String("db.system", safeOperation(system)),
+		attribute.String("db.operation.name", safeOperation(operation)),
+	)
 }
 
 func SetMessagingAttributes(ctx context.Context, system, operation, destination string) {
@@ -556,6 +677,29 @@ func SetMessagingAttributes(ctx context.Context, system, operation, destination 
 	}
 	if destination = safeOperation(destination); destination != "unknown" {
 		attrs = append(attrs, attribute.String("messaging.destination.name", destination))
+	}
+	span.SetAttributes(attrs...)
+}
+
+func SetMessagingJobAttributes(ctx context.Context, tenantID, requestID, traceID, operation, jobID string) {
+	if ctx == nil {
+		return
+	}
+	span := trace.SpanFromContext(ctx)
+	if span == nil || !span.IsRecording() {
+		return
+	}
+	attrs := make([]attribute.KeyValue, 0, 5)
+	for key, value := range map[string]string{
+		"ifritah.tenant_id":         tenantID,
+		"ifritah.origin_request_id": requestID,
+		"ifritah.origin_trace_id":   traceID,
+		"ifritah.operation":         operation,
+		"ifritah.job_id":            jobID,
+	} {
+		if value = boundedConfigValue(value, ""); value != "" {
+			attrs = append(attrs, attribute.String(key, value))
+		}
 	}
 	span.SetAttributes(attrs...)
 }

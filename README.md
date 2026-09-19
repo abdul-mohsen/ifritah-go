@@ -42,14 +42,20 @@ an OpenObserve contract in the backend. Header names and values are bounded
 and application configuration/exporter warnings do not log their values.
 Incoming request headers are never used for tenant attribution; the
 `tenant.id` span attribute comes only from trusted server-derived context
-(`TENANT_ID`/`DBNAME`).
+(`TENANT_ID`/`DBNAME`) attached after authentication.
 
-Gin middleware extracts and creates W3C trace context. Existing structured
+`OTEL_RESOURCE_ATTRIBUTES` is parsed with bounded key/value/count limits;
+standard attributes such as `deployment.environment.name` are applied to
+exported resources. Gin middleware extracts and creates W3C trace context.
+Existing structured
 events add `trace_id` and `span_id` only while a valid span is active, without
 changing request IDs, trusted tenant/company context, redaction, or protected
-Prometheus metrics. External VIN HTTP calls, NATS publishing, and the startup
-database ping create dependency spans where context is available. Exception
-events contain only bounded error types and a redacted message marker.
+Prometheus metrics. Runtime MySQL queries, execs, transactions, external VIN
+HTTP calls, and NATS publishing create bounded dependency spans where context
+is available. NATS envelopes require trusted tenant context and carry bounded
+request/trace correlation fields. VIN calls use explicit timeouts, bounded
+response reads, and typed upstream status errors. Exception events contain
+only bounded error types and a redacted message marker.
 
 Unset the endpoint or set `OTEL_TRACES_EXPORTER=none` to preserve the
 telemetry-disabled behavior. Export uses a bounded non-blocking queue,

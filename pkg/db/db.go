@@ -39,11 +39,12 @@ func Connect() *sql.DB {
 		cfg.TLSConfig = "true"
 	}
 
-	db, err := sql.Open("mysql", cfg.FormatDSN())
+	connector, err := (mysql.MySQLDriver{}).OpenConnector(cfg.FormatDSN())
 	if err != nil {
 		logging.LogError(context.Background(), "db.open_failed", err)
 		os.Exit(1)
 	}
+	db := sql.OpenDB(newTracingConnector(connector))
 
 	// ── Pool tuning: keep these SHORTER than MySQL's wait_timeout ──
 	db.SetMaxOpenConns(getEnvInt("DB_MAX_OPEN_CONNS", 50))

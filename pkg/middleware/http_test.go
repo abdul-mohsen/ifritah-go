@@ -20,8 +20,7 @@ func TestRequestIDResponseAndCompletionSchema(t *testing.T) {
 
 	router := gin.New()
 	router.Use(RequestLogging(Config{
-		Logger:        logger,
-		ServerContext: logging.ServerContext{Tenant: "tenant-a", CompanyID: "7"},
+		Logger: logger,
 	}))
 	router.GET("/items/:id", func(c *gin.Context) {
 		// A plain Gin value is not trusted authentication context.
@@ -63,14 +62,43 @@ func TestRequestIDResponseAndCompletionSchema(t *testing.T) {
 	if _, ok := record["duration_ms"]; !ok {
 		t.Fatal("duration_ms missing")
 	}
-	if record["tenant"] != "tenant-a" || record["company_id"] != "7" {
-		t.Fatalf("server context = tenant %v/company %v", record["tenant"], record["company_id"])
+	for _, key := range []string{"tenant", "tenant_id", "company_id", "user_id"} {
+		if _, ok := record[key]; ok {
+			t.Fatalf("unauthenticated completion leaked %s: %v", key, record[key])
+		}
 	}
-	if record["tenant_id"] != "tenant-a" {
-		t.Fatalf("tenant_id = %v, want tenant-a", record["tenant_id"])
+}
+
+func TestAuthenticatedCompletionIncludesTrustedServerContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var output bytes.Buffer
+	logger := logging.New(logging.Config{Level: slog.LevelInfo, Format: "json"}, &output)
+
+	router := gin.New()
+	router.Use(RequestID())
+	router.Use(RequestCompletion(Config{Logger: logger}))
+	router.GET("/trusted-context", func(c *gin.Context) {
+		requestContext := logging.WithTrustedUserID(c.Request.Context(), 42)
+		requestContext = logging.WithTrustedServerContext(requestContext, logging.ServerContext{
+			Tenant:    "tenant-a",
+			CompanyID: "7",
+		})
+		c.Request = c.Request.WithContext(requestContext)
+		c.Status(http.StatusNoContent)
+	})
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/trusted-context", nil))
+
+	var record map[string]any
+	if err := json.Unmarshal(output.Bytes(), &record); err != nil {
+		t.Fatalf("decode completion log: %v", err)
 	}
-	if _, ok := record["user_id"]; ok {
-		t.Fatalf("untrusted user ID leaked into completion log: %v", record["user_id"])
+	if record["tenant_id"] != "tenant-a" ||
+		record["tenant"] != "tenant-a" ||
+		record["company_id"] != "7" ||
+		record["user_id"] != float64(42) {
+		t.Fatalf("trusted completion context = %#v", record)
 	}
 }
 

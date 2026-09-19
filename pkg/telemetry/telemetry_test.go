@@ -27,6 +27,7 @@ func TestLoadConfigSupportsOpenObserveEndpointHeadersAndBounds(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "Authorization=Basic placeholder,stream-name=default")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_INSECURE", "true")
 	t.Setenv("OTEL_BSP_SCHEDULE_DELAY", "1000")
+	t.Setenv("OTEL_BSP_EXPORT_TIMEOUT", "3000")
 	t.Setenv("OTEL_BSP_MAX_QUEUE_SIZE", "8192")
 	t.Setenv("OTEL_BSP_MAX_EXPORT_BATCH_SIZE", "1024")
 
@@ -42,6 +43,9 @@ func TestLoadConfigSupportsOpenObserveEndpointHeadersAndBounds(t *testing.T) {
 	}
 	if cfg.QueueSize != maxQueueSize || cfg.BatchSize != maxBatchSize {
 		t.Fatalf("bounds = queue %d/batch %d", cfg.QueueSize, cfg.BatchSize)
+	}
+	if cfg.ExportTimeout != 3*time.Second {
+		t.Fatalf("export timeout = %s, want 3s", cfg.ExportTimeout)
 	}
 }
 
@@ -124,6 +128,66 @@ func TestLoadConfigUsesStandardGeneralOTELFallbacks(t *testing.T) {
 	}
 }
 
+func TestLoadConfigParsesBoundedResourceAttributes(t *testing.T) {
+	t.Setenv("OTEL_TRACES_EXPORTER", "otlp")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://collector:4318")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES",
+		"deployment.environment.name=staging,service.namespace=ifritah")
+
+	cfg, err := loadConfigFromEnv()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.ResourceAttributes["deployment.environment.name"] != "staging" ||
+		cfg.ResourceAttributes["service.namespace"] != "ifritah" {
+		t.Fatalf("resource attributes = %#v", cfg.ResourceAttributes)
+	}
+
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "authorization=secret")
+	if _, err := loadConfigFromEnv(); err == nil {
+		t.Fatal("sensitive resource attribute unexpectedly accepted")
+	}
+}
+
+func TestRuntimeAppliesResourceAttributes(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	counting := &countingExporter{delegate: exporter}
+	runtime, err := newRuntimeWithExporter(context.Background(), Config{
+		Enabled:     true,
+		Endpoint:    "http://127.0.0.1:4318",
+		Insecure:    true,
+		ServiceName: "test-backend",
+		ResourceAttributes: map[string]string{
+			"deployment.environment.name": "staging",
+		},
+		BatchTimeout:  time.Hour,
+		ExportTimeout: time.Second,
+		QueueSize:     16,
+		BatchSize:     4,
+	}, nil, counting)
+	if err != nil {
+		t.Fatalf("new runtime: %v", err)
+	}
+	_, span := runtime.tracer.Start(context.Background(), "resource-test")
+	span.End()
+	if err := runtime.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+
+	spans := exporter.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("exported spans = %d, want 1", len(spans))
+	}
+	attributes := make(map[string]string)
+	for _, attr := range spans[0].Resource.Attributes() {
+		attributes[string(attr.Key)] = attr.Value.AsString()
+	}
+	if attributes["service.name"] != "test-backend" ||
+		attributes["deployment.environment.name"] != "staging" {
+		t.Fatalf("resource attributes = %#v", attributes)
+	}
+}
+
 func TestTracingDisabledLeavesRequestContextUnchanged(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	runtime := disabledRuntime(nil)
@@ -176,7 +240,7 @@ func TestMiddlewareExtractsW3CContextAndExportsSanitizedException(t *testing.T) 
 	recording := false
 	router.GET("/items/:id", func(c *gin.Context) {
 		requestContext := logging.WithRequestID(c.Request.Context(), "req-test")
-		requestContext = logging.WithServerContext(requestContext, logging.ServerContext{
+		requestContext = logging.WithTrustedServerContext(requestContext, logging.ServerContext{
 			Tenant:    "tenant-a",
 			CompanyID: "7",
 		})

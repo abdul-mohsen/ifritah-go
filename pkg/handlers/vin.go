@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	log "ifritah/web-service-gin/pkg/logging"
 	"ifritah/web-service-gin/pkg/telemetry"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,6 +48,29 @@ type BaseModel struct {
 }
 
 var vinPattern = regexp.MustCompile(`^[A-HJ-NPR-Z0-9]{17}$`)
+
+const (
+	defaultVINRequestTimeout = 10 * time.Second
+	maxVINResponseBytes      = 2 * 1024 * 1024
+)
+
+var vinHTTPClient = &http.Client{Timeout: defaultVINRequestTimeout}
+
+type VINUpstreamStatusError struct {
+	StatusCode int
+}
+
+func (e *VINUpstreamStatusError) Error() string {
+	return fmt.Sprintf("vehicle database returned status %d", e.StatusCode)
+}
+
+type VINResponseTooLargeError struct {
+	Limit int
+}
+
+func (e *VINResponseTooLargeError) Error() string {
+	return fmt.Sprintf("vehicle database response exceeds %d bytes", e.Limit)
+}
 
 type CarModel struct {
 	Id           int    `json:"id"`
@@ -265,13 +290,22 @@ func getYear(c string) string {
 }
 
 func getBody(ctx context.Context, url string) ([]byte, error) {
+	return getBodyWithTimeout(ctx, url, defaultVINRequestTimeout)
+}
 
+func getBodyWithTimeout(ctx context.Context, url string, timeout time.Duration) ([]byte, error) {
 	key := os.Getenv("VEHICLE_DATABASES_KEY")
 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	spanCtx, span := telemetry.StartClientSpan(ctx, "vehicle_database.lookup")
+	if timeout <= 0 {
+		timeout = defaultVINRequestTimeout
+	}
+	requestContext, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	spanCtx, span := telemetry.StartClientSpan(requestContext, "vehicle_database.lookup")
 	defer span.End()
 	telemetry.SetHTTPClientRequest(span, http.MethodGet, url)
 
@@ -282,11 +316,18 @@ func getBody(ctx context.Context, url string) ([]byte, error) {
 		return nil, err
 	}
 
-	req.Header.Add("x-AuthKey", key)
+	req.Header.Set("x-AuthKey", key)
+	if requestID := log.RequestIDFromContext(spanCtx); log.ValidRequestID(requestID) {
+		req.Header.Set(log.RequestIDHeader, requestID)
+	}
 	telemetry.InjectHTTP(spanCtx, req.Header)
 
-	// Create an HTTP client and perform the request
-	client := &http.Client{}
+	// Use both a request context and client timeout so connection, headers,
+	// and response reads remain bounded.
+	client := vinHTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: defaultVINRequestTimeout}
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		telemetry.RecordError(spanCtx, err, "vehicle_database.request")
@@ -294,21 +335,28 @@ func getBody(ctx context.Context, url string) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close() // Ensure the response body is closed
-	telemetry.SetHTTPClientResponse(spanCtx, resp.StatusCode, 0)
 
-	// Check if the response status is OK
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		upstreamErr := &VINUpstreamStatusError{StatusCode: resp.StatusCode}
+		telemetry.SetHTTPClientResponse(spanCtx, resp.StatusCode, 0)
+		telemetry.RecordError(spanCtx, upstreamErr, "vehicle_database.response_status")
 		log.LogWarn(spanCtx, "vin.upstream_unexpected_status",
 			slog.Int("status", resp.StatusCode))
-		return nil, err
+		return nil, upstreamErr
 	}
 
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxVINResponseBytes+1))
 	if err != nil {
 		telemetry.RecordError(spanCtx, err, "vehicle_database.response_read")
 		log.LogError(spanCtx, "vin.response_read_failed", err)
 		return nil, err
+	}
+	if len(body) > maxVINResponseBytes {
+		sizeErr := &VINResponseTooLargeError{Limit: maxVINResponseBytes}
+		telemetry.RecordError(spanCtx, sizeErr, "vehicle_database.response_size")
+		log.LogWarn(spanCtx, "vin.response_too_large",
+			slog.Int("limit_bytes", maxVINResponseBytes))
+		return nil, sizeErr
 	}
 	telemetry.SetHTTPClientResponse(spanCtx, resp.StatusCode, len(body))
 	log.LogInfo(spanCtx, "vin.upstream_response_received",

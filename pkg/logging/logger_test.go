@@ -130,7 +130,7 @@ func TestStructuredHelpersPreserveTrustedContextWithoutErrorText(t *testing.T) {
 
 	ctx := WithRequestID(context.Background(), "req-context")
 	ctx = WithTrustedUserID(ctx, 42)
-	ctx = WithServerContext(ctx, ServerContext{Tenant: "tenant-a", CompanyID: "7"})
+	ctx = WithTrustedServerContext(ctx, ServerContext{Tenant: "tenant-a", CompanyID: "7"})
 	LogError(ctx, "test.context", errors.New("SQL password token secret"),
 		slog.String("request_count", "3"),
 		slog.String("metadata", "stable"))

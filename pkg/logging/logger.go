@@ -38,6 +38,7 @@ const (
 	requestIDKey contextKey = iota
 	trustedUserIDKey
 	serverContextKey
+	trustedServerContextKey
 )
 
 func ConfigFromEnv() Config {
@@ -205,7 +206,7 @@ func ContextAttrs(ctx context.Context) []slog.Attr {
 	if userID, ok := TrustedUserIDFromContext(ctx); ok {
 		attrs = append(attrs, slog.Int64("user_id", userID))
 	}
-	if serverContext, ok := ServerContextFromContext(ctx); ok {
+	if serverContext, ok := TrustedServerContextFromContext(ctx); ok {
 		if serverContext.Tenant != "" {
 			attrs = append(attrs, slog.String("tenant", serverContext.Tenant))
 			attrs = append(attrs, slog.String("tenant_id", serverContext.Tenant))
@@ -248,6 +249,12 @@ func WithServerContext(ctx context.Context, serverContext ServerContext) context
 	return context.WithValue(ctx, serverContextKey, normalizeServerContext(serverContext))
 }
 
+func WithTrustedServerContext(ctx context.Context, serverContext ServerContext) context.Context {
+	normalized := normalizeServerContext(serverContext)
+	ctx = context.WithValue(ctx, serverContextKey, normalized)
+	return context.WithValue(ctx, trustedServerContextKey, true)
+}
+
 func WithCompanyID(ctx context.Context, companyID string) context.Context {
 	serverContext, _ := ServerContextFromContext(ctx)
 	serverContext.CompanyID = companyID
@@ -260,6 +267,17 @@ func ServerContextFromContext(ctx context.Context) (ServerContext, bool) {
 	}
 	serverContext, ok := ctx.Value(serverContextKey).(ServerContext)
 	return serverContext, ok
+}
+
+func TrustedServerContextFromContext(ctx context.Context) (ServerContext, bool) {
+	if ctx == nil {
+		return ServerContext{}, false
+	}
+	trusted, _ := ctx.Value(trustedServerContextKey).(bool)
+	if !trusted {
+		return ServerContext{}, false
+	}
+	return ServerContextFromContext(ctx)
 }
 
 func ServerContextFromEnv() ServerContext {

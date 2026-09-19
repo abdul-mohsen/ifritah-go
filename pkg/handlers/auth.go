@@ -174,7 +174,9 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	c.Set("userId", claims.Id) // back-compat for handlers using GetInt64("userId")
 	c.Set("username", claims.Username)
 	c.Set("user_role", claims.Role)
-	c.Request = c.Request.WithContext(log.WithTrustedUserID(c.Request.Context(), claims.Id))
+	requestContext := log.WithTrustedUserID(c.Request.Context(), claims.Id)
+	requestContext = log.WithTrustedServerContext(requestContext, log.ServerContextFromEnv())
+	c.Request = c.Request.WithContext(requestContext)
 
 	c.Next()
 }

@@ -38,7 +38,10 @@ func RequestCompletion(config Config) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		requestID := ensureRequestMetadata(c, config.ServerContext)
+		// Deployment context is attached by authenticated middleware only.
+		// Applying Config.ServerContext here would leak process-global tenant
+		// metadata into unauthenticated completion events.
+		requestID := ensureRequestMetadata(c, logging.ServerContext{})
 		startedAt := time.Now()
 
 		defer func() {
@@ -66,7 +69,7 @@ func RequestCompletion(config Config) gin.HandlerFunc {
 			if userID, ok := logging.TrustedUserIDFromContext(c.Request.Context()); ok {
 				attrs = append(attrs, slog.Int64("user_id", userID))
 			}
-			if serverContext, ok := logging.ServerContextFromContext(c.Request.Context()); ok {
+			if serverContext, ok := logging.TrustedServerContextFromContext(c.Request.Context()); ok {
 				if serverContext.Tenant != "" {
 					tenant := strings.ReplaceAll(strings.ReplaceAll(serverContext.Tenant, "\r", " "), "\n", " ")
 					attrs = append(attrs, slog.String("tenant", tenant))

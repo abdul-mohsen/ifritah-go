@@ -55,7 +55,7 @@ func (r *Runtime) Middleware() gin.HandlerFunc {
 		if requestID := logging.RequestIDFromContext(c.Request.Context()); logging.ValidRequestID(requestID) {
 			span.SetAttributes(attribute.String("request.id", requestID))
 		}
-		if serverContext, ok := logging.ServerContextFromContext(c.Request.Context()); ok {
+		if serverContext, ok := logging.TrustedServerContextFromContext(c.Request.Context()); ok {
 			if serverContext.Tenant != "" {
 				span.SetAttributes(attribute.String("tenant.id", serverContext.Tenant))
 			}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"ifritah/web-service-gin/pkg/buildinfo"
+	appdb "ifritah/web-service-gin/pkg/db"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/handlers"
 	"ifritah/web-service-gin/pkg/logging"
@@ -53,7 +54,7 @@ func run() error {
 	}()
 
 	_, databaseSpan := telemetry.StartClientSpan(context.Background(), "mysql.connect")
-	DB := db.Connect()
+	DB := appdb.Connect()
 	databaseSpan.End()
 	defer DB.Close()
 	queries := db.New(DB)
@@ -77,9 +78,8 @@ func run() error {
 	router := gin.New()
 	router.Use(telemetryRuntime.Middleware())
 	router.Use(middleware.RequestLogging(middleware.Config{
-		Logger:        logger,
-		ServerContext: logging.ServerContextFromEnv(),
-		Metrics:       httpMetrics,
+		Logger:  logger,
+		Metrics: httpMetrics,
 	}))
 	// Recovery runs inside the request logger so recovered panics are recorded
 	// with the final 500 response status without emitting panic text or stacks.

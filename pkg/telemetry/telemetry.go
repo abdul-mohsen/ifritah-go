@@ -49,7 +49,9 @@ const (
 )
 
 // Config contains the bounded OTLP trace exporter settings used by the
-// backend. Tracing is disabled unless Enabled is true and Endpoint is set.
+// backend. Headers are deployment-provided collector headers (for example,
+// authentication or stream identity); they are never populated from request
+// headers. Tracing is disabled unless Enabled is true and Endpoint is set.
 type Config struct {
 	Enabled        bool
 	Endpoint       string
@@ -361,14 +363,14 @@ func normalizeEndpoint(value string, insecure bool) (string, error) {
 		return "", errors.New("telemetry endpoint contains unsupported credentials or query data")
 	}
 	endpointPath := strings.TrimRight(parsed.Path, "/")
-	if !strings.HasSuffix(endpointPath, "/v1/traces") {
-		if endpointPath == "" {
-			endpointPath = "/v1/traces"
-		} else {
-			endpointPath += "/v1/traces"
-		}
-		parsed.Path = endpointPath
+	if endpointPath == "" {
+		endpointPath = "/v1/traces"
+	} else if !strings.HasSuffix(endpointPath, "/v1/traces") {
+		endpointPath += "/v1/traces"
 	}
+	// WithEndpointURL uses the path verbatim. Set the canonical path even when
+	// the caller supplied an explicit /v1/traces path with a trailing slash.
+	parsed.Path = endpointPath
 	return parsed.String(), nil
 }
 

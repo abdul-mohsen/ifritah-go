@@ -31,7 +31,18 @@ OpenObserve. Configure `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (or the general
 `OTEL_EXPORTER_OTLP_TRACES_INSECURE=true` for a local HTTP collector. An
 OpenObserve base URL such as
 `http://openobserve:5080/api/default` is accepted; the backend sends traces to
-its `/v1/traces` path.
+its `/v1/traces` path. A bare collector URL is normalized the same way, while
+an endpoint that already ends in `/v1/traces` is used once without
+double-appending. Signal-specific OTEL variables take precedence over their
+general counterparts.
+
+Headers are deployment-provided OTLP collector headers, so they can carry
+per-tenant authentication or stream/organization identity without hard-coding
+an OpenObserve contract in the backend. Header names and values are bounded
+and application configuration/exporter warnings do not log their values.
+Incoming request headers are never used for tenant attribution; the
+`tenant.id` span attribute comes only from trusted server-derived context
+(`TENANT_ID`/`DBNAME`).
 
 Gin middleware extracts and creates W3C trace context. Existing structured
 events add `trace_id` and `span_id` only while a valid span is active, without

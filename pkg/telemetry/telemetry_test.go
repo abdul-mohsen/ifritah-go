@@ -45,6 +45,85 @@ func TestLoadConfigSupportsOpenObserveEndpointHeadersAndBounds(t *testing.T) {
 	}
 }
 
+func TestNormalizeEndpointAppendsTracePathOnce(t *testing.T) {
+	tests := []struct {
+		name     string
+		endpoint string
+		insecure bool
+		want     string
+	}{
+		{
+			name:     "bare collector URL",
+			endpoint: "http://collector:4318",
+			want:     "http://collector:4318/v1/traces",
+		},
+		{
+			name:     "bare collector URL with trailing slash",
+			endpoint: "http://collector:4318/",
+			want:     "http://collector:4318/v1/traces",
+		},
+		{
+			name:     "OpenObserve base URL",
+			endpoint: "http://openobserve:5080/api/default",
+			want:     "http://openobserve:5080/api/default/v1/traces",
+		},
+		{
+			name:     "explicit trace path",
+			endpoint: "http://collector:4318/v1/traces",
+			want:     "http://collector:4318/v1/traces",
+		},
+		{
+			name:     "OpenObserve explicit trace path",
+			endpoint: "http://openobserve:5080/api/default/v1/traces",
+			want:     "http://openobserve:5080/api/default/v1/traces",
+		},
+		{
+			name:     "explicit trace path with trailing slash",
+			endpoint: "http://collector:4318/v1/traces/",
+			want:     "http://collector:4318/v1/traces",
+		},
+		{
+			name:     "bare collector host uses insecure scheme",
+			endpoint: "collector:4318",
+			insecure: true,
+			want:     "http://collector:4318/v1/traces",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := normalizeEndpoint(test.endpoint, test.insecure)
+			if err != nil {
+				t.Fatalf("normalize endpoint: %v", err)
+			}
+			if got != test.want {
+				t.Fatalf("normalized endpoint = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestLoadConfigUsesStandardGeneralOTELFallbacks(t *testing.T) {
+	t.Setenv("OTEL_TRACES_EXPORTER", "otlp")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "Authorization=Basic placeholder,stream-name=tenant-a")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_INSECURE", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_INSECURE", "true")
+
+	cfg, err := loadConfigFromEnv()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.Enabled || cfg.Endpoint != "http://collector:4318/v1/traces" || !cfg.Insecure {
+		t.Fatalf("config = %#v", cfg)
+	}
+	if cfg.Headers["Authorization"] != "Basic placeholder" || cfg.Headers["stream-name"] != "tenant-a" {
+		t.Fatalf("headers = %#v", cfg.Headers)
+	}
+}
+
 func TestTracingDisabledLeavesRequestContextUnchanged(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	runtime := disabledRuntime(nil)
@@ -110,6 +189,8 @@ func TestMiddlewareExtractsW3CContextAndExportsSanitizedException(t *testing.T) 
 
 	request := httptest.NewRequest(http.MethodGet, "/items/42", nil)
 	request.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	request.Header.Set("X-Tenant-ID", "attacker-tenant")
+	request.Header.Set("X-Company-ID", "999")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusInternalServerError {
@@ -129,6 +210,9 @@ func TestMiddlewareExtractsW3CContextAndExportsSanitizedException(t *testing.T) 
 	}
 	if strings.Contains(output.String(), "SELECT password") || strings.Contains(output.String(), "secret") {
 		t.Fatalf("raw exception text leaked into logs: %s", output.String())
+	}
+	if strings.Contains(output.String(), "attacker-tenant") || strings.Contains(output.String(), "999") {
+		t.Fatalf("untrusted tenant headers leaked into logs: %s", output.String())
 	}
 
 	if err := runtime.Shutdown(context.Background()); err != nil {

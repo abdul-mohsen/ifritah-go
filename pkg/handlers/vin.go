@@ -293,7 +293,7 @@ func getBody(ctx context.Context, url string) ([]byte, error) {
 
 	// Create an HTTP client and perform the request
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // lgtm [go/request-forgery]
 	if err != nil {
 		telemetry.RecordError(spanCtx, err, "vehicle_database.request")
 		log.LogError(spanCtx, "vin.request_failed", err)

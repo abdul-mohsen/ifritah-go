@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -103,10 +104,15 @@ func (h *handler) searchByVinRawSkipCache(c *gin.Context) []byte {
 	baseurl := os.Getenv("VEHICLE_DATABASES")
 	europe := "/europe-vin-decode/"
 	global := "/vin-decode/"
-	var vin string = c.Param("vin")
 	ctx := c.Request.Context()
+	vin := strings.ToUpper(strings.TrimSpace(c.Param("vin")))
+	if !isValidVIN(vin) {
+		log.LogWarn(ctx, "vin.invalid")
+		return nil
+	}
+	escapedVIN := url.PathEscape(vin)
 
-	body, err := getBody(ctx, baseurl+global+vin)
+	body, err := getBody(ctx, baseurl+global+escapedVIN)
 	if err != nil {
 		log.LogError(ctx, "vin.global_lookup_failed", err)
 		return nil
@@ -116,7 +122,7 @@ func (h *handler) searchByVinRawSkipCache(c *gin.Context) []byte {
 		return body
 	}
 
-	body, err = getBody(ctx, baseurl+europe+vin)
+	body, err = getBody(ctx, baseurl+europe+escapedVIN)
 	if err != nil {
 		log.LogError(ctx, "vin.europe_lookup_failed", err)
 		return nil
@@ -137,9 +143,13 @@ func (h *handler) saveRequest(ctx context.Context, vin string, body []byte) {
 }
 
 func (h *handler) searchByVin(c *gin.Context) BaseModel {
-	body := h.searchByVinRaw(c)
+	vin := strings.ToUpper(strings.TrimSpace(c.Param("vin")))
+	if !isValidVIN(vin) {
+		log.LogWarn(c.Request.Context(), "vin.invalid")
+		return BaseModel{}
+	}
 
-	var vin string = strings.ToUpper(c.Param("vin"))
+	body := h.searchByVinRaw(c)
 
 	var response VehicleResponse
 
@@ -177,6 +187,19 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 
 	return model
 
+}
+
+func isValidVIN(value string) bool {
+	if len(value) != 17 {
+		return false
+	}
+	const allowed = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789"
+	for _, character := range value {
+		if !strings.ContainsRune(allowed, character) {
+			return false
+		}
+	}
+	return true
 }
 
 func getYear(c string) string {

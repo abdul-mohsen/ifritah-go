@@ -48,3 +48,25 @@ func TestVINUpstreamEventUsesRequestContextAndOmitsResponseBody(t *testing.T) {
 		t.Fatalf("VIN response body leaked into event: %s", output.String())
 	}
 }
+
+func TestIsValidVIN(t *testing.T) {
+	for _, value := range []string{
+		"1M8GDM9AXKP042788",
+		"jhmcm56557c404453",
+	} {
+		if !isValidVIN(strings.ToUpper(value)) {
+			t.Fatalf("isValidVIN(%q) = false", value)
+		}
+	}
+	for _, value := range []string{
+		"",
+		"1M8GDM9AXKP04278",
+		"1M8GDM9AXKP0427880",
+		"1M8GDM9AOKP042788",
+		"1M8GDM9A/KP042788",
+	} {
+		if isValidVIN(value) {
+			t.Fatalf("isValidVIN(%q) = true", value)
+		}
+	}
+}

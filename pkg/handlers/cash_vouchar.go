@@ -242,8 +242,7 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 		LIMIT ?
 	`
 
-	// NOSONAR: dataSQL contains fixed SQL fragments; request values stay bound in args.
-	rows, err := h.DB.Query(dataSQL, args...)
+	rows, err := h.DB.Query(dataSQL, args...) // NOSONAR: dataSQL contains fixed SQL fragments; request values stay bound in args.
 	if err != nil {
 		log.Printf("ERROR ListCashVouchers query: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "خطأ في قراءة البيانات"})

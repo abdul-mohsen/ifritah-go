@@ -84,8 +84,7 @@ func (h *handler) ListBranches(c *gin.Context) {
 	}
 	args = append(args, limit+1)
 
-	// NOSONAR: where contains only fixed SQL fragments; request values stay bound in args.
-	rows, err := h.DB.Query(`
+	query := `
 		SELECT b.id, b.name, COALESCE(b.address,''), COALESCE(b.city,''),
 		       COALESCE(b.phone,''), b.company_id, b.manager_id, b.is_active,
 		       b.created_at,
@@ -97,10 +96,11 @@ func (h *handler) ListBranches(c *gin.Context) {
 		       END) AS zatca_status
 		FROM branches b
 		LEFT JOIN branch_zatca_config bzc ON bzc.branch_id = b.id
-		`+where+`
+		` + where + `
 		ORDER BY b.id
 		LIMIT ?
-	`, args...)
+	`
+	rows, err := h.DB.Query(query, args...) // NOSONAR: where contains only fixed SQL fragments; request values stay bound in args.
 	if err != nil {
 		log.Printf("ERROR ListBranches: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to fetch branches"})

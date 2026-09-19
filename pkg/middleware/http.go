@@ -75,11 +75,11 @@ func RequestCompletion(config Config) gin.HandlerFunc {
 
 			switch {
 			case status >= http.StatusInternalServerError:
-				logger.LogAttrs(c.Request.Context(), slog.LevelError, "http.request.completed", attrs...) // lgtm [go/log-injection]
+				logger.LogAttrs(c.Request.Context(), slog.LevelError, "http.request.completed", attrs...) // lgtm[go/log-injection]
 			case status >= http.StatusBadRequest:
-				logger.LogAttrs(c.Request.Context(), slog.LevelWarn, "http.request.completed", attrs...) // lgtm [go/log-injection]
+				logger.LogAttrs(c.Request.Context(), slog.LevelWarn, "http.request.completed", attrs...) // lgtm[go/log-injection]
 			default:
-				logger.LogAttrs(c.Request.Context(), slog.LevelInfo, "http.request.completed", attrs...) // lgtm [go/log-injection]
+				logger.LogAttrs(c.Request.Context(), slog.LevelInfo, "http.request.completed", attrs...) // lgtm[go/log-injection]
 			}
 
 			if config.Metrics != nil {

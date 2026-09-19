@@ -18,9 +18,10 @@ import (
 	"database/sql"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
+	log "ifritah/web-service-gin/pkg/logging"
 	"ifritah/web-service-gin/pkg/model"
 	"ifritah/web-service-gin/pkg/pagination"
-	"log"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"os"
@@ -278,7 +279,8 @@ func (h *handler) AddBill(c *gin.Context) {
 			enforcement, int32(userSession.id),
 		)
 		if err != nil {
-			log.Printf("AddBill: %s", sanitizeForLog(err.Error()))
+			log.LogError(c.Request.Context(), "stock.sale_movements_failed", err,
+				slog.String("operation", "add_bill"))
 			// enforce mode: block if insufficient stock
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
@@ -293,8 +295,11 @@ func (h *handler) AddBill(c *gin.Context) {
 	}
 
 	if request.State > 0 {
-		if err := h.pub.SubmitBill(id, int64(request.BranchID)); err != nil {
-			log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
+		if err := h.pub.SubmitBillContext(c.Request.Context(), id, int64(request.BranchID)); err != nil {
+			log.LogError(c.Request.Context(), "zatca.publish_failed", err,
+				slog.String("document_type", "bill"),
+				slog.Int64("bill_id", id),
+				slog.Int64("branch_id", int64(request.BranchID)))
 		}
 	}
 
@@ -322,13 +327,15 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		PaidAmount:    decimal.NewFromInt(0),
 	}
 
-	log.Print(request)
-
 	if err := c.BindJSON(&request); err != nil {
 		log.Printf("SubmitDraftBill: %v", err)
 		c.Status(http.StatusBadRequest)
 		return
 	}
+	log.LogInfo(c.Request.Context(), "bill.draft_submitted",
+		slog.Int64("bill_id", int64(BillID)),
+		slog.Int("product_count", len(request.Products)+len(request.ManualProducts)),
+		slog.Int("state", int(request.State)))
 
 	userSession := GetSessionInfo(c)
 
@@ -419,7 +426,8 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 			enforcement, int32(userSession.id),
 		)
 		if err != nil {
-			log.Printf("SubmitDraftBill: %s", sanitizeForLog(err.Error()))
+			log.LogError(c.Request.Context(), "stock.sale_movements_failed", err,
+				slog.String("operation", "submit_draft_bill"))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"detail": err.Error(),
 				"type":   "stock_insufficient",
@@ -432,8 +440,11 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	}
 
 	if request.State > 0 {
-		if err := h.pub.SubmitBill(BillID, int64(request.BranchID)); err != nil {
-			log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
+		if err := h.pub.SubmitBillContext(c.Request.Context(), BillID, int64(request.BranchID)); err != nil {
+			log.LogError(c.Request.Context(), "zatca.publish_failed", err,
+				slog.String("document_type", "bill"),
+				slog.Int64("bill_id", int64(BillID)),
+				slog.Int64("branch_id", int64(request.BranchID)))
 		}
 	}
 

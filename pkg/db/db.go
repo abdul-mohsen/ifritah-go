@@ -3,8 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"log"
+	"ifritah/web-service-gin/pkg/logging"
 	"os"
 	"strconv"
 	"time"
@@ -15,7 +14,8 @@ import (
 func Connect() *sql.DB {
 	loc, err := time.LoadLocation(getEnv("DB_TIMEZONE", "Asia/Riyadh"))
 	if err != nil {
-		log.Fatalf("invalid DB_TIMEZONE: %v", err)
+		logging.LogError(context.Background(), "db.timezone_invalid", err)
+		os.Exit(1)
 	}
 
 	cfg := mysql.NewConfig()
@@ -39,10 +39,12 @@ func Connect() *sql.DB {
 		cfg.TLSConfig = "true"
 	}
 
-	db, err := sql.Open("mysql", cfg.FormatDSN())
+	connector, err := (mysql.MySQLDriver{}).OpenConnector(cfg.FormatDSN())
 	if err != nil {
-		log.Fatalf("sql.Open: %v", err)
+		logging.LogError(context.Background(), "db.open_failed", err)
+		os.Exit(1)
 	}
+	db := sql.OpenDB(newTracingConnector(connector))
 
 	// ── Pool tuning: keep these SHORTER than MySQL's wait_timeout ──
 	db.SetMaxOpenConns(getEnvInt("DB_MAX_OPEN_CONNS", 50))
@@ -54,9 +56,10 @@ func Connect() *sql.DB {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
-		log.Fatalf("db ping: %v", err)
+		logging.LogError(context.Background(), "db.ping_failed", err)
+		os.Exit(1)
 	}
-	fmt.Println("DB connected:", cfg.Addr, cfg.DBName)
+	logging.LogInfo(context.Background(), "db.connected")
 	return db
 }
 

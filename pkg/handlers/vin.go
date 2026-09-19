@@ -1,15 +1,21 @@
 package handlers
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	log "ifritah/web-service-gin/pkg/logging"
+	"ifritah/web-service-gin/pkg/telemetry"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -41,6 +47,31 @@ type BaseModel struct {
 	Year  string
 }
 
+var vinPattern = regexp.MustCompile(`^[A-HJ-NPR-Z0-9]{17}$`)
+
+const (
+	defaultVINRequestTimeout = 10 * time.Second
+	maxVINResponseBytes      = 2 * 1024 * 1024
+)
+
+var vinHTTPClient = &http.Client{Timeout: defaultVINRequestTimeout}
+
+type VINUpstreamStatusError struct {
+	StatusCode int
+}
+
+func (e *VINUpstreamStatusError) Error() string {
+	return fmt.Sprintf("vehicle database returned status %d", e.StatusCode)
+}
+
+type VINResponseTooLargeError struct {
+	Limit int
+}
+
+func (e *VINResponseTooLargeError) Error() string {
+	return fmt.Sprintf("vehicle database response exceeds %d bytes", e.Limit)
+}
+
 type CarModel struct {
 	Id           int    `json:"id"`
 	Name         string `json:"name"`
@@ -55,12 +86,13 @@ func (h *handler) GetCarInfoByVin(c *gin.Context) {
 
 func (h *handler) GetCarsByVin(c *gin.Context) {
 	model := h.searchByVin(c)
+	ctx := c.Request.Context()
 	query := `
 	select distinct linkageTargetId, vehicleModelSeriesName, m.manuName, linkageTargetType 
 	from manufacturers m 
 	join modelseries s on manuName like ? and m.manuId=s.manuId and model_name like ? and (? = '' or end_year is Null or end_year >= ?) and (? = '' or start_year is Null or start_year<= ?) 
 	join linkagetargets l on vehicleModelSeriesId = s.modelId and lang='en';`
-	rows, err := h.DB.Query(query, model.Make, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00")
+	rows, err := h.DB.QueryContext(ctx, query, model.Make, "%"+model.Model+"%", model.Year, model.Year+"12", model.Year, model.Year+"00")
 
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -83,9 +115,10 @@ func (h *handler) GetCarsByVin(c *gin.Context) {
 
 func (h *handler) searchByVinRaw(c *gin.Context) []byte {
 	var vin string = c.Param("vin")
+	ctx := c.Request.Context()
 
 	query := `select data from vin_cache where vin like ? limit 1`
-	row := h.DB.QueryRow(query, vin+"%")
+	row := h.DB.QueryRowContext(ctx, query, vin+"%")
 	var data string
 	err := row.Scan(&data)
 
@@ -99,48 +132,58 @@ func (h *handler) searchByVinRawSkipCache(c *gin.Context) []byte {
 	baseurl := os.Getenv("VEHICLE_DATABASES")
 	europe := "/europe-vin-decode/"
 	global := "/vin-decode/"
-	var vin string = c.Param("vin")
+	ctx := c.Request.Context()
+	vin := strings.ToUpper(strings.TrimSpace(c.Param("vin")))
+	if !isValidVIN(vin) {
+		log.LogWarn(ctx, "vin.invalid")
+		return nil
+	}
+	escapedVIN := url.PathEscape(vin)
 
-	body, err := getBody(baseurl + global + vin)
+	body, err := getBody(ctx, baseurl+global+escapedVIN)
 	if err != nil {
-		log.Printf("searchByVinRawSkipCache global: %v", err)
+		log.LogError(ctx, "vin.global_lookup_failed", err)
 		return nil
 	}
 	if body != nil {
-		h.saveRequest(vin, body)
+		h.saveRequest(ctx, vin, body)
 		return body
 	}
 
-	body, err = getBody(baseurl + europe + vin)
+	body, err = getBody(ctx, baseurl+europe+escapedVIN)
 	if err != nil {
-		log.Printf("searchByVinRawSkipCache europe: %v", err)
+		log.LogError(ctx, "vin.europe_lookup_failed", err)
 		return nil
 	}
 	if body != nil {
-		h.saveRequest(vin, body)
+		h.saveRequest(ctx, vin, body)
 		return body
 	}
 
 	return nil
 }
 
-func (h *handler) saveRequest(vin string, body []byte) {
+func (h *handler) saveRequest(ctx context.Context, vin string, body []byte) {
 	query := `INSERT INTO vin_cache (vin, data) values (?, ?)`
-	if _, err := h.DB.Exec(query, vin, string(body)); err != nil {
-		fmt.Println(err)
+	if _, err := h.DB.ExecContext(ctx, query, vin, string(body)); err != nil {
+		log.LogError(ctx, "vin.cache_write_failed", err)
 	}
 }
 
 func (h *handler) searchByVin(c *gin.Context) BaseModel {
+	vin := strings.ToUpper(strings.TrimSpace(c.Param("vin")))
+	if !isValidVIN(vin) {
+		log.LogWarn(c.Request.Context(), "vin.invalid")
+		return BaseModel{}
+	}
+
 	body := h.searchByVinRaw(c)
 
-	var vin string = strings.ToUpper(c.Param("vin"))
-
-	fmt.Println(getYear(vin))
 	var response VehicleResponse
 
 	if err := json.Unmarshal(body, &response); err != nil {
-		log.Printf("searchByVin unmarshal VehicleResponse: %v", err)
+		log.LogError(c.Request.Context(), "vin.response_decode_failed", err,
+			slog.String("response_variant", "global"))
 		return BaseModel{}
 	}
 
@@ -158,7 +201,8 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 	var europeVehicle EuropeVehicle
 
 	if err := json.Unmarshal(body, &europeVehicle); err != nil {
-		log.Printf("searchByVin unmarshal EuropeVehicle: %v", err)
+		log.LogError(c.Request.Context(), "vin.response_decode_failed", err,
+			slog.String("response_variant", "europe"))
 		return BaseModel{}
 	}
 
@@ -171,6 +215,10 @@ func (h *handler) searchByVin(c *gin.Context) BaseModel {
 
 	return model
 
+}
+
+func isValidVIN(value string) bool {
+	return vinPattern.MatchString(value)
 }
 
 func getYear(c string) string {
@@ -241,39 +289,79 @@ func getYear(c string) string {
 	}
 }
 
-func getBody(url string) ([]byte, error) {
+func getBody(ctx context.Context, url string) ([]byte, error) {
+	return getBodyWithTimeout(ctx, url, defaultVINRequestTimeout)
+}
 
+func getBodyWithTimeout(ctx context.Context, url string, timeout time.Duration) ([]byte, error) {
 	key := os.Getenv("VEHICLE_DATABASES_KEY")
 
-	req, err := http.NewRequest("GET", url, nil)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if timeout <= 0 {
+		timeout = defaultVINRequestTimeout
+	}
+	requestContext, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	spanCtx, span := telemetry.StartClientSpan(requestContext, "vehicle_database.lookup")
+	defer span.End()
+	telemetry.SetHTTPClientRequest(span, http.MethodGet, url)
+
+	req, err := http.NewRequestWithContext(spanCtx, http.MethodGet, url, nil)
 	if err != nil {
-		fmt.Println("Error creating request:", err)
+		telemetry.RecordError(spanCtx, err, "vehicle_database.request_create")
+		log.LogError(spanCtx, "vin.request_create_failed", err)
 		return nil, err
 	}
 
-	req.Header.Add("x-AuthKey", key)
+	req.Header.Set("x-AuthKey", key)
+	if requestID := log.RequestIDFromContext(spanCtx); log.ValidRequestID(requestID) {
+		req.Header.Set(log.RequestIDHeader, requestID)
+	}
+	telemetry.InjectHTTP(spanCtx, req.Header)
 
-	// Create an HTTP client and perform the request
-	client := &http.Client{}
+	// Use both a request context and client timeout so connection, headers,
+	// and response reads remain bounded.
+	client := vinHTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: defaultVINRequestTimeout}
+	}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error making GET request:", err)
+		telemetry.RecordError(spanCtx, err, "vehicle_database.request")
+		log.LogError(spanCtx, "vin.request_failed", err)
 		return nil, err
 	}
 	defer resp.Body.Close() // Ensure the response body is closed
 
-	// Check if the response status is OK
-	if resp.StatusCode != http.StatusOK {
-		fmt.Println("Error: received non-200 response status:", resp.Status)
-		return nil, err
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		upstreamErr := &VINUpstreamStatusError{StatusCode: resp.StatusCode}
+		telemetry.SetHTTPClientResponse(spanCtx, resp.StatusCode, 0)
+		telemetry.RecordError(spanCtx, upstreamErr, "vehicle_database.response_status")
+		log.LogWarn(spanCtx, "vin.upstream_unexpected_status",
+			slog.Int("status", resp.StatusCode))
+		return nil, upstreamErr
 	}
 
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxVINResponseBytes+1))
 	if err != nil {
-		fmt.Println("Error reading response body:", err)
+		telemetry.RecordError(spanCtx, err, "vehicle_database.response_read")
+		log.LogError(spanCtx, "vin.response_read_failed", err)
 		return nil, err
 	}
+	if len(body) > maxVINResponseBytes {
+		sizeErr := &VINResponseTooLargeError{Limit: maxVINResponseBytes}
+		telemetry.RecordError(spanCtx, sizeErr, "vehicle_database.response_size")
+		log.LogWarn(spanCtx, "vin.response_too_large",
+			slog.Int("limit_bytes", maxVINResponseBytes))
+		return nil, sizeErr
+	}
+	telemetry.SetHTTPClientResponse(spanCtx, resp.StatusCode, len(body))
+	log.LogInfo(spanCtx, "vin.upstream_response_received",
+		slog.Int("status", resp.StatusCode),
+		slog.Int("bytes", len(body)))
 
 	return body, nil
 }
@@ -281,7 +369,7 @@ func getBody(url string) ([]byte, error) {
 func (h *handler) GetAllCachedVin(c *gin.Context) {
 	query := `select vin from vin_cache`
 	var vins []string
-	rows, err := h.DB.Query(query)
+	rows, err := h.DB.QueryContext(c.Request.Context(), query)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
@@ -323,12 +411,12 @@ func (h *handler) GetPartByVinDetails(c *gin.Context) {
 		return
 	}
 	model := h.searchByVin(c)
-	parts := h.getPartDetailsByVinQuery(model, request.Query, request.PageSize, request.Page)
+	parts := h.getPartDetailsByVinQuery(c.Request.Context(), model, request.Query, request.PageSize, request.Page)
 	c.JSON(http.StatusOK, parts)
 
 }
 
-func (h *handler) getPartDetailsByVinQuery(model BaseModel, q string, page, pageSize int) []Part {
+func (h *handler) getPartDetailsByVinQuery(ctx context.Context, model BaseModel, q string, page, pageSize int) []Part {
 
 	query := `
 	select distinct a.legacyArticleId, o.number, a.genericArticleDescription, al.url as link, p.url 
@@ -341,9 +429,9 @@ func (h *handler) getPartDetailsByVinQuery(model BaseModel, q string, page, page
 	limit ? offset ?
 	`
 	q = strings.ReplaceAll(strings.ReplaceAll(q, "-", ""), " ", "")
-	rows, err := h.DB.Query(query, model.Model, model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, q, q+"%", pageSize, page)
+	rows, err := h.DB.QueryContext(ctx, query, model.Model, model.Year, model.Year+"12", model.Year, model.Year+"00", model.Make, q, q+"%", pageSize, page)
 	if err != nil {
-		log.Printf("getPartDetailsByVinQuery: %v", err)
+		log.LogError(ctx, "vin.part_details_query_failed", err)
 		return nil
 	}
 
@@ -353,7 +441,7 @@ func (h *handler) getPartDetailsByVinQuery(model BaseModel, q string, page, page
 		var part Part
 		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type, &part.Link, &part.Url)
 		if err != nil {
-			log.Printf("getPartDetailsByVinQuery scan: %v", err)
+			log.LogError(ctx, "vin.part_details_scan_failed", err)
 			return nil
 		}
 
@@ -376,12 +464,12 @@ func (h *handler) GetPartByVin(c *gin.Context) {
 		return
 	}
 	model := h.searchByVin(c)
-	parts := h.getPartByVinQuery(model, request.Query, request.PageSize, request.Page)
+	parts := h.getPartByVinQuery(c.Request.Context(), model, request.Query, request.PageSize, request.Page)
 	c.JSON(http.StatusOK, parts)
 
 }
 
-func (h *handler) getPartByVinQuery(model BaseModel, q string, pageSize, page int) []Part {
+func (h *handler) getPartByVinQuery(ctx context.Context, model BaseModel, q string, pageSize, page int) []Part {
 
 	year, _ := strconv.Atoi(model.Year)
 	query := `
@@ -395,9 +483,9 @@ func (h *handler) getPartByVinQuery(model BaseModel, q string, pageSize, page in
 	limit ? offset ?
 	`
 	q = strings.ReplaceAll(strings.ReplaceAll(q, "-", ""), " ", "")
-	rows, err := h.DB.Query(query, "+"+model.Model, year, year, year, year, q+"*", "*"+model.Make+"*", pageSize, page)
+	rows, err := h.DB.QueryContext(ctx, query, "+"+model.Model, year, year, year, year, q+"*", "*"+model.Make+"*", pageSize, page)
 	if err != nil {
-		log.Printf("getPartByVinQuery: %v", err)
+		log.LogError(ctx, "vin.part_query_failed", err)
 		return nil
 	}
 
@@ -407,7 +495,7 @@ func (h *handler) getPartByVinQuery(model BaseModel, q string, pageSize, page in
 		var part Part
 		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type)
 		if err != nil {
-			log.Printf("getPartByVinQuery scan: %v", err)
+			log.LogError(ctx, "vin.part_scan_failed", err)
 			return nil
 		}
 
@@ -520,7 +608,7 @@ type EuropeVehicle struct {
 
 func (h *handler) DownloadAllVinPartCSV(c *gin.Context) {
 	model := h.searchByVin(c)
-	parts := h.getAllPartByVinQuery(model)
+	parts := h.getAllPartByVinQuery(c.Request.Context(), model)
 	c.Writer.Header().Set("Content-Type", "text/csv")
 	c.Writer.Header().Set("Content-Disposition", "attachment;filename=example.csv")
 
@@ -528,7 +616,7 @@ func (h *handler) DownloadAllVinPartCSV(c *gin.Context) {
 	defer writer.Flush()
 
 	if err := writer.Write([]string{"legacyArticleId", "number", "type"}); err != nil {
-		log.Printf("DownloadAllVinPartCSV: %v", err)
+		log.LogError(c.Request.Context(), "vin.csv_header_write_failed", err)
 		c.String(http.StatusInternalServerError, "Error writing CSV header")
 		return
 	}
@@ -536,7 +624,7 @@ func (h *handler) DownloadAllVinPartCSV(c *gin.Context) {
 	for _, item := range parts {
 		row := []string{strconv.Itoa(*item.Id), item.OemNumber, *item.Type}
 		if err := writer.Write(row); err != nil {
-			log.Printf("DownloadAllVinPartCSV: %v", err)
+			log.LogError(c.Request.Context(), "vin.csv_row_write_failed", err)
 			c.String(http.StatusInternalServerError, "Error writing CSV data")
 			return
 		}
@@ -545,7 +633,7 @@ func (h *handler) DownloadAllVinPartCSV(c *gin.Context) {
 	c.JSON(http.StatusOK, parts)
 }
 
-func (h *handler) getAllPartByVinQuery(model BaseModel) []Part {
+func (h *handler) getAllPartByVinQuery(ctx context.Context, model BaseModel) []Part {
 
 	year, _ := strconv.Atoi(model.Year)
 	query := `
@@ -557,9 +645,9 @@ func (h *handler) getAllPartByVinQuery(model BaseModel) []Part {
 	join oem_number o on o.articleId = a.legacyArticleId
 	where match(manuName) against(?)
 	`
-	rows, err := h.DB.Query(query, "+"+model.Model, year, year, year, year, model.Make)
+	rows, err := h.DB.QueryContext(ctx, query, "+"+model.Model, year, year, year, year, model.Make)
 	if err != nil {
-		log.Printf("getAllPartByVinQuery: %v", err)
+		log.LogError(ctx, "vin.all_parts_query_failed", err)
 		return nil
 	}
 
@@ -569,7 +657,7 @@ func (h *handler) getAllPartByVinQuery(model BaseModel) []Part {
 		var part Part
 		err = rows.Scan(&part.Id, &part.OemNumber, &part.Type)
 		if err != nil {
-			log.Printf("getAllPartByVinQuery scan: %v", err)
+			log.LogError(ctx, "vin.all_parts_scan_failed", err)
 			return nil
 		}
 

@@ -1,8 +1,8 @@
 package handlers
 
 import (
+	log "ifritah/web-service-gin/pkg/logging"
 	"ifritah/web-service-gin/pkg/pagination"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"

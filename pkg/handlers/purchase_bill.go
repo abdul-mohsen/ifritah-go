@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
+	log "ifritah/web-service-gin/pkg/logging"
 	"ifritah/web-service-gin/pkg/model"
 	"ifritah/web-service-gin/pkg/pagination"
-	"log"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -169,7 +170,8 @@ func finalizePurchaseBill(h *handler, c *gin.Context, setup *purchaseBillSetup, 
 	request model.AddPurchaseBillRequest, enforcement, operation string) bool {
 	if err := addProductToBillPurchase(h, setup.qtx, c, purchaseBillProducts(&request), id, request.StoreId,
 		enforcement != model.StockEnforcementDisable && request.State > 0); err != nil {
-		log.Printf("%s: %s", operation, sanitizeForLog(err.Error()))
+		log.LogError(c.Request.Context(), "stock.purchase_movements_failed", err,
+			slog.String("operation", operation))
 		c.Status(http.StatusBadRequest)
 		return false
 	}
@@ -272,7 +274,9 @@ func (h *handler) CheckPurchaseBillDuplicate(c *gin.Context) {
 		}
 
 		log.Printf("CheckPurchaseBillDuplicate: %v", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "unable to verify duplicate purchase bill",
+		})
 		return
 	}
 

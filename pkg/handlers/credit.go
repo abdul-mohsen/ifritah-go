@@ -13,8 +13,9 @@ package handlers
 
 import (
 	db "ifritah/web-service-gin/pkg/db/gen"
+	log "ifritah/web-service-gin/pkg/logging"
 	"ifritah/web-service-gin/pkg/model"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -86,9 +87,14 @@ func (h *handler) CreditBill(c *gin.Context) {
 
 	branchID, err := qtx.GetBranchByBillID(c.Request.Context(), request.BillId)
 	if err != nil {
-		log.Printf("GetBranchByBillID failed for credit note %d: %s", CreditNoteID, sanitizeForLog(err.Error()))
-	} else if err := h.pub.SubmitCredit(CreditNoteID, int64(branchID)); err != nil {
-		log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
+		log.LogError(c.Request.Context(), "zatca.branch_lookup_failed", err,
+			slog.String("document_type", "credit"),
+			slog.Int64("credit_note_id", int64(CreditNoteID)))
+	} else if err := h.pub.SubmitCreditContext(c.Request.Context(), CreditNoteID, int64(branchID)); err != nil {
+		log.LogError(c.Request.Context(), "zatca.publish_failed", err,
+			slog.String("document_type", "credit"),
+			slog.Int64("credit_note_id", int64(CreditNoteID)),
+			slog.Int64("branch_id", int64(branchID)))
 	}
 
 	if err := tx.Commit(); err != nil {

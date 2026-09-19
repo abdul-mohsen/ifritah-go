@@ -32,8 +32,8 @@ package handlers
 import (
 	"database/sql"
 	db "ifritah/web-service-gin/pkg/db/gen"
+	log "ifritah/web-service-gin/pkg/logging"
 	"ifritah/web-service-gin/pkg/model"
-	"log"
 	"net/http"
 	"strings"
 

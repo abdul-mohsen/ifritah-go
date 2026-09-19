@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -116,6 +117,25 @@ func TestCheckPurchaseBillDuplicate(t *testing.T) {
 			assertMockExpectations(t, mock)
 		})
 	}
+}
+
+func TestCheckPurchaseBillDuplicateDatabaseErrorIsExplicit(t *testing.T) {
+	h, mock, cleanup := newPurchaseBillTestHandler(t)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta(duplicatePurchaseBillQuery)).
+		WithArgs(int32(7), int32(123), sqlmock.AnyArg()).
+		WillReturnError(errors.New("database unavailable"))
+
+	w := runPurchaseBillRequest(t, h.CheckPurchaseBillDuplicate, http.MethodPost, "/api/v2/purchase_bill/duplicate-check", `{"supplier_id":123,"supplier_sequence_number":456}`)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusInternalServerError, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "unable to verify duplicate purchase bill") {
+		t.Fatalf("expected explicit duplicate-check error, body=%s", w.Body.String())
+	}
+	assertMockExpectations(t, mock)
 }
 
 func TestAddPurchaseBillDuplicateConflictStillReturnsConflict(t *testing.T) {

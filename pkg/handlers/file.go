@@ -45,8 +45,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	log "ifritah/web-service-gin/pkg/logging"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -234,7 +234,11 @@ func (h *handler) UploadFile(c *gin.Context) {
 	}
 
 	// Save file to disk
-	dstPath := filepath.Join(FilesUploadDir, fileKey)
+	dstPath, err := resolveUploadPath(fileKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "معرف الملف الناتج غير صالح"})
+		return
+	}
 	dst, err := os.Create(dstPath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "فشل في حفظ الملف"})

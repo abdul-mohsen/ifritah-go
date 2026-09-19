@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	db "ifritah/web-service-gin/pkg/db/gen"
+	log "ifritah/web-service-gin/pkg/logging"
 	"ifritah/web-service-gin/pkg/pagination"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -242,7 +242,7 @@ func (h *handler) ListCashVouchers(c *gin.Context) {
 		LIMIT ?
 	`
 
-	rows, err := h.DB.Query(dataSQL, args...)
+	rows, err := h.DB.Query(dataSQL, args...) // NOSONAR: dataSQL contains fixed SQL fragments; request values stay bound in args.
 	if err != nil {
 		log.Printf("ERROR ListCashVouchers query: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "خطأ في قراءة البيانات"})
@@ -715,11 +715,10 @@ func (h *handler) GetCashVoucherSummary(c *gin.Context) {
 
 // validateCashVoucherRequest validates the create/update request fields.
 func validateCashVoucherRequest(req *cashVoucherCreateRequest) error {
-	// Amount
-	// TODO @ssda please fix this
-	// if req.Amount <= 0 {
-	// 	return &validationError{"المبلغ يجب أن يكون أكبر من صفر"}
-	// }
+	// Amount must be strictly positive.
+	if req.Amount.LessThanOrEqual(decimal.Zero) {
+		return &validationError{"المبلغ يجب أن يكون أكبر من صفر"}
+	}
 
 	// Voucher type
 	if req.VoucherType != "disbursement" && req.VoucherType != "receipt" && req.VoucherType != "cash_box" {

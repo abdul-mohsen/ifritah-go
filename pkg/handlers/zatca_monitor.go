@@ -15,7 +15,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
-	"log"
+	log "ifritah/web-service-gin/pkg/logging"
 	"net/http"
 	"strconv"
 	"time"

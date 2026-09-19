@@ -3,7 +3,7 @@ package handlers
 import (
 	"errors"
 	"fmt"
-	"log"
+	log "ifritah/web-service-gin/pkg/logging"
 	"net/http"
 	"slices"
 	"strconv"

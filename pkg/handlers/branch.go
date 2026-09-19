@@ -2,8 +2,9 @@ package handlers
 
 import (
 	db "ifritah/web-service-gin/pkg/db/gen"
+	log "ifritah/web-service-gin/pkg/logging"
 	"ifritah/web-service-gin/pkg/pagination"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -444,7 +445,9 @@ func (h *handler) OnboardBranchZatca(c *gin.Context) {
 		return
 	}
 
-	if err := h.pub.OnboadBranch(int64(branchID), req.OTP); err != nil {
+	if err := h.pub.OnboadBranchContext(c.Request.Context(), int64(branchID), req.OTP); err != nil {
+		log.LogError(c.Request.Context(), "zatca.onboarding_publish_failed", err,
+			slog.Int64("branch_id", int64(branchID)))
 		c.Status(http.StatusInternalServerError)
 		return
 	}

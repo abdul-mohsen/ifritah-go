@@ -2,8 +2,9 @@ package handlers
 
 import (
 	db "ifritah/web-service-gin/pkg/db/gen"
-	"log"
+	log "ifritah/web-service-gin/pkg/logging"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -44,6 +45,7 @@ func (h *handler) getUserCompany(c *gin.Context) int {
 		log.Printf("ERROR CreateBranch: could not get user company: %v", err)
 		return 0
 	}
+	c.Request = c.Request.WithContext(log.WithCompanyID(c.Request.Context(), strconv.Itoa(companyID)))
 	return companyID
 
 }

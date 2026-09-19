@@ -1,50 +1,100 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"ifritah/web-service-gin/pkg/buildinfo"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/handlers"
+	"ifritah/web-service-gin/pkg/logging"
+	"ifritah/web-service-gin/pkg/metrics"
+	"ifritah/web-service-gin/pkg/middleware"
+	"ifritah/web-service-gin/pkg/telemetry"
 
-	"log"
+	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-contrib/cache"
 	"github.com/gin-contrib/cache/persistence"
-
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func main() {
-
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	// .env is optional — production reads env from the container/runtime.
-	if err := godotenv.Load(); err != nil {
-		log.Printf("no .env file loaded (this is fine in production): %v", err)
+	if err := run(); err != nil {
+		logging.LogError(context.Background(), "server.run_failed", err)
+		os.Exit(1)
 	}
+}
+
+func run() error {
+	// .env is optional — production reads env from the container/runtime.
+	envErr := godotenv.Load()
+	logger := logging.NewFromEnv(os.Stderr)
+	slog.SetDefault(logger)
+	if envErr != nil && !os.IsNotExist(envErr) {
+		logging.LogWarn(context.Background(), "config.dotenv_load_failed", logging.ErrorAttr(envErr))
+	}
+
+	telemetryRuntime := telemetry.Setup(context.Background(), logger)
+	telemetryRuntime.InstallGlobal()
+	defer func() {
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := telemetryRuntime.Shutdown(shutdownContext); err != nil {
+			logging.LogWarn(context.Background(), "telemetry.shutdown_failed", logging.ErrorAttr(err))
+		}
+	}()
+
+	_, databaseSpan := telemetry.StartClientSpan(context.Background(), "mysql.connect")
 	DB := db.Connect()
+	databaseSpan.End()
+	defer DB.Close()
 	queries := db.New(DB)
 
 	pub, err := handlers.NewZATCAPublisher()
 	if err != nil {
-		log.Fatal(err)
+		logging.LogError(context.Background(), "zatca.publisher_init_failed", err)
+		return err
 	}
 	defer pub.Close()
 
 	handlers.EnvSetup()
 	h := handlers.New(DB, queries, pub)
 
-	router := gin.Default()
+	httpMetrics, err := metrics.NewHTTP(prometheus.DefaultRegisterer)
+	if err != nil {
+		logging.LogError(context.Background(), "metrics.register_failed", err)
+		return err
+	}
+
+	router := gin.New()
+	router.Use(telemetryRuntime.Middleware())
+	router.Use(middleware.RequestLogging(middleware.Config{
+		Logger:        logger,
+		ServerContext: logging.ServerContextFromEnv(),
+		Metrics:       httpMetrics,
+	}))
+	// Recovery runs inside the request logger so recovered panics are recorded
+	// with the final 500 response status without emitting panic text or stacks.
+	router.Use(middleware.Recovery(logger))
 	store := persistence.NewInMemoryStore(time.Second)
-	// Recovery middleware recovers from any panics and writes a 500 if there was one.
-	router.Use(gin.Recovery())
 
 	// Liveness probe used by Docker HEALTHCHECK and ops tooling.
 	router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 	router.GET("/version", gin.WrapF(buildinfo.Handler()))
+	router.GET("/metrics", gin.WrapH(metrics.ProtectedHandler(
+		httpMetrics.Handler(),
+		os.Getenv("METRICS_TOKEN"),
+	)))
 
 	authorized := router.Group(os.Getenv("BASEURL"))
 	authorized.Use(handlers.JWTVerifyMiddleware)
@@ -217,9 +267,49 @@ func main() {
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
-		log.Fatal("SERVER_PORT env var is required")
+		logging.LogError(context.Background(), "config.server_port_missing", nil)
+		return errors.New("SERVER_PORT is required")
 	}
 	// Bind on all interfaces so the container's mapped port works.
-	router.Run(":" + port)
-	DB.Close()
+	server := &http.Server{
+		Addr:    ":" + port,
+		Handler: router,
+	}
+	if err := serveHTTP(server); err != nil {
+		logging.LogError(context.Background(), "server.run_failed", err)
+		return err
+	}
+	return nil
+}
+
+func serveHTTP(server *http.Server) error {
+	if server == nil {
+		return errors.New("HTTP server is nil")
+	}
+
+	serverErrors := make(chan error, 1)
+	go func() {
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signals)
+
+	select {
+	case err := <-serverErrors:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return fmt.Errorf("listen and serve: %w", err)
+	case received := <-signals:
+		logging.LogInfo(context.Background(), "server.shutdown_started",
+			slog.String("signal", received.String()))
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownContext); err != nil {
+			return fmt.Errorf("HTTP shutdown: %w", err)
+		}
+		return nil
+	}
 }

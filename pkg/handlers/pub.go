@@ -1,14 +1,23 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"ifritah/web-service-gin/pkg/logging"
+	"ifritah/web-service-gin/pkg/telemetry"
+	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
+)
+
+const (
+	defaultNATSPublishTimeout = 5 * time.Second
+	maxNATSPublishTimeout     = time.Minute
 )
 
 type Message struct {
@@ -20,10 +29,15 @@ type Message struct {
 }
 
 type ZatcaPublisher struct {
-	js     nats.JetStreamContext
-	nc     *nats.Conn
-	dbName string
-	once   sync.Once
+	js             jetStreamPublisher
+	nc             *nats.Conn
+	dbName         string
+	publishTimeout time.Duration
+	once           sync.Once
+}
+
+type jetStreamPublisher interface {
+	Publish(subject string, data []byte, options ...nats.PubOpt) (*nats.PubAck, error)
 }
 
 func NewZATCAPublisher() (*ZatcaPublisher, error) {
@@ -41,14 +55,15 @@ func NewZATCAPublisher() (*ZatcaPublisher, error) {
 		nats.Timeout(5*time.Second),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 			if err != nil {
-				log.Printf("[zatca-publisher] nats disconnected: %v", err)
+				logging.LogError(context.Background(), "nats.disconnected", err)
 			}
 		}),
 		nats.ReconnectHandler(func(nc *nats.Conn) {
-			log.Printf("[zatca-publisher] NATS reconnected to %s", nc.ConnectedUrl())
+			logging.LogInfo(context.Background(), "nats.reconnected",
+				slog.Bool("connected", nc.IsConnected()))
 		}),
 		nats.ClosedHandler(func(_ *nats.Conn) {
-			log.Printf("[zatca-publisher] NATS  connection closed")
+			logging.LogInfo(context.Background(), "nats.closed")
 		}),
 	)
 	if err != nil {
@@ -60,7 +75,12 @@ func NewZATCAPublisher() (*ZatcaPublisher, error) {
 		return nil, fmt.Errorf("jetstream: %w", err)
 	}
 
-	return &ZatcaPublisher{js: js, nc: nc, dbName: dbName}, nil
+	return &ZatcaPublisher{
+		js:             js,
+		nc:             nc,
+		dbName:         dbName,
+		publishTimeout: publishTimeoutFromEnv(),
+	}, nil
 
 }
 
@@ -69,36 +89,87 @@ func (p *ZatcaPublisher) Close() {
 }
 
 func (p *ZatcaPublisher) SubmitBill(billID, branchID int64) error {
-	return p.publish(Message{DocType: "bill", ID: billID, BranchID: branchID, DBName: p.dbName})
+	return p.SubmitBillContext(context.Background(), billID, branchID)
+}
+
+func (p *ZatcaPublisher) SubmitBillContext(ctx context.Context, billID, branchID int64) error {
+	return p.publish(ctx, Message{DocType: "bill", ID: billID, BranchID: branchID, DBName: p.dbName})
 }
 
 func (p *ZatcaPublisher) SubmitCredit(creditNotID, branchID int64) error {
-	return p.publish(Message{DocType: "credit", ID: creditNotID, BranchID: branchID, DBName: p.dbName})
+	return p.SubmitCreditContext(context.Background(), creditNotID, branchID)
+}
+
+func (p *ZatcaPublisher) SubmitCreditContext(ctx context.Context, creditNotID, branchID int64) error {
+	return p.publish(ctx, Message{DocType: "credit", ID: creditNotID, BranchID: branchID, DBName: p.dbName})
 }
 
 func (p *ZatcaPublisher) SubmitDebit(debitNoteID, branchID int64) error {
-	return p.publish(Message{DocType: "debit", ID: debitNoteID, BranchID: branchID, DBName: p.dbName})
+	return p.SubmitDebitContext(context.Background(), debitNoteID, branchID)
+}
+
+func (p *ZatcaPublisher) SubmitDebitContext(ctx context.Context, debitNoteID, branchID int64) error {
+	return p.publish(ctx, Message{DocType: "debit", ID: debitNoteID, BranchID: branchID, DBName: p.dbName})
 }
 
 func (p *ZatcaPublisher) OnboadBranch(branchID int64, otp string) error {
-	return p.publish(Message{DocType: "onboard", ID: branchID, BranchID: branchID, DBName: p.dbName, OTP: otp})
+	return p.OnboadBranchContext(context.Background(), branchID, otp)
 }
 
-func (p *ZatcaPublisher) publish(msg Message) error {
+func (p *ZatcaPublisher) OnboadBranchContext(ctx context.Context, branchID int64, otp string) error {
+	return p.publish(ctx, Message{DocType: "onboard", ID: branchID, BranchID: branchID, DBName: p.dbName, OTP: otp})
+}
+
+func (p *ZatcaPublisher) publish(ctx context.Context, msg Message) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
 	subject := fmt.Sprintf("zatca.%s.%s.%d", msg.DocType, msg.DBName, msg.BranchID)
-	ack, err := p.js.Publish(subject, data)
+	spanContext, span := telemetry.StartProducerSpan(ctx, "nats.publish")
+	defer span.End()
+	telemetry.SetMessagingAttributes(spanContext, "nats", "publish", msg.DocType)
+
+	publishContext, cancel := boundedPublishContext(spanContext, p.publishTimeout)
+	defer cancel()
+
+	ack, err := p.js.Publish(subject, data, nats.Context(publishContext))
 	if err != nil {
-		return fmt.Errorf("publish to %s: %w", subject, err)
+		telemetry.RecordError(publishContext, err, "nats.publish")
+		return fmt.Errorf("nats publish: %w", err)
 	}
-	log.Print(ack)
-	log.Print(sanitizeForLog(subject))
-	log.Print(msg)
+	logPublished(spanContext, msg, ack != nil)
 	return nil
+}
+
+func boundedPublishContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if timeout <= 0 || timeout > maxNATSPublishTimeout {
+		timeout = defaultNATSPublishTimeout
+	}
+	return context.WithTimeout(parent, timeout)
+}
+
+func publishTimeoutFromEnv() time.Duration {
+	value := strings.TrimSpace(os.Getenv("NATS_PUBLISH_TIMEOUT"))
+	if value == "" {
+		return defaultNATSPublishTimeout
+	}
+	timeout, err := time.ParseDuration(value)
+	if err != nil || timeout <= 0 || timeout > maxNATSPublishTimeout {
+		return defaultNATSPublishTimeout
+	}
+	return timeout
+}
+
+func logPublished(ctx context.Context, msg Message, acknowledged bool) {
+	logging.LogInfo(ctx, "zatca.message_published",
+		slog.String("document_type", msg.DocType),
+		slog.Int64("branch_id", msg.BranchID),
+		slog.Bool("acknowledged", acknowledged))
 }
 
 func env(key, fallback string) string {

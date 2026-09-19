@@ -7,8 +7,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
+	log "ifritah/web-service-gin/pkg/logging"
 	"ifritah/web-service-gin/pkg/model"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -173,6 +174,7 @@ func JWTVerifyMiddleware(c *gin.Context) {
 	c.Set("userId", claims.Id) // back-compat for handlers using GetInt64("userId")
 	c.Set("username", claims.Username)
 	c.Set("user_role", claims.Role)
+	c.Request = c.Request.WithContext(log.WithTrustedUserID(c.Request.Context(), claims.Id))
 
 	c.Next()
 }
@@ -474,9 +476,9 @@ func (h *handler) ForgotPassword(c *gin.Context) {
 		log.Printf("ForgotPassword: insert reset token: %v", err)
 	}
 
-	// TODO: Send email with reset link containing the raw resetToken
-	// For now, log it (remove in production)
-	fmt.Printf("[FORGOT-PASSWORD] Reset token for user %d: %s\n", userID, resetToken)
+	log.LogInfo(c.Request.Context(), "auth.password_reset_requested",
+		slog.Int64("user_id", int64(userID)),
+		slog.String("delivery", "not_configured"))
 
 	c.JSON(http.StatusOK, gin.H{"detail": "if the email exists, a reset link has been sent"})
 }

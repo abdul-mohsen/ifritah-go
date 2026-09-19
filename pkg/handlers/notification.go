@@ -3,7 +3,7 @@ package handlers
 import (
 	"database/sql"
 	db "ifritah/web-service-gin/pkg/db/gen"
-	"log"
+	log "ifritah/web-service-gin/pkg/logging"
 	"net/http"
 	"strconv"
 

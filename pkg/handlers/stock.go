@@ -21,9 +21,9 @@ package handlers
 // ============================================================================
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
+	log "ifritah/web-service-gin/pkg/logging"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -64,9 +64,13 @@ func insertStockMovement(tx *db.Queries, c *gin.Context, productID uint64, store
 		CreatedBy:     createdBy,
 		CreatedAt:     createdAt,
 	}
-	data, _ := json.Marshal(args)
-	log.Println(string(data))
 	_, err := tx.InsertStockMovement(c.Request.Context(), args)
+	if err == nil {
+		log.LogInfo(c.Request.Context(), "stock.movement_recorded",
+			slog.Uint64("product_id", productID),
+			slog.Int("store_id", int(storeID)),
+			slog.String("movement_type", movementType))
+	}
 	return err
 }
 

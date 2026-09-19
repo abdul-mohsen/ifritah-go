@@ -41,8 +41,10 @@ jobs:
       - name: Compute branch tag
         id: branch_tag
         shell: bash
+        env:
+          PR_BRANCH_NAME: ${{ github.head_ref }}
         run: |
-          raw="${{ github.head_ref }}"
+          raw="${PR_BRANCH_NAME}"
           # Replace '/' with '-'; strip leading/trailing hyphens; lowercase
           tag="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g' | sed 's/^-//;s/-$//')"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"

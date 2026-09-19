@@ -84,6 +84,7 @@ func (h *handler) ListBranches(c *gin.Context) {
 	}
 	args = append(args, limit+1)
 
+	// NOSONAR: where contains only fixed SQL fragments; request values stay bound in args.
 	rows, err := h.DB.Query(`
 		SELECT b.id, b.name, COALESCE(b.address,''), COALESCE(b.city,''),
 		       COALESCE(b.phone,''), b.company_id, b.manager_id, b.is_active,

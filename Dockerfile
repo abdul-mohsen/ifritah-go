@@ -36,7 +36,7 @@ RUN go mod download
 # generation step into the image so the build does not depend on local
 # state — pkg/db/gen is .dockerignore'd because it is .gitignore'd, so
 # without this step CI fails with "package .../pkg/db/gen is not in std".
-RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.27.0
+# sqlc is a locked tool dependency in go.mod/go.sum.
 
 # Copy only the inputs needed to build the binary. Avoids a recursive
 # `COPY . .` which can leak local state into the image (Sonar docker:S6470).
@@ -45,7 +45,7 @@ COPY pkg ./pkg
 COPY fonts ./fonts
 COPY sqlc.yaml ./
 COPY VERSION ./VERSION
-RUN sqlc generate
+RUN go tool sqlc generate
 RUN set -eu; \
     test -n "$APP_VERSION"; \
     test "$APP_VERSION" != "v0.0.0"; \

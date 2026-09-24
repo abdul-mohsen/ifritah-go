@@ -19,6 +19,13 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const (
+	purchaseBillPDFRequiredCode         = "PURCHASE_BILL_PDF_REQUIRED"
+	purchaseBillPDFSettingErrorCode     = "PURCHASE_BILL_PDF_SETTING_UNAVAILABLE"
+	purchaseBillPDFRequiredSettingValue = "required"
+	purchaseBillPDFSettingKey           = "pb_pdf_required"
+)
+
 func (h *handler) getPurchaseBills(c *gin.Context, args db.GetAllPurchaseBillParams) ([]db.PurchaseBill, error) {
 	return h.queries.GetAllPurchaseBill(c.Request.Context(), args)
 }
@@ -153,6 +160,41 @@ func (h *handler) savePurchaseBillAttachments(id uint64, request model.AddPurcha
 	}
 }
 
+// validatePurchaseBillPDFRequirement is the authoritative PDF requirement
+// check for purchase-bill creation. The frontend setting is only advisory:
+// this check must use the persisted backend value immediately before insert.
+func (h *handler) validatePurchaseBillPDFRequirement(c *gin.Context, request model.AddPurchaseBillRequest) bool {
+	raw, err := h.queries.GetSettingValue(c.Request.Context(), purchaseBillPDFSettingKey)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		log.Printf("validatePurchaseBillPDFRequirement: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":   purchaseBillPDFSettingErrorCode,
+			"detail": "تعذر التحقق من إعداد ملف فاتورة الشراء",
+			"field":  "pdf_link",
+		})
+		return false
+	}
+
+	// A missing, blank, or unknown setting fails closed. The documented
+	// default is required, so a settings read must never silently weaken it.
+	setting := strings.ToLower(strings.TrimSpace(raw))
+	required := setting == "" || setting == purchaseBillPDFRequiredSettingValue
+	if !required {
+		return true
+	}
+
+	if request.PDFLink != nil && strings.TrimSpace(*request.PDFLink) != "" {
+		return true
+	}
+
+	c.JSON(http.StatusBadRequest, gin.H{
+		"code":   purchaseBillPDFRequiredCode,
+		"detail": "يرجى رفع ملف فاتورة الشراء (PDF)",
+		"field":  "pdf_link",
+	})
+	return false
+}
+
 func recordPurchaseBillStockMovements(qtx *db.Queries, c *gin.Context, id uint64,
 	request model.AddPurchaseBillRequest, enforcement string, userID int32) error {
 	if enforcement == model.StockEnforcementDisable || request.State <= 0 {
@@ -230,6 +272,9 @@ func (h *handler) AddPurchaseBill(c *gin.Context) {
 	}
 	request := setup.request
 	defer setup.tx.Rollback()
+	if !h.validatePurchaseBillPDFRequirement(c, request) {
+		return
+	}
 	enforcement := h.getStockEnforcementMode(c)
 
 	res, err := setup.qtx.AddPurchaseBill(c.Request.Context(), addPurchaseBillParams(request, setup))

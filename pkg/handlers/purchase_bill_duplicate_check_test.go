@@ -26,6 +26,11 @@ WHERE b.supplier_id = ?
   AND b.supplier_sequence_number = ?
 LIMIT 1`
 
+const purchaseBillSettingQuery = `SELECT COALESCE(value, '') AS value
+FROM settings
+WHERE setting_key = ?
+LIMIT 1`
+
 func newPurchaseBillTestHandler(t *testing.T) (*handler, sqlmock.Sqlmock, func()) {
 	t.Helper()
 
@@ -146,6 +151,9 @@ func TestAddPurchaseBillDuplicateConflictStillReturnsConflict(t *testing.T) {
 		WithArgs(int64(7)).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int32(1)))
 	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(purchaseBillSettingQuery)).
+		WithArgs("pb_pdf_required").
+		WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow("disabled"))
 	mock.ExpectExec("insert into purchase_bill").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry"})
@@ -156,6 +164,119 @@ func TestAddPurchaseBillDuplicateConflictStillReturnsConflict(t *testing.T) {
 
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusConflict, w.Body.String())
+	}
+	assertMockExpectations(t, mock)
+}
+
+func TestValidatePurchaseBillPDFRequirement(t *testing.T) {
+	tests := []struct {
+		name       string
+		setting    string
+		settingErr error
+		pdfLink    *string
+		wantOK     bool
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "required setting rejects missing PDF",
+			setting:    "required",
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "PURCHASE_BILL_PDF_REQUIRED",
+		},
+		{
+			name:    "required setting accepts PDF link",
+			setting: "required",
+			pdfLink: strPtr("/api/v2/files/invoice.pdf"),
+			wantOK:  true,
+		},
+		{
+			name:    "optional setting accepts missing PDF",
+			setting: "optional",
+			wantOK:  true,
+		},
+		{
+			name:    "disabled setting accepts missing PDF",
+			setting: "disabled",
+			wantOK:  true,
+		},
+		{
+			name:       "missing setting fails closed",
+			settingErr: sql.ErrNoRows,
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "PURCHASE_BILL_PDF_REQUIRED",
+		},
+		{
+			name:       "settings lookup failure is explicit",
+			settingErr: errors.New("settings database unavailable"),
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "PURCHASE_BILL_PDF_SETTING_UNAVAILABLE",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h, mock, cleanup := newPurchaseBillTestHandler(t)
+			defer cleanup()
+
+			query := mock.ExpectQuery(regexp.QuoteMeta(purchaseBillSettingQuery)).
+				WithArgs("pb_pdf_required")
+			if tc.settingErr != nil {
+				query.WillReturnError(tc.settingErr)
+			} else {
+				query.WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow(tc.setting))
+			}
+
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/v2/purchase_bill", nil)
+
+			got := h.validatePurchaseBillPDFRequirement(c, model.AddPurchaseBillRequest{PDFLink: tc.pdfLink})
+			if got != tc.wantOK {
+				t.Fatalf("validatePurchaseBillPDFRequirement() = %v, want %v", got, tc.wantOK)
+			}
+			if tc.wantStatus != 0 && w.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d; body=%s", w.Code, tc.wantStatus, w.Body.String())
+			}
+			if tc.wantCode != "" {
+				var body map[string]string
+				if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+					t.Fatalf("decode response: %v; body=%s", err, w.Body.String())
+				}
+				if body["code"] != tc.wantCode {
+					t.Fatalf("code = %q, want %q", body["code"], tc.wantCode)
+				}
+			}
+			assertMockExpectations(t, mock)
+		})
+	}
+}
+
+func TestAddPurchaseBillRequiredPDFRejectsBeforeInsert(t *testing.T) {
+	h, mock, cleanup := newPurchaseBillTestHandler(t)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("select store.id from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id")).
+		WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int32(1)))
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(purchaseBillSettingQuery)).
+		WithArgs("pb_pdf_required").
+		WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow("required"))
+	mock.ExpectRollback()
+
+	body := `{"store_id":1,"products":[],"manual_products":[],"supplier_id":123,"supplier_sequence_number":456,"payment_method":10}`
+	w := runPurchaseBillRequest(t, h.AddPurchaseBill, http.MethodPost, "/api/v2/purchase_bill", body)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	var response map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v; body=%s", err, w.Body.String())
+	}
+	if response["code"] != "PURCHASE_BILL_PDF_REQUIRED" {
+		t.Fatalf("code = %q, want PURCHASE_BILL_PDF_REQUIRED", response["code"])
 	}
 	assertMockExpectations(t, mock)
 }

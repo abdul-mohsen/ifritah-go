@@ -224,11 +224,12 @@ func (h *handler) UpdatePurchaseBill(c *gin.Context) {
 }
 
 func (h *handler) AddPurchaseBill(c *gin.Context) {
-	setup, ok := h.beginPurchaseBillTx(c, 1)
+	setup, ok := h.beginPurchaseBillTx(c, 3)
 	if !ok {
 		return
 	}
 	request := setup.request
+	request.State = 3
 	defer setup.tx.Rollback()
 	enforcement := h.getStockEnforcementMode(c)
 

@@ -65,7 +65,14 @@ func NewZATCAPublisher() (*ZatcaPublisher, error) {
 }
 
 func (p *ZatcaPublisher) Close() {
-	p.once.Do(func() { p.nc.Close() })
+	if p == nil {
+		return
+	}
+	p.once.Do(func() {
+		if p.nc != nil {
+			p.nc.Close()
+		}
+	})
 }
 
 func (p *ZatcaPublisher) SubmitBill(billID, branchID int64) error {
@@ -85,6 +92,10 @@ func (p *ZatcaPublisher) OnboadBranch(branchID int64, otp string) error {
 }
 
 func (p *ZatcaPublisher) publish(msg Message) error {
+	if p == nil || p.js == nil {
+		return fmt.Errorf("publish ZATCA message: NATS JetStream is unavailable")
+	}
+
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)

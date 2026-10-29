@@ -444,8 +444,38 @@ func (h *handler) OnboardBranchZatca(c *gin.Context) {
 		return
 	}
 
-	if err := h.pub.OnboadBranch(int64(branchID), req.OTP); err != nil {
+	tx, err := h.DB.Begin()
+	if err != nil {
+		log.Printf("OnboardBranchZatca begin transaction: %v", err)
 		c.Status(http.StatusInternalServerError)
 		return
 	}
+	defer tx.Rollback()
+
+	qtx := h.queries.WithTx(tx)
+	if err := qtx.MarkZatcaOnboardingQueued(c.Request.Context(), branchID); err != nil {
+		log.Printf("OnboardBranchZatca mark queued: %s", sanitizeForLog(err.Error()))
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.pub.EnqueueOnboarding(
+		c.Request.Context(),
+		qtx,
+		int32(GetSessionInfo(c).id),
+		int64(branchID),
+		otp,
+	); err != nil {
+		log.Printf("OnboardBranchZatca enqueue ZATCA event: %s", sanitizeForLog(err.Error()))
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("OnboardBranchZatca commit transaction: %v", err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	h.wakeZatcaOutbox()
+	c.Status(http.StatusOK)
 }

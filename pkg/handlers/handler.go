@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
@@ -14,6 +15,7 @@ type handler struct {
 	DB            *sql.DB
 	queries       *db.Queries
 	pub           *ZatcaPublisher
+	outbox        *ZatcaOutboxDrainer
 	renderBillPDF billPDFRenderer
 }
 
@@ -30,7 +32,20 @@ func New(db *sql.DB, queries *db.Queries, pub *ZatcaPublisher) handler {
 		DB:            db,
 		queries:       queries,
 		pub:           pub,
+		outbox:        newZatcaOutboxDrainer(db, queries, pub),
 		renderBillPDF: generateBillPDFBytes,
+	}
+}
+
+func (h *handler) StartZatcaOutbox(ctx context.Context) {
+	if h.outbox != nil {
+		go h.outbox.Run(ctx)
+	}
+}
+
+func (h *handler) wakeZatcaOutbox() {
+	if h.outbox != nil {
+		h.outbox.Wake()
 	}
 }
 

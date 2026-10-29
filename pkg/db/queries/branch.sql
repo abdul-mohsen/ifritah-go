@@ -41,3 +41,20 @@ building = VALUES(building),
 district = VALUES(district),
 postal_code = VALUES(postal_code),
 zatca_status = VALUES(zatca_status);
+
+-- name: MarkZatcaOnboardingQueued :exec
+UPDATE branch_zatca_config
+SET last_attempt_at = CURRENT_TIMESTAMP,
+    last_error = NULL
+WHERE branch_id = ?;
+
+-- name: ClearZatcaOnboardingPublicationError :exec
+UPDATE branch_zatca_config
+SET last_error = NULL
+WHERE branch_id = ?;
+
+-- name: MarkZatcaOnboardingPublicationFailure :exec
+UPDATE branch_zatca_config
+SET last_attempt_at = CURRENT_TIMESTAMP,
+    last_error = ?
+WHERE branch_id = ?;

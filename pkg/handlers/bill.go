@@ -293,8 +293,16 @@ func (h *handler) AddBill(c *gin.Context) {
 	}
 
 	if request.State > 0 {
-		if err := h.pub.SubmitBill(id, int64(request.BranchID)); err != nil {
-			log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
+		if err := h.pub.EnqueueBill(
+			c.Request.Context(),
+			qtx,
+			int32(userSession.id),
+			id,
+			int64(request.BranchID),
+		); err != nil {
+			log.Printf("AddBill enqueue ZATCA event: %s", sanitizeForLog(err.Error()))
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 	}
 
@@ -302,6 +310,7 @@ func (h *handler) AddBill(c *gin.Context) {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
+	h.wakeZatcaOutbox()
 	c.JSON(http.StatusCreated, id)
 
 }
@@ -432,8 +441,16 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	}
 
 	if request.State > 0 {
-		if err := h.pub.SubmitBill(BillID, int64(request.BranchID)); err != nil {
-			log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
+		if err := h.pub.EnqueueBill(
+			c.Request.Context(),
+			qtx,
+			int32(userSession.id),
+			BillID,
+			int64(request.BranchID),
+		); err != nil {
+			log.Printf("SubmitDraftBill enqueue ZATCA event: %s", sanitizeForLog(err.Error()))
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 	}
 
@@ -441,6 +458,7 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
+	h.wakeZatcaOutbox()
 
 	c.Status(http.StatusCreated)
 

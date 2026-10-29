@@ -16,3 +16,17 @@ rtk sqlc generate
 
 Generated files under `pkg/db/gen` are pipeline output and must not be edited
 by hand.
+
+## ZATCA event delivery
+
+Bill, credit, debit, and onboarding handlers write a durable
+`zatca_event_outbox` row in the same database transaction as the business
+change. The backend publisher drains committed rows after the transaction,
+reuses the stored event payload/idempotency key, and records publish failures
+with a retry time and bounded error message. The additive migration is
+`pkg/db/migrations/0009_zatca_event_outbox.sql`; historical business rows are
+not backfilled.
+
+The outbox drainer is started by `main.go`. It requires the migration before
+new handlers are deployed, but tests can exercise enqueue and retry behavior
+with sqlmock without a live MySQL, NATS, or ZATCA daemon.

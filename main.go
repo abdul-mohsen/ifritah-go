@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/handlers"
 
@@ -33,6 +34,9 @@ func main() {
 
 	handlers.EnvSetup()
 	h := handlers.New(DB, queries, pub)
+	outboxContext, cancelOutbox := context.WithCancel(context.Background())
+	defer cancelOutbox()
+	h.StartZatcaOutbox(outboxContext)
 
 	router := gin.Default()
 	store := persistence.NewInMemoryStore(time.Second)

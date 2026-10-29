@@ -57,6 +57,7 @@ type Message struct {
 	SourceID          int64   `json:"source_id"`
 	OutboxID          uint64  `json:"outbox_id"`
 	StableDocumentKey string  `json:"stable_document_key"`
+	SequenceNumber    *uint64 `json:"sequence_number,omitempty"`
 	Attempt           uint32  `json:"attempt"`
 	AttemptCount      uint32  `json:"attempt_count"`
 	AttemptID         string  `json:"attempt_id"`

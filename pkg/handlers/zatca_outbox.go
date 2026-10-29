@@ -35,6 +35,44 @@ func (p *ZatcaPublisher) buildZatcaOutboxParams(
 	documentID, branchID int64,
 	otp string,
 ) (db.InsertZatcaEventOutboxParams, error) {
+	return p.buildZatcaOutboxParamsWithContext(
+		merchantID,
+		documentType,
+		documentID,
+		branchID,
+		otp,
+		"",
+		nil,
+	)
+}
+
+func (p *ZatcaPublisher) buildZatcaOutboxParamsWithContext(
+	merchantID int32,
+	documentType string,
+	documentID, branchID int64,
+	otp string,
+	egsID string,
+	sequenceNumber *uint64,
+) (db.InsertZatcaEventOutboxParams, error) {
+	return p.buildZatcaOutboxParamsWithStableKey(
+		merchantID,
+		documentType,
+		documentID,
+		branchID,
+		otp,
+		"",
+		egsID,
+		sequenceNumber,
+	)
+}
+
+func (p *ZatcaPublisher) buildZatcaOutboxParamsWithStableKey(
+	merchantID int32,
+	documentType string,
+	documentID, branchID int64,
+	otp, stableDocumentKey, egsID string,
+	sequenceNumber *uint64,
+) (db.InsertZatcaEventOutboxParams, error) {
 	if p == nil {
 		return db.InsertZatcaEventOutboxParams{}, fmt.Errorf("ZATCA publisher is unavailable")
 	}
@@ -62,7 +100,10 @@ func (p *ZatcaPublisher) buildZatcaOutboxParams(
 		return db.InsertZatcaEventOutboxParams{}, fmt.Errorf("OTP is only valid for onboarding")
 	}
 
-	idempotencyKey := zatcaOutboxIdempotencyKey(p.dbName, documentType, documentID, branchID, otp)
+	idempotencyKey := strings.TrimSpace(stableDocumentKey)
+	if idempotencyKey == "" {
+		idempotencyKey = zatcaOutboxIdempotencyKey(p.dbName, documentType, documentID, branchID, otp)
+	}
 	message := NewMessage(
 		documentType,
 		p.dbName,
@@ -70,6 +111,10 @@ func (p *ZatcaPublisher) buildZatcaOutboxParams(
 		documentID,
 		idempotencyKey,
 	).withOTP(otp)
+	if strings.TrimSpace(egsID) != "" {
+		message.EGSID = strings.TrimSpace(egsID)
+	}
+	message.SequenceNumber = sequenceNumber
 	message.EventID = "evt-" + sha256Hex(idempotencyKey)
 	message.Attempt = 1
 	message.AttemptCount = 0
@@ -157,7 +202,49 @@ func (p *ZatcaPublisher) EnqueueDebit(
 	merchantID int32,
 	debitNoteID, branchID int64,
 ) error {
-	return enqueueZatcaEvent(ctx, qtx, p, merchantID, zatcaDocDebit, debitNoteID, branchID, "")
+	if qtx == nil {
+		return fmt.Errorf("ZATCA debit enqueue queries are unavailable")
+	}
+	if debitNoteID <= 0 {
+		return fmt.Errorf("ZATCA debit note id must be greater than zero")
+	}
+	if branchID <= 0 || uint64(branchID) > uint64(^uint32(0)) {
+		return fmt.Errorf("ZATCA debit branch id must be greater than zero")
+	}
+
+	row, err := qtx.GetDebitNotePublicationContext(ctx, db.GetDebitNotePublicationContextParams{
+		DebitNoteID: uint64(debitNoteID),
+		MerchantID:  merchantID,
+		BranchID:    uint32(branchID),
+	})
+	if err != nil {
+		return fmt.Errorf("load debit-note publication context: %w", err)
+	}
+	if row.DocumentID == nil || strings.TrimSpace(*row.DocumentID) == "" ||
+		row.StableDocumentKey == nil || strings.TrimSpace(*row.StableDocumentKey) == "" {
+		return fmt.Errorf("debit note %d has no stable document identity", debitNoteID)
+	}
+	if strings.TrimSpace(row.EgsID) == "" {
+		return fmt.Errorf("debit note %d has no EGS identity", debitNoteID)
+	}
+
+	params, err := p.buildZatcaOutboxParamsWithStableKey(
+		merchantID,
+		zatcaDocDebit,
+		debitNoteID,
+		branchID,
+		"",
+		strings.TrimSpace(*row.StableDocumentKey),
+		row.EgsID,
+		row.SequenceNumber,
+	)
+	if err != nil {
+		return err
+	}
+	if err := qtx.InsertZatcaEventOutbox(ctx, params); err != nil {
+		return fmt.Errorf("enqueue ZATCA debit event: %w", err)
+	}
+	return nil
 }
 
 // EnqueueOnboarding records an onboarding action in the caller's transaction.

@@ -99,6 +99,27 @@ func TestEnqueueDebitUsesCallerTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
+	mock.ExpectQuery("SELECT").
+		WithArgs(uint64(77), int32(7), int32(7), uint32(3)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id",
+			"bill_id",
+			"merchant_id",
+			"branch_id",
+			"sequence_number",
+			"egs_id",
+			"document_id",
+			"stable_document_key",
+		}).AddRow(
+			uint64(77),
+			uint64(99),
+			int32(7),
+			uint32(3),
+			uint64(20260099),
+			"egs-3",
+			"debit:77",
+			"test_tenant:3:debit:77",
+		))
 	mock.ExpectExec("INSERT INTO zatca_event_outbox").
 		WillReturnResult(sqlmock.NewResult(4, 1))
 

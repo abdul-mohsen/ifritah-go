@@ -81,9 +81,13 @@ ORDER BY b.id ASC;
 --   branch_id    = 0 disables the branch filter.
 SELECT
   bl.id AS invoice_id,
-  bl.sequence_number,
+  COALESCE(zs.sequence_number, bl.sequence_number) AS sequence_number,
   bl.branch_id,
   COALESCE(b.name, '') AS branch_name,
+  zs.document_type,
+  zs.source_id,
+  zs.egs_id,
+  zs.stable_document_key,
   zs.document_id,
   COALESCE(latest_outcome.outcome_state, zs.outcome_state, 'pending') AS outcome_state,
   COALESCE(latest_outcome.provider_code, zs.provider_code) AS provider_code,

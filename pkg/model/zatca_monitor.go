@@ -33,6 +33,11 @@ type ZatcaSubmissionRow struct {
 	InvoiceNo           string  `json:"invoice_no"`
 	BranchID            *int64  `json:"branch_id"`
 	BranchName          string  `json:"branch_name"`
+	DocumentType        string  `json:"document_type"`
+	SourceID            int64   `json:"source_id"`
+	SequenceNumber      *uint64 `json:"sequence_number"`
+	EGSID               *string `json:"egs_id"`
+	StableDocumentKey   *string `json:"stable_document_key"`
 	Status              string  `json:"status"`
 	State               string  `json:"state"`
 	StatusCode          int     `json:"status_code"`

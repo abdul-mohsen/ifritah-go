@@ -39,6 +39,25 @@ attempt metadata while retaining the legacy top-level `doc_type`, `id`,
 decoders. The stable document key is supplied as JetStream `Nats-Msg-Id`, so
 retries of one outbox event keep the same NATS identity and subject.
 
+## Debit-note backend contract
+
+`POST /api/v2/bill/debit` is JWT-protected and accepts `bill_id` plus a
+non-empty `note`. It creates a tenant-safe `debit_note` source row, parent
+sequence/EGS context, a pending generic ZATCA submission, and one outbox event
+in the same transaction. The request never publishes directly; the existing
+post-commit drainer owns publication and retry identity.
+
+The additive migrations are
+`pkg/db/migrations/0011_zatca_debit_note.sql` and
+`pkg/db/migrations/0012_zatca_submission_sources.sql`. The latter retains
+`zatca_submission.bill_id` as the parent compatibility link while adding
+document-kind/source identity so bill, credit, and debit outcomes do not
+collide. Existing monitor routes expose the debit document/source, sequence,
+EGS, stable key, and explicit pending/provider outcome fields.
+
+This backend change does not implement debit XML, signing, provider
+submission, daemon processing, stock, accounting, or import persistence.
+
 ## ZATCA sequence and EGS chain ownership
 
 Posted invoice numbers are allocated by the tenant-local

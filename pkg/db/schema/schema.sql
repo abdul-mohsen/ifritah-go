@@ -1010,7 +1010,6 @@ CREATE TABLE `credit_note` (
 ) ENGINE=InnoDB AUTO_INCREMENT=118 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
 -- Table structure for table `criteria`
 --
 
@@ -1068,17 +1067,27 @@ DROP TABLE IF EXISTS `debit_note`;
 CREATE TABLE `debit_note` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `bill_id` bigint unsigned NOT NULL,
-  `state` int DEFAULT NULL COMMENT '1=pending, 3=submitted',
-  `note` text COMMENT 'KSA-10 reason',
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `merchant_id` int NOT NULL,
+  `branch_id` int unsigned NOT NULL,
+  `sequence_number` bigint unsigned DEFAULT NULL,
+  `egs_id` varchar(128) NOT NULL,
+  `document_id` varchar(128) DEFAULT NULL,
+  `stable_document_key` varchar(255) DEFAULT NULL,
+  `state` int NOT NULL DEFAULT '1' COMMENT '1=pending,3=submitted',
+  `note` text NOT NULL COMMENT 'KSA-10 reason',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `invoice_uuid` char(36) DEFAULT NULL,
   `invoice_hash` varchar(128) DEFAULT NULL,
   `invoice_qr` mediumtext,
   `invoice_xml_path` varchar(500) DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_dn_bill_id` (`bill_id`),
-  KEY `idx_dn_state` (`state`),
-  CONSTRAINT `fk_debit_note_bill` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`)
+  UNIQUE KEY `uq_debit_note_merchant_bill` (`merchant_id`,`bill_id`),
+  UNIQUE KEY `uq_debit_note_document` (`merchant_id`,`document_id`),
+  UNIQUE KEY `uq_debit_note_stable_key` (`merchant_id`,`stable_document_key`),
+  KEY `idx_debit_note_state` (`merchant_id`,`state`),
+  KEY `idx_debit_note_context` (`merchant_id`,`branch_id`,`egs_id`,`sequence_number`),
+  CONSTRAINT `fk_debit_note_bill` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_debit_note_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -2293,9 +2302,14 @@ DROP TABLE IF EXISTS `zatca_submission`;
 CREATE TABLE `zatca_submission` (
   `id` int NOT NULL AUTO_INCREMENT,
   `bill_id` bigint unsigned NOT NULL,
+  `document_type` varchar(16) NOT NULL DEFAULT 'bill',
+  `source_id` bigint unsigned NOT NULL,
   `merchant_id` int NOT NULL,
   `status` tinyint NOT NULL DEFAULT '0' COMMENT '0=pending,1=submitted,2=accepted,3=rejected,4=warning',
   `document_id` varchar(128) NOT NULL,
+  `stable_document_key` varchar(255) DEFAULT NULL,
+  `sequence_number` bigint unsigned DEFAULT NULL,
+  `egs_id` varchar(128) DEFAULT NULL,
   `outcome_state` varchar(32) NOT NULL DEFAULT 'pending',
   `provider_code` varchar(64) DEFAULT NULL,
   `provider_warning_code` varchar(64) DEFAULT NULL,
@@ -2315,15 +2329,17 @@ CREATE TABLE `zatca_submission` (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_zatca_bill` (`bill_id`),
+  UNIQUE KEY `uq_zatca_source` (`merchant_id`,`document_type`,`source_id`),
   UNIQUE KEY `uq_zatca_merchant_document` (`merchant_id`,`document_id`),
   UNIQUE KEY `uq_zatca_bill_document` (`bill_id`,`document_id`),
+  KEY `idx_zatca_source` (`merchant_id`,`document_type`,`source_id`),
   KEY `idx_zatca_merchant_state` (`merchant_id`,`outcome_state`),
   KEY `idx_zatca_status` (`status`),
   KEY `idx_zatca_outcome_state` (`outcome_state`),
   KEY `idx_zatca_provider_reference` (`provider_reference`),
   KEY `idx_zatca_retry` (`next_retry_at`),
   KEY `idx_zatca_submitted` (`submitted_at`),
+  CONSTRAINT `chk_zatca_submission_document_type` CHECK (`document_type` IN ('bill','credit','debit')),
   CONSTRAINT `chk_zatca_submission_outcome_state` CHECK (`outcome_state` IN ('pending','accepted','accepted_with_warning','rejected','ambiguous','terminal_failure')),
   CONSTRAINT `fk_zatca_bill` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

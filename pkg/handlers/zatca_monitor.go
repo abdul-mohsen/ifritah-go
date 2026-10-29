@@ -243,6 +243,8 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 		item := model.ZatcaSubmissionRow{
 			InvoiceID:           int64(r.InvoiceID),
 			BranchName:          r.BranchName,
+			DocumentType:        r.DocumentType,
+			SourceID:            int64(r.SourceID),
 			StatusCode:          int(r.LegacyStatus),
 			Status:              state,
 			State:               state,
@@ -251,6 +253,18 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 			ProviderWarningCode: r.ProviderWarningCode,
 			ProviderReference:   r.ProviderReference,
 			RetryCount:          int(r.RetryCount),
+		}
+		if r.SequenceNumber != nil {
+			v := *r.SequenceNumber
+			item.SequenceNumber = &v
+		}
+		if r.EgsID != nil {
+			v := *r.EgsID
+			item.EGSID = &v
+		}
+		if r.StableDocumentKey != nil {
+			v := *r.StableDocumentKey
+			item.StableDocumentKey = &v
 		}
 		if r.SequenceNumber != nil {
 			item.InvoiceNo = "INV-" + strconv.FormatUint(*r.SequenceNumber, 10)

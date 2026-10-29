@@ -13,8 +13,15 @@ import (
 type handler struct {
 	DB            *sql.DB
 	queries       *db.Queries
-	pub           *ZatcaPublisher
+	pub           zatcaPublisher
 	renderBillPDF billPDFRenderer
+}
+
+type zatcaPublisher interface {
+	SubmitBill(billID, branchID int64) error
+	SubmitCredit(creditNoteID, branchID int64) error
+	SubmitDebit(debitNoteID, branchID int64) error
+	OnboadBranch(branchID int64, otp string) error
 }
 
 type billPDFRenderer func(model.Bill, []model.BillProductResponse) ([]byte, error)

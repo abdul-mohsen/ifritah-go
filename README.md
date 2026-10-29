@@ -30,3 +30,11 @@ not backfilled.
 The outbox drainer is started by `main.go`. It requires the migration before
 new handlers are deployed, but tests can exercise enqueue and retry behavior
 with sqlmock without a live MySQL, NATS, or ZATCA daemon.
+
+Published outbox events use the additive versioned envelope documented in
+`specs/014-zatca-event-idempotency-envelope/contracts/zatca-event-envelope.md`.
+It carries tenant, branch, EGS, source-document, outbox, stable-key, and
+attempt metadata while retaining the legacy top-level `doc_type`, `id`,
+`branch_id`, `db_name`, and onboarding `otp` fields for deployed daemon
+decoders. The stable document key is supplied as JetStream `Nats-Msg-Id`, so
+retries of one outbox event keep the same NATS identity and subject.

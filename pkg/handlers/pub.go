@@ -5,19 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
 )
-
-type Message struct {
-	DocType  string `json:"doc_type"`
-	ID       int64  `json:"id"`
-	BranchID int64  `json:"branch_id"`
-	DBName   string `json:"db_name"`
-	OTP      string `json:"otp,omitempty"`
-}
 
 type ZatcaPublisher struct {
 	js     nats.JetStreamContext
@@ -76,39 +69,78 @@ func (p *ZatcaPublisher) Close() {
 }
 
 func (p *ZatcaPublisher) SubmitBill(billID, branchID int64) error {
-	return p.publish(Message{DocType: "bill", ID: billID, BranchID: branchID, DBName: p.dbName})
+	return p.publish(NewMessage(DocBill, p.dbName, branchID, billID, ""))
 }
 
 func (p *ZatcaPublisher) SubmitCredit(creditNotID, branchID int64) error {
-	return p.publish(Message{DocType: "credit", ID: creditNotID, BranchID: branchID, DBName: p.dbName})
+	return p.publish(NewMessage(DocCredit, p.dbName, branchID, creditNotID, ""))
 }
 
 func (p *ZatcaPublisher) SubmitDebit(debitNoteID, branchID int64) error {
-	return p.publish(Message{DocType: "debit", ID: debitNoteID, BranchID: branchID, DBName: p.dbName})
+	return p.publish(NewMessage(DocDebit, p.dbName, branchID, debitNoteID, ""))
+}
+
+func (p *ZatcaPublisher) OnboardBranch(branchID int64, otp string) error {
+	otp = strings.TrimSpace(otp)
+	return p.publish(NewMessage(
+		DocOnboard,
+		p.dbName,
+		branchID,
+		branchID,
+		OnboardingIdempotencyKey(p.dbName, branchID, otp),
+	).withOTP(otp))
 }
 
 func (p *ZatcaPublisher) OnboadBranch(branchID int64, otp string) error {
-	return p.publish(Message{DocType: "onboard", ID: branchID, BranchID: branchID, DBName: p.dbName, OTP: otp})
+	return p.OnboardBranch(branchID, otp)
 }
 
 func (p *ZatcaPublisher) publish(msg Message) error {
+	return p.publishMessage(msg)
+}
+
+func (p *ZatcaPublisher) publishMessage(msg Message) error {
 	if p == nil || p.js == nil {
 		return fmt.Errorf("publish ZATCA message: NATS JetStream is unavailable")
 	}
 
-	data, err := json.Marshal(msg)
+	normalized, err := msg.Normalize()
+	if err != nil {
+		return fmt.Errorf("validate ZATCA message: %w", err)
+	}
+	if err := normalized.Validate(); err != nil {
+		return fmt.Errorf("validate ZATCA message: %w", err)
+	}
+
+	data, err := json.Marshal(normalized)
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	subject := fmt.Sprintf("zatca.%s.%s.%d", msg.DocType, msg.DBName, msg.BranchID)
-	ack, err := p.js.Publish(subject, data)
+	subject := normalized.Subject()
+	messageID := normalized.NATSMessageID()
+	if messageID == "" {
+		return fmt.Errorf("validate ZATCA message: stable document key is required")
+	}
+	ack, err := p.js.Publish(subject, data, nats.MsgId(messageID))
 	if err != nil {
 		return fmt.Errorf("publish to %s: %w", subject, err)
 	}
 	log.Print(ack)
 	log.Print(sanitizeForLog(subject))
-	log.Print(msg)
+	log.Printf(
+		"[zatca-publisher] published contract=%s version=%s event_id=%s idempotency_key=%s tenant_id=%s branch_id=%d document_type=%s source_id=%d outbox_id=%d attempt=%d",
+		normalized.Contract,
+		normalized.Version,
+		normalized.EventID,
+		normalized.StableDocumentKey,
+		normalized.TenantID,
+		normalized.BranchID,
+		normalized.DocumentType,
+		normalized.SourceID,
+		normalized.OutboxID,
+		normalized.Attempt,
+	)
 	return nil
 }
 

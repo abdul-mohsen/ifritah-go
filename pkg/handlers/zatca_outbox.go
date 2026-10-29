@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	db "ifritah/web-service-gin/pkg/db/gen"
 )
 
@@ -63,19 +62,27 @@ func (p *ZatcaPublisher) buildZatcaOutboxParams(
 		return db.InsertZatcaEventOutboxParams{}, fmt.Errorf("OTP is only valid for onboarding")
 	}
 
-	message := Message{
-		DocType:  documentType,
-		ID:       documentID,
-		BranchID: branchID,
-		DBName:   p.dbName,
-		OTP:      otp,
+	idempotencyKey := zatcaOutboxIdempotencyKey(p.dbName, documentType, documentID, branchID, otp)
+	message := NewMessage(
+		documentType,
+		p.dbName,
+		branchID,
+		documentID,
+		idempotencyKey,
+	).withOTP(otp)
+	message.EventID = "evt-" + sha256Hex(idempotencyKey)
+	message.Attempt = 1
+	message.AttemptCount = 0
+	message.AttemptID = fmt.Sprintf("%s:1", idempotencyKey)
+	message, err := message.Normalize()
+	if err != nil {
+		return db.InsertZatcaEventOutboxParams{}, fmt.Errorf("normalize ZATCA outbox event: %w", err)
 	}
 	payload, err := json.Marshal(message)
 	if err != nil {
 		return db.InsertZatcaEventOutboxParams{}, fmt.Errorf("marshal ZATCA outbox event: %w", err)
 	}
 
-	idempotencyKey := zatcaOutboxIdempotencyKey(p.dbName, documentType, documentID, branchID, otp)
 	return db.InsertZatcaEventOutboxParams{
 		EventID:        "evt-" + sha256Hex(idempotencyKey),
 		TenantID:       p.dbName,
@@ -258,7 +265,7 @@ func (d *ZatcaOutboxDrainer) Drain(ctx context.Context) error {
 }
 
 func (d *ZatcaOutboxDrainer) publishAndRecord(ctx context.Context, row db.ZatcaEventOutbox) error {
-	err := d.publisher.publishPayload(row.Payload, row.IdempotencyKey)
+	err := d.publisher.publishOutboxRow(row)
 	if err == nil {
 		if updateErr := d.queries.MarkZatcaEventOutboxPublished(ctx, row.ID); updateErr != nil {
 			return fmt.Errorf("mark ZATCA outbox event %d published: %w", row.ID, updateErr)
@@ -325,13 +332,43 @@ func (p *ZatcaPublisher) publishPayload(payload []byte, idempotencyKey string) e
 	if err := json.Unmarshal(payload, &message); err != nil {
 		return fmt.Errorf("decode ZATCA outbox payload: %w", err)
 	}
-	subject := fmt.Sprintf("zatca.%s.%s.%d", message.DocType, message.DBName, message.BranchID)
-	opts := make([]nats.PubOpt, 0, 1)
 	if strings.TrimSpace(idempotencyKey) != "" {
-		opts = append(opts, nats.MsgId(idempotencyKey))
+		message.IdempotencyKey = strings.TrimSpace(idempotencyKey)
+		message.StableDocumentKey = strings.TrimSpace(idempotencyKey)
 	}
-	if _, err := p.js.Publish(subject, payload, opts...); err != nil {
-		return fmt.Errorf("publish to %s: %w", subject, err)
+	if err := p.publishMessage(message); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *ZatcaPublisher) publishOutboxRow(row db.ZatcaEventOutbox) error {
+	if p == nil || p.js == nil {
+		return fmt.Errorf("publish ZATCA message: NATS JetStream is unavailable")
+	}
+
+	var message Message
+	if err := json.Unmarshal(row.Payload, &message); err != nil {
+		return fmt.Errorf("decode ZATCA outbox payload: %w", err)
+	}
+	message.EventID = row.EventID
+	message.TenantID = row.TenantID
+	message.DBName = row.TenantID
+	message.BranchID = int64(row.BranchID)
+	message.DocType = row.DocumentType
+	message.DocumentType = row.DocumentType
+	message.ID = int64(row.DocumentID)
+	message.DocumentID = int64(row.DocumentID)
+	message.SourceID = int64(row.DocumentID)
+	message.OutboxID = row.ID
+	message.IdempotencyKey = row.IdempotencyKey
+	message.StableDocumentKey = row.IdempotencyKey
+	message.AttemptCount = row.AttemptCount
+	message.Attempt = row.AttemptCount + 1
+	message.AttemptID = fmt.Sprintf("%d:%d", row.ID, message.Attempt)
+
+	if err := p.publishMessage(message); err != nil {
+		return err
 	}
 	return nil
 }

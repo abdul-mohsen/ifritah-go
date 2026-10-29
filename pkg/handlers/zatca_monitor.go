@@ -46,6 +46,8 @@ func (h *handler) ZatcaMonitorStats(c *gin.Context) {
 		Ambiguous:           row.Ambiguous,
 		TerminalFailure:     row.TerminalFailure,
 		Pending:             row.Pending,
+		OldestPendingAt:     formatZatcaTime(row.OldestPendingAt),
+		PendingAgeSeconds:   nullableZatcaInt64(row.PendingAgeSeconds),
 	})
 }
 
@@ -64,10 +66,19 @@ func (h *handler) ZatcaMonitorBranches(c *gin.Context) {
 	out := make([]model.ZatcaBranchRow, 0, len(rows))
 	for _, r := range rows {
 		item := model.ZatcaBranchRow{
-			BranchID:    int64(r.BranchID),
-			BranchName:  r.BranchName,
-			ZatcaStatus: int(r.ZatcaStatus),
-			TodayCount:  r.TodayCount,
+			BranchID:            int64(r.BranchID),
+			BranchName:          r.BranchName,
+			ZatcaStatus:         int(r.ZatcaStatus),
+			TodayCount:          r.TodayCount,
+			TotalSubmitted:      r.TotalSubmitted,
+			Accepted:            r.Accepted,
+			AcceptedWithWarning: r.AcceptedWithWarning,
+			Warnings:            r.AcceptedWithWarning,
+			Rejected:            r.Rejected,
+			Pending:             r.Pending,
+			Ambiguous:           r.Ambiguous,
+			TerminalFailure:     r.TerminalFailure,
+			PendingRetryCount:   nullableZatcaInt64Value(r.PendingRetryCount),
 		}
 		if r.WeekTotal > 0 {
 			item.SuccessRate = float64(r.WeekAccepted) / float64(r.WeekTotal) * 100.0
@@ -81,6 +92,9 @@ func (h *handler) ZatcaMonitorBranches(c *gin.Context) {
 			s := t.Format(time.RFC3339)
 			item.LastSubmissionAt = &s
 		}
+		item.OldestPendingAt = formatZatcaTime(r.OldestPendingAt)
+		item.PendingAgeSeconds = nullableZatcaInt64(r.PendingAgeSeconds)
+		item.PendingNextRetryAt = formatZatcaTime(r.PendingNextRetryAt)
 		out = append(out, item)
 	}
 	c.JSON(http.StatusOK, out)
@@ -247,10 +261,14 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 			Status:              state,
 			State:               state,
 			DocumentID:          r.DocumentID,
-			ProviderCode:        r.ProviderCode,
-			ProviderWarningCode: r.ProviderWarningCode,
-			ProviderReference:   r.ProviderReference,
+			ProviderCode:        nullableZatcaString(r.ProviderCode),
+			ProviderWarningCode: nullableZatcaString(r.ProviderWarningCode),
+			ProviderReference:   nullableZatcaString(r.ProviderReference),
 			RetryCount:          int(r.RetryCount),
+			AttemptNumber:       nullableZatcaInt64(r.AttemptNumber),
+			RetryState:          nullableZatcaString(r.RetryState),
+			RetryErrorCode:      nullableZatcaString(r.RetryErrorCode),
+			RetryErrorMessage:   nullableZatcaString(r.RetryErrorMessage),
 		}
 		if r.SequenceNumber != nil {
 			item.InvoiceNo = "INV-" + strconv.FormatUint(*r.SequenceNumber, 10)
@@ -261,17 +279,15 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 			v := int64(*r.BranchID)
 			item.BranchID = &v
 		}
-		if r.ProviderWarningMessage != nil {
-			v := *r.ProviderWarningMessage
-			item.ProviderWarning = &v
-			item.WarningMsg = &v
+		if v := nullableZatcaString(r.ProviderWarningMessage); v != nil {
+			item.ProviderWarning = v
+			item.WarningMsg = v
 		} else if r.RejectionMsg != nil {
 			v := *r.RejectionMsg
 			item.WarningMsg = &v
 		}
-		if r.ProviderReference != nil {
-			v := *r.ProviderReference
-			item.ZatcaRef = &v
+		if v := nullableZatcaString(r.ProviderReference); v != nil {
+			item.ZatcaRef = v
 		} else if r.RejectionCode != nil {
 			v := *r.RejectionCode
 			item.ZatcaRef = &v
@@ -283,6 +299,8 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 		item.LastAttemptAt = formatZatcaTime(r.LastAttemptAt)
 		item.NextRetryAt = formatZatcaTime(r.NextRetryAt)
 		item.OutcomeAt = formatZatcaTime(r.OutcomeAt)
+		item.PendingSince = formatZatcaTime(r.PendingSince)
+		item.PendingAgeSeconds = nullableZatcaInt64(r.PendingAgeSeconds)
 		if r.RequestXmlPath != nil {
 			v := *r.RequestXmlPath
 			item.RequestXMLPath = &v
@@ -296,10 +314,86 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-func formatZatcaTime(t *time.Time) *string {
-	if t == nil {
+func formatZatcaTime(v interface{}) *string {
+	t, ok := lastSubmissionTime(v)
+	if !ok {
 		return nil
 	}
 	s := t.Format(time.RFC3339)
 	return &s
+}
+
+func nullableZatcaString(v interface{}) *string {
+	switch x := v.(type) {
+	case nil:
+		return nil
+	case string:
+		return &x
+	case []byte:
+		s := string(x)
+		return &s
+	case *string:
+		return x
+	default:
+		return nil
+	}
+}
+
+func nullableZatcaInt64(v interface{}) *int64 {
+	switch x := v.(type) {
+	case nil:
+		return nil
+	case int:
+		n := int64(x)
+		return &n
+	case int8:
+		n := int64(x)
+		return &n
+	case int16:
+		n := int64(x)
+		return &n
+	case int32:
+		n := int64(x)
+		return &n
+	case int64:
+		return &x
+	case uint:
+		n := int64(x)
+		return &n
+	case uint8:
+		n := int64(x)
+		return &n
+	case uint16:
+		n := int64(x)
+		return &n
+	case uint32:
+		n := int64(x)
+		return &n
+	case uint64:
+		n := int64(x)
+		return &n
+	case *int64:
+		return x
+	case *int32:
+		if x == nil {
+			return nil
+		}
+		n := int64(*x)
+		return &n
+	case *uint32:
+		if x == nil {
+			return nil
+		}
+		n := int64(*x)
+		return &n
+	default:
+		return nil
+	}
+}
+
+func nullableZatcaInt64Value(v interface{}) int64 {
+	if n := nullableZatcaInt64(v); n != nil {
+		return *n
+	}
+	return 0
 }

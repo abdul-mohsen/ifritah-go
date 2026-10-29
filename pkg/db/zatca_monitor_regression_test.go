@@ -45,6 +45,12 @@ func TestZatcaMonitorReturnsProviderOutcome(t *testing.T) {
 			"request_xml_path",
 			"cleared_xml_path",
 			"outcome_at",
+			"attempt_number",
+			"retry_state",
+			"retry_error_code",
+			"retry_error_message",
+			"pending_since",
+			"pending_age_seconds",
 		}).AddRow(
 			uint64(41),
 			uint64(20260041),
@@ -65,6 +71,12 @@ func TestZatcaMonitorReturnsProviderOutcome(t *testing.T) {
 			nil,
 			"zatca/request/41.xml",
 			"zatca/cleared/41.xml",
+			nil,
+			uint32(1),
+			"accepted_with_warning",
+			nil,
+			nil,
+			nil,
 			nil,
 		))
 
@@ -109,7 +121,7 @@ func nullableStringField(row reflect.Value, name string) string {
 	if !field.IsValid() {
 		return ""
 	}
-	if field.Kind() == reflect.Pointer {
+	for field.IsValid() && (field.Kind() == reflect.Pointer || field.Kind() == reflect.Interface) {
 		if field.IsNil() {
 			return ""
 		}

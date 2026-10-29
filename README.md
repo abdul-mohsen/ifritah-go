@@ -16,3 +16,17 @@ rtk sqlc generate
 
 Generated files under `pkg/db/gen` are pipeline output and must not be edited
 by hand.
+
+## ZATCA monitor
+
+The admin-only monitor endpoints read tenant-scoped durable submission,
+outcome, and attempt rows:
+
+- `GET /api/v2/zatca/monitor/stats`
+- `GET /api/v2/zatca/monitor/branches`
+- `GET /api/v2/zatca/monitor/submissions`
+
+Aggregate counts, pending age, retry state, and provider details are sourced
+from those rows. Missing optional outcome or attempt evidence remains `null`;
+the monitor does not create branch or submission values for rows that are not
+durably present.

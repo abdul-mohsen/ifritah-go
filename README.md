@@ -58,6 +58,29 @@ EGS, stable key, and explicit pending/provider outcome fields.
 This backend change does not implement debit XML, signing, provider
 submission, daemon processing, stock, accounting, or import persistence.
 
+## Signed-UBL import persistence
+
+The JWT-protected import lane is separate from outbound ZATCA submission:
+
+- `POST /api/v2/zatca/import` (also `/zatca/imports`) stores a T030-shaped
+  result, preserving original bytes/reference, hash, provenance, canonical and
+  parsed JSON, signature/validation evidence, failure classification, and
+  normalized validation issues.
+- `GET /api/v2/zatca/import` lists tenant-scoped jobs; `GET
+  /api/v2/zatca/import/:id` returns the immutable evidence and append-only
+  review/status history.
+- `POST /api/v2/zatca/import/:id/review` records review decisions and can
+  approve a job; `/post` records import workflow completion; `/reject` records
+  a review rejection. These transitions use optimistic workflow versions.
+
+The additive migration is
+`pkg/db/migrations/0013_zatca_signed_ubl_import.sql`; query source is
+`pkg/db/queries/zatca_import.sql`. Import post/reject/review operations do not
+write `zatca_submission`, `zatca_event_outbox`, publish NATS messages, mutate
+purchase bills, or modify daemon behavior. The backend aligns to the T030
+JSON contract read-only; parsing and cryptographic verification remain in the
+separate signed-UBL service.
+
 ## ZATCA sequence and EGS chain ownership
 
 Posted invoice numbers are allocated by the tenant-local

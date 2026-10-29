@@ -205,6 +205,20 @@ func main() {
 		authorized.GET("zatca/monitor/stats", admin, h.ZatcaMonitorStats)
 		authorized.GET("zatca/monitor/branches", admin, h.ZatcaMonitorBranches)
 		authorized.GET("zatca/monitor/submissions", admin, h.ZatcaMonitorSubmissions)
+
+		// ── Signed-UBL import lane (JWT protected; separate from outbound) ─
+		authorized.POST("zatca/import", h.CreateZatcaImport)
+		authorized.GET("zatca/import", h.ListZatcaImports)
+		authorized.GET("zatca/import/:id", h.GetZatcaImport)
+		authorized.POST("zatca/import/:id/review", h.ReviewZatcaImport)
+		authorized.POST("zatca/import/:id/post", h.PostZatcaImport)
+		authorized.POST("zatca/import/:id/reject", h.RejectZatcaImport)
+		authorized.POST("zatca/imports", h.CreateZatcaImport)
+		authorized.GET("zatca/imports", h.ListZatcaImports)
+		authorized.GET("zatca/imports/:id", h.GetZatcaImport)
+		authorized.POST("zatca/imports/:id/review", h.ReviewZatcaImport)
+		authorized.POST("zatca/imports/:id/post", h.PostZatcaImport)
+		authorized.POST("zatca/imports/:id/reject", h.RejectZatcaImport)
 	}
 
 	nonAuthGroup := router.Group(os.Getenv("BASEURL"))

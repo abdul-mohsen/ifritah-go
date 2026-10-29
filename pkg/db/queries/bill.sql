@@ -178,9 +178,6 @@ SELECT bp.id, bp.product_id, bp.quantity, b.store_id, b.sequence_number
 		 JOIN bill b ON bp.bill_id = b.id
 		 WHERE bp.bill_id = ? AND bp.product_id IS NOT NULL;
 
--- name: GetMaxSequenceNumber :one
-select CAST(COALESCE(max(sequence_number), 1) AS UNSIGNED) from bill;
-
 -- name: GetBillProductsWithArticle :many
 SELECT bp.product_id, bp.price, bp.quantity,
        a.id AS article_id, a.articleNumber, a.genericArticleDescription

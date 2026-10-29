@@ -38,3 +38,23 @@ attempt metadata while retaining the legacy top-level `doc_type`, `id`,
 `branch_id`, `db_name`, and onboarding `otp` fields for deployed daemon
 decoders. The stable document key is supplied as JetStream `Nats-Msg-Id`, so
 retries of one outbox event keep the same NATS identity and subject.
+
+## ZATCA sequence and EGS chain ownership
+
+Posted invoice numbers are allocated by the tenant-local
+`branch_sequence(branch_id, scope)` counter inside the existing business
+transaction. The backend no longer derives a posted invoice number from a
+tenant-wide `MAX(bill.sequence_number)`, so branches can allocate their own
+monotonic sequence concurrently.
+
+The additive `0010_zatca_egs_chain.sql` migration defines the daemon-facing
+`zatca_egs_chain` contract. A row is keyed by `(branch_id, egs_id)` and owns
+the shared invoice/credit/debit ICV and previous-invoice-hash chain. Daemon
+reserve, commit, and release statements must use the documented owner token
+and row-lock ordering in
+`specs/016-atomic-egs-sequence/contracts/zatca-chain.md`.
+
+Focused sqlmock tests cover query ordering, branch isolation, owner predicates,
+and transaction behavior. They cannot prove live InnoDB lock, isolation,
+deadlock, or lease-expiry behavior; validate those against live MySQL before
+production rollout.

@@ -107,8 +107,9 @@ func TestAddBillEnqueuesBeforePublication(t *testing.T) {
 		WithArgs(int64(7)).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(54))
 	mock.ExpectBegin()
-	mock.ExpectQuery("select CAST").
-		WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(100))
+	mock.ExpectExec("INSERT INTO branch_sequence").
+		WithArgs(uint32(7), "bill").
+		WillReturnResult(sqlmock.NewResult(101, 1))
 	mock.ExpectExec("insert into bill").
 		WillReturnResult(sqlmock.NewResult(42, 1))
 	mock.ExpectExec("UPDATE bill").

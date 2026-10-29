@@ -199,10 +199,15 @@ func (h *handler) AddBill(c *gin.Context) {
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
 
-	var squenceNumber uint64 = 0
+	var squenceNumber uint64
 
 	if request.State > 0 {
-		squenceNumber = getNextSquenceNumber(qtx, c)
+		squenceNumber, err = getNextSequenceNumber(c.Request.Context(), qtx, request.BranchID)
+		if err != nil {
+			log.Printf("AddBill sequence allocation: %s", sanitizeForLog(err.Error()))
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
 	}
 
 	args := db.CreateBillParams{
@@ -357,9 +362,14 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
 
-	var squenceNumber uint64 = 0
+	var squenceNumber uint64
 	if request.State > 0 {
-		squenceNumber = getNextSquenceNumber(qtx, c)
+		squenceNumber, err = getNextSequenceNumber(c.Request.Context(), qtx, request.BranchID)
+		if err != nil {
+			log.Printf("SubmitDraftBill sequence allocation: %s", sanitizeForLog(err.Error()))
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
 	}
 
 	args := db.UpdateBillByIDParams{
@@ -495,16 +505,27 @@ func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.BillProd
 	return nil
 }
 
-func getNextSquenceNumber(qtx *db.Queries, c *gin.Context) uint64 {
-
-	var maxSequenceNumber int64
-	maxSequenceNumber, err := qtx.GetMaxSequenceNumber(c.Request.Context())
-	if err != nil {
-		log.Printf("getNextSquenceNumber: %v", err)
-		return 0
+func getNextSequenceNumber(ctx context.Context, qtx *db.Queries, branchID uint32) (uint64, error) {
+	if branchID == 0 {
+		return 0, fmt.Errorf("branch ID is required for posted invoice sequence allocation")
 	}
 
-	return uint64(maxSequenceNumber) + 1
+	result, err := qtx.AllocateBranchSequence(ctx, db.AllocateBranchSequenceParams{
+		BranchID: branchID,
+		Scope:    "bill",
+	})
+	if err != nil {
+		return 0, fmt.Errorf("allocate branch invoice sequence: %w", err)
+	}
+
+	sequence, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("read allocated branch invoice sequence: %w", err)
+	}
+	if sequence <= 0 {
+		return 0, fmt.Errorf("allocated branch invoice sequence is invalid: %d", sequence)
+	}
+	return uint64(sequence), nil
 }
 
 func parseBillID(rawID string) (uint64, error) {

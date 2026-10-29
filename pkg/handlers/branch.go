@@ -1,12 +1,13 @@
 package handlers
 
 import (
+	"database/sql"
+	"errors"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -438,13 +439,36 @@ func (h *handler) OnboardBranchZatca(c *gin.Context) {
 		return
 	}
 
-	otp := strings.TrimSpace(req.OTP)
-	if len(otp) != 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "OTP must be 6 numbers"})
+	otp, err := validateZatcaOTP(req.OTP)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
 		return
 	}
 
-	if err := h.pub.OnboadBranch(int64(branchID), req.OTP); err != nil {
+	config, err := h.queries.GetZatcaBranchConfig(c.Request.Context(), branchID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"detail": "invalid ZATCA onboarding request: zatca_config is required",
+			})
+			return
+		}
+		log.Printf("ERROR OnboardBranchZatca load config: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to load ZATCA config"})
+		return
+	}
+
+	if err := validateZatcaBranchConfig(config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		return
+	}
+
+	if h.pub == nil {
+		log.Printf("ERROR OnboardBranchZatca: ZATCA publisher is unavailable")
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	if err := h.pub.OnboadBranch(int64(branchID), otp); err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
 	}

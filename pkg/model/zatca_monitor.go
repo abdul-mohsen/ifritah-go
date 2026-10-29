@@ -6,11 +6,14 @@ package model
 // ZatcaMonitorStats is the aggregated submission counter response for
 // GET /zatca/monitor/stats.
 type ZatcaMonitorStats struct {
-	TotalSubmitted int64 `json:"total_submitted"`
-	Accepted       int64 `json:"accepted"`
-	Warnings       int64 `json:"warnings"`
-	Rejected       int64 `json:"rejected"`
-	Pending        int64 `json:"pending"`
+	TotalSubmitted      int64 `json:"total_submitted"`
+	Accepted            int64 `json:"accepted"`
+	AcceptedWithWarning int64 `json:"accepted_with_warning"`
+	Warnings            int64 `json:"warnings"`
+	Rejected            int64 `json:"rejected"`
+	Ambiguous           int64 `json:"ambiguous"`
+	TerminalFailure     int64 `json:"terminal_failure"`
+	Pending             int64 `json:"pending"`
 }
 
 // ZatcaBranchRow is one row in the GET /zatca/monitor/branches response.
@@ -26,13 +29,25 @@ type ZatcaBranchRow struct {
 
 // ZatcaSubmissionRow is one row in the GET /zatca/monitor/submissions response.
 type ZatcaSubmissionRow struct {
-	InvoiceID   int64   `json:"invoice_id"`
-	InvoiceNo   string  `json:"invoice_no"`
-	BranchID    *int64  `json:"branch_id"`
-	BranchName  string  `json:"branch_name"`
-	Status      string  `json:"status"`
-	StatusCode  int     `json:"status_code"`
-	ZatcaRef    *string `json:"zatca_ref"`
-	WarningMsg  *string `json:"warning_msg"`
-	SubmittedAt *string `json:"submitted_at"`
+	InvoiceID           int64   `json:"invoice_id"`
+	InvoiceNo           string  `json:"invoice_no"`
+	BranchID            *int64  `json:"branch_id"`
+	BranchName          string  `json:"branch_name"`
+	Status              string  `json:"status"`
+	State               string  `json:"state"`
+	StatusCode          int     `json:"status_code"`
+	DocumentID          string  `json:"document_id"`
+	ProviderCode        *string `json:"provider_code"`
+	ProviderWarningCode *string `json:"provider_warning_code"`
+	ProviderWarning     *string `json:"provider_warning"`
+	ProviderReference   *string `json:"provider_reference"`
+	ZatcaRef            *string `json:"zatca_ref"`
+	WarningMsg          *string `json:"warning_msg"`
+	RetryCount          int     `json:"retry_count"`
+	LastAttemptAt       *string `json:"last_attempt_at"`
+	NextRetryAt         *string `json:"next_retry_at"`
+	RequestXMLPath      *string `json:"request_xml_path"`
+	ClearedXMLPath      *string `json:"cleared_xml_path"`
+	OutcomeAt           *string `json:"outcome_at"`
+	SubmittedAt         *string `json:"submitted_at"`
 }

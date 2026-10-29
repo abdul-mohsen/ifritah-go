@@ -2293,20 +2293,127 @@ DROP TABLE IF EXISTS `zatca_submission`;
 CREATE TABLE `zatca_submission` (
   `id` int NOT NULL AUTO_INCREMENT,
   `bill_id` bigint unsigned NOT NULL,
+  `merchant_id` int NOT NULL,
   `status` tinyint NOT NULL DEFAULT '0' COMMENT '0=pending,1=submitted,2=accepted,3=rejected,4=warning',
+  `document_id` varchar(128) NOT NULL,
+  `outcome_state` varchar(32) NOT NULL DEFAULT 'pending',
+  `provider_code` varchar(64) DEFAULT NULL,
+  `provider_warning_code` varchar(64) DEFAULT NULL,
+  `provider_warning_message` varchar(1024) DEFAULT NULL,
+  `provider_reference` varchar(255) DEFAULT NULL,
   `rejection_code` varchar(32) DEFAULT NULL,
   `rejection_msg` varchar(512) DEFAULT NULL,
   `submitted_at` datetime DEFAULT NULL,
   `cleared_at` datetime DEFAULT NULL,
   `response_xml` mediumtext,
   `retry_count` int NOT NULL DEFAULT '0',
+  `last_attempt_at` datetime DEFAULT NULL,
+  `next_retry_at` datetime DEFAULT NULL,
+  `outcome_at` datetime DEFAULT NULL,
+  `request_xml_path` varchar(500) DEFAULT NULL,
+  `cleared_xml_path` varchar(500) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_zatca_bill` (`bill_id`),
+  UNIQUE KEY `uq_zatca_merchant_document` (`merchant_id`,`document_id`),
+  UNIQUE KEY `uq_zatca_bill_document` (`bill_id`,`document_id`),
+  KEY `idx_zatca_merchant_state` (`merchant_id`,`outcome_state`),
   KEY `idx_zatca_status` (`status`),
+  KEY `idx_zatca_outcome_state` (`outcome_state`),
+  KEY `idx_zatca_provider_reference` (`provider_reference`),
+  KEY `idx_zatca_retry` (`next_retry_at`),
   KEY `idx_zatca_submitted` (`submitted_at`),
+  CONSTRAINT `chk_zatca_submission_outcome_state` CHECK (`outcome_state` IN ('pending','accepted','accepted_with_warning','rejected','ambiguous','terminal_failure')),
   CONSTRAINT `fk_zatca_bill` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `zatca_submission_attempt`
+--
+
+DROP TABLE IF EXISTS `zatca_submission_attempt`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `zatca_submission_attempt` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `submission_id` int NOT NULL,
+  `attempt_number` int unsigned NOT NULL,
+  `attempt_state` varchar(32) NOT NULL DEFAULT 'pending',
+  `provider_code` varchar(64) DEFAULT NULL,
+  `provider_warning_code` varchar(64) DEFAULT NULL,
+  `provider_warning_message` varchar(1024) DEFAULT NULL,
+  `provider_reference` varchar(255) DEFAULT NULL,
+  `error_code` varchar(64) DEFAULT NULL,
+  `error_message` varchar(1024) DEFAULT NULL,
+  `retry_count` int unsigned NOT NULL DEFAULT '0',
+  `next_retry_at` datetime DEFAULT NULL,
+  `request_xml_path` varchar(500) DEFAULT NULL,
+  `cleared_xml_path` varchar(500) DEFAULT NULL,
+  `started_at` datetime NOT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_zatca_attempt_number` (`submission_id`,`attempt_number`),
+  KEY `idx_zatca_attempt_retry` (`next_retry_at`),
+  KEY `idx_zatca_attempt_state` (`attempt_state`),
+  CONSTRAINT `chk_zatca_attempt_state` CHECK (`attempt_state` IN ('pending','accepted','accepted_with_warning','rejected','ambiguous','terminal_failure')),
+  CONSTRAINT `fk_zatca_attempt_submission` FOREIGN KEY (`submission_id`) REFERENCES `zatca_submission` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `zatca_submission_outcome`
+--
+
+DROP TABLE IF EXISTS `zatca_submission_outcome`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `zatca_submission_outcome` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `submission_id` int NOT NULL,
+  `attempt_id` bigint unsigned DEFAULT NULL,
+  `outcome_state` varchar(32) NOT NULL,
+  `provider_code` varchar(64) DEFAULT NULL,
+  `provider_warning_code` varchar(64) DEFAULT NULL,
+  `provider_warning_message` varchar(1024) DEFAULT NULL,
+  `provider_reference` varchar(255) DEFAULT NULL,
+  `observed_at` datetime NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_zatca_outcome_latest` (`submission_id`,`observed_at`,`id`),
+  KEY `idx_zatca_outcome_provider_code` (`provider_code`),
+  CONSTRAINT `chk_zatca_outcome_state` CHECK (`outcome_state` IN ('pending','accepted','accepted_with_warning','rejected','ambiguous','terminal_failure')),
+  CONSTRAINT `fk_zatca_outcome_submission` FOREIGN KEY (`submission_id`) REFERENCES `zatca_submission` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_zatca_outcome_attempt` FOREIGN KEY (`attempt_id`) REFERENCES `zatca_submission_attempt` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `zatca_submission_artifact`
+--
+
+DROP TABLE IF EXISTS `zatca_submission_artifact`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `zatca_submission_artifact` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `submission_id` int NOT NULL,
+  `attempt_id` bigint unsigned DEFAULT NULL,
+  `artifact_kind` varchar(32) NOT NULL,
+  `artifact_path` varchar(500) DEFAULT NULL,
+  `content_type` varchar(128) DEFAULT NULL,
+  `sha256` char(64) DEFAULT NULL,
+  `metadata` json DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_zatca_artifact_submission` (`submission_id`,`created_at`),
+  KEY `idx_zatca_artifact_attempt` (`attempt_id`),
+  CONSTRAINT `chk_zatca_artifact_kind` CHECK (`artifact_kind` IN ('request_xml','cleared_xml','response_xml','other')),
+  CONSTRAINT `fk_zatca_artifact_submission` FOREIGN KEY (`submission_id`) REFERENCES `zatca_submission` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_zatca_artifact_attempt` FOREIGN KEY (`attempt_id`) REFERENCES `zatca_submission_attempt` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

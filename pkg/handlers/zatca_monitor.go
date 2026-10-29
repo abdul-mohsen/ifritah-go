@@ -7,7 +7,8 @@ package handlers
 //   * ListZatcaMonitorBranches    — per-branch dashboard
 //   * ListZatcaMonitorSubmissions — recent submissions list
 //
-// Status enum: see pkg/handlers/zatca_constants.go (matches dashboard.sql).
+// Explicit states and legacy numeric values: see
+// pkg/handlers/zatca_constants.go.
 //
 // All endpoints are mounted behind admin middleware (see main.go).
 
@@ -26,27 +27,34 @@ import (
 	"ifritah/web-service-gin/pkg/model"
 )
 
-// ZatcaMonitorStats returns aggregated submission counters across all branches.
+// ZatcaMonitorStats returns tenant-scoped submission counters across branches.
 func (h *handler) ZatcaMonitorStats(c *gin.Context) {
-	row, err := h.queries.GetZatcaMonitorStats(c.Request.Context())
+	row, err := h.queries.GetZatcaMonitorStats(c.Request.Context(), db.GetZatcaMonitorStatsParams{
+		MerchantID: int32(getMerchantID(c)),
+	})
 	if err != nil {
 		log.Printf("ZatcaMonitorStats: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": ErrZatcaLoadStats})
 		return
 	}
 	c.JSON(http.StatusOK, model.ZatcaMonitorStats{
-		TotalSubmitted: row.Total,
-		Accepted:       row.Accepted,
-		Warnings:       row.Warnings,
-		Rejected:       row.Rejected,
-		Pending:        row.Pending,
+		TotalSubmitted:      row.Total,
+		Accepted:            row.Accepted,
+		AcceptedWithWarning: row.AcceptedWithWarning,
+		Warnings:            row.AcceptedWithWarning,
+		Rejected:            row.Rejected,
+		Ambiguous:           row.Ambiguous,
+		TerminalFailure:     row.TerminalFailure,
+		Pending:             row.Pending,
 	})
 }
 
 // ZatcaMonitorBranches returns one row per branch with a branch_zatca_config
 // entry, plus today's submission counts and 7-day success rate.
 func (h *handler) ZatcaMonitorBranches(c *gin.Context) {
-	rows, err := h.queries.ListZatcaMonitorBranches(c.Request.Context())
+	rows, err := h.queries.ListZatcaMonitorBranches(c.Request.Context(), db.ListZatcaMonitorBranchesParams{
+		MerchantID: int32(getMerchantID(c)),
+	})
 	if err != nil {
 		log.Printf("ZatcaMonitorBranches: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": ErrZatcaLoadBranches})
@@ -124,47 +132,67 @@ func certExpiryDate(s string) string {
 	return cert.NotAfter.Format("2006-01-02")
 }
 
-// statusToString converts the numeric submission status into the labels the
-// frontend uses.
-func statusToString(s int) string {
+// legacyStatusToState converts the old numeric status into the explicit state
+// used when a legacy row has not yet been populated with outcome_state.
+func legacyStatusToState(s int) string {
 	switch s {
 	case ZatcaStatusAccepted:
-		return ZatcaLabelAccepted
+		return ZatcaStateAccepted
 	case ZatcaStatusRejected:
-		return ZatcaLabelRejected
+		return ZatcaStateRejected
 	case ZatcaStatusWarning:
-		return ZatcaLabelWarning
+		return ZatcaStateAcceptedWithWarning
 	case ZatcaStatusPending, ZatcaStatusSubmitted:
-		return ZatcaLabelPending
+		return ZatcaStatePending
 	default:
 		return ZatcaLabelUnknown
+	}
+}
+
+func normalizeZatcaState(state string, legacyStatus int) string {
+	switch state {
+	case ZatcaStatePending,
+		ZatcaStateAccepted,
+		ZatcaStateAcceptedWithWarning,
+		ZatcaStateRejected,
+		ZatcaStateAmbiguous,
+		ZatcaStateTerminalFailure:
+		return state
+	default:
+		return legacyStatusToState(legacyStatus)
 	}
 }
 
 // parseSubmissionFilters reads `status` and `branch_id` query params into the
 // sentinel-filter shape consumed by ListZatcaMonitorSubmissions. On failure
 // it writes a 400 response and returns ok=false.
-func parseSubmissionFilters(c *gin.Context) (pendingFlag string, statusCode int, branchID uint32, ok bool) {
+func parseSubmissionFilters(c *gin.Context) (pendingFlag, stateFilter string, statusCode int, branchID uint32, ok bool) {
 	pendingFlag = zatcaPendingFlagOff
+	stateFilter = zatcaStateAny
 	statusCode = zatcaStatusCodeAny
 	branchID = zatcaBranchAny
 
 	if s := c.Query("status"); s != "" {
 		switch s {
 		case ZatcaLabelAccepted:
-			statusCode = ZatcaStatusAccepted
+			stateFilter = ZatcaStateAccepted
+		case ZatcaLabelAcceptedWithWarning, ZatcaLabelWarning:
+			stateFilter = ZatcaStateAcceptedWithWarning
 		case ZatcaLabelRejected:
-			statusCode = ZatcaStatusRejected
-		case ZatcaLabelWarning:
-			statusCode = ZatcaStatusWarning
+			stateFilter = ZatcaStateRejected
 		case ZatcaLabelPending:
 			pendingFlag = zatcaPendingFlagOn
+			stateFilter = ZatcaStatePending
+		case ZatcaLabelAmbiguous:
+			stateFilter = ZatcaStateAmbiguous
+		case ZatcaLabelTerminalFailure:
+			stateFilter = ZatcaStateTerminalFailure
 		default:
 			n, err := strconv.ParseInt(s, 10, 8)
 			if err != nil {
 				log.Printf("ZatcaMonitorSubmissions: invalid status %q: %v", s, err)
 				c.JSON(http.StatusBadRequest, gin.H{"error": ErrZatcaInvalidStatus})
-				return "", 0, 0, false
+				return "", "", 0, 0, false
 			}
 			statusCode = int(n)
 		}
@@ -174,11 +202,11 @@ func parseSubmissionFilters(c *gin.Context) (pendingFlag string, statusCode int,
 		if err != nil {
 			log.Printf("ZatcaMonitorSubmissions: invalid branch_id %q: %v", bs, err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": ErrZatcaInvalidBranch})
-			return "", 0, 0, false
+			return "", "", 0, 0, false
 		}
 		branchID = uint32(bid)
 	}
-	return pendingFlag, statusCode, branchID, true
+	return pendingFlag, stateFilter, statusCode, branchID, true
 }
 
 // ZatcaMonitorSubmissions returns recent submissions, optionally filtered by
@@ -189,14 +217,16 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 		limit = int(v)
 	}
 
-	pendingFlag, statusCode, branchID, ok := parseSubmissionFilters(c)
+	pendingFlag, stateFilter, statusCode, branchID, ok := parseSubmissionFilters(c)
 	if !ok {
 		return
 	}
 
 	branchPtr := &branchID
 	rows, err := h.queries.ListZatcaMonitorSubmissions(c.Request.Context(), db.ListZatcaMonitorSubmissionsParams{
+		MerchantID:  int32(getMerchantID(c)),
 		PendingFlag: pendingFlag,
+		StateFilter: stateFilter,
 		StatusCode:  int8(statusCode),
 		BranchID:    branchPtr,
 		Limit:       int32(limit),
@@ -209,11 +239,18 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 
 	out := make([]model.ZatcaSubmissionRow, 0, len(rows))
 	for _, r := range rows {
+		state := normalizeZatcaState(r.OutcomeState, int(r.LegacyStatus))
 		item := model.ZatcaSubmissionRow{
-			InvoiceID:  int64(r.InvoiceID),
-			BranchName: r.BranchName,
-			StatusCode: int(r.Status),
-			Status:     statusToString(int(r.Status)),
+			InvoiceID:           int64(r.InvoiceID),
+			BranchName:          r.BranchName,
+			StatusCode:          int(r.LegacyStatus),
+			Status:              state,
+			State:               state,
+			DocumentID:          r.DocumentID,
+			ProviderCode:        r.ProviderCode,
+			ProviderWarningCode: r.ProviderWarningCode,
+			ProviderReference:   r.ProviderReference,
+			RetryCount:          int(r.RetryCount),
 		}
 		if r.SequenceNumber != nil {
 			item.InvoiceNo = "INV-" + strconv.FormatUint(*r.SequenceNumber, 10)
@@ -224,19 +261,45 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 			v := int64(*r.BranchID)
 			item.BranchID = &v
 		}
-		if r.RejectionCode != nil {
-			v := *r.RejectionCode
-			item.ZatcaRef = &v
-		}
-		if r.RejectionMsg != nil {
+		if r.ProviderWarningMessage != nil {
+			v := *r.ProviderWarningMessage
+			item.ProviderWarning = &v
+			item.WarningMsg = &v
+		} else if r.RejectionMsg != nil {
 			v := *r.RejectionMsg
 			item.WarningMsg = &v
+		}
+		if r.ProviderReference != nil {
+			v := *r.ProviderReference
+			item.ZatcaRef = &v
+		} else if r.RejectionCode != nil {
+			v := *r.RejectionCode
+			item.ZatcaRef = &v
 		}
 		if r.SubmittedAt != nil {
 			s := r.SubmittedAt.Format(time.RFC3339)
 			item.SubmittedAt = &s
 		}
+		item.LastAttemptAt = formatZatcaTime(r.LastAttemptAt)
+		item.NextRetryAt = formatZatcaTime(r.NextRetryAt)
+		item.OutcomeAt = formatZatcaTime(r.OutcomeAt)
+		if r.RequestXmlPath != nil {
+			v := *r.RequestXmlPath
+			item.RequestXMLPath = &v
+		}
+		if r.ClearedXmlPath != nil {
+			v := *r.ClearedXmlPath
+			item.ClearedXMLPath = &v
+		}
 		out = append(out, item)
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+func formatZatcaTime(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.Format(time.RFC3339)
+	return &s
 }

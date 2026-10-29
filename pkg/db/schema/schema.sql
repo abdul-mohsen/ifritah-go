@@ -701,12 +701,21 @@ CREATE TABLE `branch_zatca_config` (
   `csr_tin` varchar(9) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '9-digit EGS serial used in CSR CommonName',
   `csr_computer_number` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT 'EGS UUID used in CSR SerialNumber (3-{uuid})',
   `csr_invoice_type` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '1100' COMMENT '1100=both, 1000=B2B only, 0100=B2C only',
-  `onboard_state` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'not_started' COMMENT 'not_started|csr|compliance|invoices|done|failed',
+  `onboard_state` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'not_started' COMMENT 'not_started|queued|compliance|production|done|failed; legacy csr|invoices readable',
+  `onboard_step` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'none' COMMENT 'none|queued|csr|compliance|invoices|production|done',
+  `onboard_attempt` bigint unsigned NOT NULL DEFAULT '0',
+  `onboard_retry_count` int unsigned NOT NULL DEFAULT '0',
+  `onboard_error_code` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `onboard_error` text COLLATE utf8mb4_unicode_ci,
+  `onboard_queued_at` datetime DEFAULT NULL,
+  `onboard_started_at` datetime DEFAULT NULL,
+  `onboard_completed_at` datetime DEFAULT NULL,
   `last_error` text COLLATE utf8mb4_unicode_ci,
   `last_attempt_at` datetime DEFAULT NULL,
   `previous_invoice_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'base64(sha256(prev_signed_xml)); null = first document',
   `last_icv` bigint unsigned NOT NULL DEFAULT '0' COMMENT 'Strictly increasing per-EGS Invoice Counter Value (shared across bill/credit/debit)',
   PRIMARY KEY (`branch_id`),
+  KEY `idx_bzc_onboard_state` (`onboard_state`,`onboard_attempt`),
   CONSTRAINT `fk_bzc_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -736,6 +745,37 @@ CREATE TABLE `branches` (
   CONSTRAINT `fk_branches_company` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `zatca_onboarding_attempt`
+--
+
+DROP TABLE IF EXISTS `zatca_onboarding_attempt`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `zatca_onboarding_attempt` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `branch_id` int unsigned NOT NULL,
+  `attempt_number` bigint unsigned NOT NULL,
+  `state` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'queued',
+  `step` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'queued',
+  `retry_count` int unsigned NOT NULL DEFAULT '0',
+  `error_code` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `error_message` text COLLATE utf8mb4_unicode_ci,
+  `queued_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `started_at` datetime DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_zatca_onboarding_attempt` (`branch_id`,`attempt_number`),
+  KEY `idx_zatca_onboarding_state` (`branch_id`,`state`,`attempt_number`),
+  KEY `idx_zatca_onboarding_retry` (`state`,`retry_count`),
+  CONSTRAINT `chk_zatca_onboarding_state` CHECK (`state` IN ('queued','compliance','production','done','failed','not_started','csr','invoices')),
+  CONSTRAINT `chk_zatca_onboarding_step` CHECK (`step` IN ('none','queued','csr','compliance','invoices','production','done','failed')),
+  CONSTRAINT `fk_zatca_onboarding_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
 
 --
 -- Table structure for table `car_link`

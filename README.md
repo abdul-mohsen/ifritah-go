@@ -30,3 +30,28 @@ Invalid requests return HTTP 400 with a `detail` message naming the field and
 reason; no onboarding event is published. The configuration save endpoint may
 still save drafts, but onboarding is blocked until the persisted configuration
 is complete.
+
+## ZATCA onboarding state
+
+After validation, `POST /api/v2/branch/:id/zatca/onboard` records a durable
+branch attempt in `queued` state before publishing the existing onboarding
+message. The response includes `onboard_state`, `onboard_step`, and the
+monotonic `onboard_attempt`. Duplicate active or completed requests do not
+create another attempt.
+
+`GET /api/v2/branch/:id/zatca` exposes non-secret progress metadata:
+`onboard_state` (`not_started`, `queued`, `compliance`, `production`, `done`,
+or `failed`), `onboard_step`, retry count, error code/message, and queued,
+started, and completed timestamps. The durable attempt history is stored in
+`zatca_onboarding_attempt`; daemon-facing sqlc queries update it by branch and
+attempt number. OTPs and ZATCA credentials are never included in this
+metadata.
+
+The database transition and attempt insert are atomic locally. The existing
+publisher is called after commit; if publication fails, the same attempt is
+marked `failed` with bounded error evidence. Cross-system atomicity requires an
+outbox and remains outside this backend lane.
+
+For existing databases, apply
+`pkg/db/migrations/0009_zatca_onboarding_state.sql` after the T003 submission
+state migration. Fresh Docker initialization includes it automatically.

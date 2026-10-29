@@ -117,6 +117,12 @@ func TestOnboardBranchZatcaPublishesTrimmedOTPAfterValidation(t *testing.T) {
 			"Retail", "300000000000003", "7000000000", "King Fahd Rd",
 			"1234", "Olaya", "12345",
 		))
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE\s+branch_zatca_config`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT\s+INTO\s+zatca_onboarding_attempt`).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 	publisher := &recordingZatcaPublisher{}
 	h.pub = publisher
 
@@ -185,10 +191,14 @@ func zatcaConfigRows(values ...string) *sqlmock.Rows {
 		"orgid", "orgunit", "orgname", "csrcountry", "csrloc", "bizcat",
 		"vat", "crn", "street", "building", "district", "postal",
 		"csrlen", "prodlen", "zatca_registered_at", "zatca_status",
-		"zatca_onboarded_at", "name",
+		"zatca_onboarded_at", "name", "onboard_state", "onboard_step",
+		"onboard_attempt", "onboard_retry_count", "onboard_error_code",
+		"onboard_error", "onboard_queued_at", "onboard_started_at",
+		"onboard_completed_at", "last_error", "last_attempt_at",
 	}).AddRow(
 		values[0], values[1], values[2], values[3], values[4], values[5],
 		values[6], values[7], values[8], values[9], values[10], values[11],
 		int32(0), int32(0), nil, int8(3), nil, "Main Branch",
+		"not_started", "none", uint64(0), uint32(0), nil, nil, nil, nil, nil, nil, nil,
 	)
 }

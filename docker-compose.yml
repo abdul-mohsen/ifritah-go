@@ -43,6 +43,7 @@ services:
       - ./pkg/db/migrations/0004_typed_filter_indexes.sql:/docker-entrypoint-initdb.d/13-0004-typed-filter-indexes.sql:ro
       - ./pkg/db/runtime_migrations/0005_bill_total_backfill.sql:/docker-entrypoint-initdb.d/14-0005-bill-total-backfill.sql:ro
       - ./pkg/db/migrations/0008_zatca_submission_state.sql:/docker-entrypoint-initdb.d/15-0008-zatca-submission-state.sql:ro
+      - ./pkg/db/migrations/0009_zatca_onboarding_state.sql:/docker-entrypoint-initdb.d/16-0009-zatca-onboarding-state.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
       interval: 5s

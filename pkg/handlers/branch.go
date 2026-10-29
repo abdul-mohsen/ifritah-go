@@ -465,11 +465,83 @@ func (h *handler) OnboardBranchZatca(c *gin.Context) {
 
 	if h.pub == nil {
 		log.Printf("ERROR OnboardBranchZatca: ZATCA publisher is unavailable")
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	tx, err := h.DB.BeginTx(c.Request.Context(), nil)
+	if err != nil {
+		log.Printf("ERROR OnboardBranchZatca begin state transition: %v", err)
 		c.Status(http.StatusInternalServerError)
 		return
 	}
+	defer tx.Rollback()
+
+	qtx := h.queries.WithTx(tx)
+	result, err := qtx.QueueZatcaOnboarding(c.Request.Context(), branchID)
+	if err != nil {
+		log.Printf("ERROR OnboardBranchZatca queue state transition: %v", err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("ERROR OnboardBranchZatca inspect state transition: %v", err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	if affected == 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"detail":          "ZATCA onboarding is already active or completed",
+			"onboard_state":   config.OnboardState,
+			"onboard_step":    config.OnboardStep,
+			"onboard_attempt": config.OnboardAttempt,
+		})
+		return
+	}
+
+	attemptNumber := config.OnboardAttempt + 1
+	if err := qtx.CreateZatcaOnboardingAttempt(c.Request.Context(), db.CreateZatcaOnboardingAttemptParams{
+		BranchID:      branchID,
+		AttemptNumber: attemptNumber,
+	}); err != nil {
+		log.Printf("ERROR OnboardBranchZatca create attempt: %v", err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		log.Printf("ERROR OnboardBranchZatca commit state transition: %v", err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
 	if err := h.pub.OnboadBranch(int64(branchID), otp); err != nil {
-		c.Status(http.StatusInternalServerError)
+		errorCode, errorMessage := zatcaOnboardingPublisherError(err)
+		if stateErr := h.queries.MarkZatcaOnboardingFailed(c.Request.Context(), db.MarkZatcaOnboardingFailedParams{
+			ErrorCode:     errorCode,
+			ErrorMessage:  errorMessage,
+			BranchID:      branchID,
+			AttemptNumber: attemptNumber,
+		}); stateErr != nil {
+			log.Printf("ERROR OnboardBranchZatca persist failed state: %v", stateErr)
+		}
+		if attemptErr := h.queries.MarkZatcaOnboardingAttemptFailed(c.Request.Context(), db.MarkZatcaOnboardingAttemptFailedParams{
+			ErrorCode:     errorCode,
+			ErrorMessage:  errorMessage,
+			BranchID:      branchID,
+			AttemptNumber: attemptNumber,
+		}); attemptErr != nil {
+			log.Printf("ERROR OnboardBranchZatca persist failed attempt: %v", attemptErr)
+		}
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"detail":              "onboarding queued",
+		"onboard_state":       "queued",
+		"onboard_step":        "queued",
+		"onboard_attempt":     attemptNumber,
+		"onboard_retry_count": 0,
+	})
 }

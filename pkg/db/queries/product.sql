@@ -1,6 +1,19 @@
 -- name: GetProduct :one
 select p.* from product p where p.id = ? and p.is_deleted = False;
 
+-- name: GetProductForUpdate :one
+select p.* from product p where p.id = ? and p.is_deleted = False for update;
+
+-- name: GetProductByStoreAndName :one
+select p.* from product p
+where p.store_id = ? and p.name = ? and p.is_deleted = False
+order by p.id
+limit 1
+for update;
+
+-- name: LockStoreForProductSync :one
+select id from store where id = ? for update;
+
 -- name: GetAllProduct :many
 SELECT p.*
 FROM user

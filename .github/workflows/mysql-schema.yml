@@ -39,17 +39,8 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Check out deployment database scripts
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          repository: abdul-mohsen/deployment
-          ref: main
-          path: deployment
-          persist-credentials: false
-
       - name: Validate schema and migration replay
         env:
-          DEPLOYMENT_DIR: deployment
           MYSQL_IMAGE: mysql:${{ matrix.mysql }}
           MYSQL_HOST: 127.0.0.1
           MYSQL_PORT: 3306

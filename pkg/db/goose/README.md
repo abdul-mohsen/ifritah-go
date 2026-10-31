@@ -5,8 +5,7 @@
 for new tenant databases. Existing tenant databases are adopted at version 1 by the
 deployment change that follows this PR, so goose never re-runs the baseline.
 
-The legacy folders still drive `sqlc generate` and the existing replay check
-(`.github/workflows/mysql-schema.yml`) until the deployment tooling moves to goose.
+`sqlc.yaml` reads this folder for the main tenant schema, so every goose migration reaches the generated code. `pkg/db/schema/car_part.sql` stays a separate sqlc input: it is another database, and sqlc reads it first (see the comment in `sqlc.yaml`). The legacy `pkg/db/migrations` and `pkg/db/runtime_migrations` folders are no longer read by sqlc. They drive only the replay check (`.github/workflows/mysql-schema.yml`) until the deployment tooling moves to goose.
 `pkg/db/gen` is git-ignored: `go.yml` regenerates it before every build.
 
 ## Commands
@@ -23,6 +22,7 @@ go run ./cmd/migrate version
 
 ## Rules for new migrations
 
+- New schema changes go only in this folder. sqlc reads it, so no other file needs to change.
 - File name `NNNNN_snake_case.sql` with the next free five-digit version. sqlc reads
   migration folders in name order, so the zero padding matters.
 - Each file has `-- +goose Up` and `-- +goose Down`. The Down section must reverse the Up section.
@@ -36,4 +36,5 @@ go run ./cmd/migrate version
   after the baseline, and (when `GOOSE_PARITY_DSN` is set) a comparison of the baseline with the
   legacy SQL, table by table.
 - `cmd/migrate up`, `status`, `roundtrip`, `up`, `version` on a fresh database.
+- `.github/scripts/test-sqlc-goose.sh` (sqlc 1.27.0, the CI version): a probe migration with a Down section reaches the generated model, and the Down is ignored.
 - The baseline replayed by a tenant account that has only `ALL` on its own database. `ALL` does not include `SUPER` or `SET_USER_ID`.

@@ -1,4 +1,4 @@
-# Verifies the goose migrations on every pull request and on pushes to dev and main.
+# Verifies the goose migrations, and that sqlc generates from them, on every pull request and on pushes to dev and main.
 # The baseline must apply cleanly and match the legacy schema on each supported MySQL version,
 # and every migration after the baseline must roll back and re-apply.
 name: Migrations
@@ -74,3 +74,17 @@ jobs:
             -e "CREATE DATABASE goose_tenant CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER 'tenant'@'%' IDENTIFIED BY 'tenant'; GRANT ALL PRIVILEGES ON goose_tenant.* TO 'tenant'@'%';"
           docker run --rm --network host -e MYSQL_PWD=tenant -v "$PWD/pkg/db/goose:/sql:ro" "mysql:${{ matrix.mysql }}" \
             sh -c 'mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u tenant goose_tenant < /sql/00001_baseline.sql'
+
+  sqlc:
+    name: sqlc reads the goose migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install sqlc
+        uses: sqlc-dev/setup-sqlc@c0209b9199cd1cce6a14fc27cabcec491b651761 # v4
+        with:
+          sqlc-version: '1.27.0'
+
+      - name: Probe migration reaches the generated code
+        run: sh .github/scripts/test-sqlc-goose.sh

@@ -3,8 +3,10 @@ sql:
   - engine : "mysql"
     queries: "pkg/db/queries"
     schema:
-      - "pkg/db/schema"
-      - "pkg/db/migrations"
+      # car_part.sql must come first. Its unqualified DROP TABLE IF EXISTS oem_number would
+      # remove the main oem_number table if it ran after the main schema.
+      - "pkg/db/schema/car_part.sql"
+      - "pkg/db/goose"
     gen:
       go:
         package: "db"

@@ -90,6 +90,21 @@ func (p *ZatcaPublisher) publish(msg Message) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
+	return p.publishPayload(msg, data)
+}
+
+func (p *ZatcaPublisher) PublishOutboxPayload(data []byte) error {
+	var msg Message
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return fmt.Errorf("decode outbox payload: %w", err)
+	}
+	if msg.DocType == "" || msg.BranchID <= 0 || msg.DBName == "" {
+		return fmt.Errorf("outbox payload is missing publish identity")
+	}
+	return p.publishPayload(msg, data)
+}
+
+func (p *ZatcaPublisher) publishPayload(msg Message, data []byte) error {
 	subject := fmt.Sprintf("zatca.%s.%s.%d", msg.DocType, msg.DBName, msg.BranchID)
 	ack, err := p.js.Publish(subject, data)
 	if err != nil {

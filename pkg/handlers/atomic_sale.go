@@ -51,6 +51,8 @@ type atomicSaleOutboxPayload struct {
 	TenantID      uint64 `json:"tenant_id"`
 	PosID         string `json:"pos_id"`
 	BillRequestID string `json:"bill_request_id"`
+	EventID       string `json:"event_id"`
+	EGSSequenceID string `json:"egs_sequence_id"`
 	InvoiceUUID   string `json:"invoice_uuid"`
 }
 
@@ -155,6 +157,7 @@ func (h *handler) addAtomicSale(c *gin.Context) {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
+	var eventID string
 
 	tenantID := identity.TenantID
 	posID := identity.PosID
@@ -274,13 +277,14 @@ func (h *handler) addAtomicSale(c *gin.Context) {
 	}
 
 	if request.State > 0 {
-		eventID, err := newAtomicSaleUUID()
+		eventID, err = newAtomicSaleUUID()
 		if err != nil {
 			log.Printf("AddBill outbox identity: %v", err)
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
-		payload, err := json.Marshal(atomicSaleOutboxPayload{
+		egsSequenceID := atomicSaleEGSSequenceID(request.BranchID, sequenceNumber)
+		payload, payloadHash, err := atomicSaleOutboxPayloadBytes(atomicSaleOutboxPayload{
 			DocType:       "bill",
 			ID:            uint64(billID),
 			BranchID:      request.BranchID,
@@ -288,6 +292,8 @@ func (h *handler) addAtomicSale(c *gin.Context) {
 			TenantID:      identity.TenantID,
 			PosID:         identity.PosID,
 			BillRequestID: identity.BillRequestID,
+			EventID:       eventID,
+			EGSSequenceID: egsSequenceID,
 			InvoiceUUID:   invoiceUUID,
 		})
 		if err != nil {
@@ -295,7 +301,7 @@ func (h *handler) addAtomicSale(c *gin.Context) {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
-		if _, err := qtx.InsertSaleOutbox(ctx, db.InsertSaleOutboxParams{
+		if err := insertAtomicSaleOutbox(ctx, qtx, db.InsertSaleOutboxParams{
 			TenantID:      identity.TenantID,
 			EventID:       eventID,
 			AggregateType: "bill",
@@ -303,7 +309,16 @@ func (h *handler) addAtomicSale(c *gin.Context) {
 			PosID:         &posID,
 			BillRequestID: billRequestID,
 			InvoiceUuid:   invoiceIdentity,
+			EgsSequenceID: stringPtr(egsSequenceID),
 			Payload:       json.RawMessage(payload),
+			PayloadFingerprint: sql.NullString{
+				String: payloadHash,
+				Valid:  true,
+			},
+			ContentHash: sql.NullString{
+				String: payloadHash,
+				Valid:  true,
+			},
 		}); err != nil {
 			log.Printf("AddBill outbox: %v", err)
 			c.AbortWithError(http.StatusInternalServerError, err)
@@ -315,6 +330,11 @@ func (h *handler) addAtomicSale(c *gin.Context) {
 		log.Printf("AddBill commit: %v", err)
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
+	}
+	if h.outboxPublisher != nil && eventID != "" {
+		if err := h.outboxPublisher.PublishOutbox(ctx, identity.TenantID, eventID); err != nil {
+			log.Printf("AddBill outbox publish deferred: %v", err)
+		}
 	}
 	c.JSON(http.StatusCreated, atomicSaleResponse{
 		ID:            uint64(billID),
@@ -547,6 +567,10 @@ func newAtomicSaleUUID() (string, error) {
 		value[8:10],
 		value[10:16],
 	), nil
+}
+
+func atomicSaleEGSSequenceID(branchID uint32, sequenceNumber uint64) string {
+	return fmt.Sprintf("%d:%d", branchID, sequenceNumber)
 }
 
 func uint64Ptr(value uint64) *uint64 {

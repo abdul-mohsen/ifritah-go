@@ -11,10 +11,11 @@ import (
 )
 
 type handler struct {
-	DB            *sql.DB
-	queries       *db.Queries
-	pub           *ZatcaPublisher
-	renderBillPDF billPDFRenderer
+	DB              *sql.DB
+	queries         *db.Queries
+	pub             *ZatcaPublisher
+	outboxPublisher outboxEventPublisher
+	renderBillPDF   billPDFRenderer
 }
 
 type billPDFRenderer func(model.Bill, []model.BillProductResponse) ([]byte, error)
@@ -26,11 +27,16 @@ type userSession struct {
 }
 
 func New(db *sql.DB, queries *db.Queries, pub *ZatcaPublisher) handler {
+	var outboxPublisher outboxEventPublisher
+	if db != nil && queries != nil && pub != nil {
+		outboxPublisher = newOutboxDispatcher(db, queries, pub)
+	}
 	return handler{
-		DB:            db,
-		queries:       queries,
-		pub:           pub,
-		renderBillPDF: generateBillPDFBytes,
+		DB:              db,
+		queries:         queries,
+		pub:             pub,
+		outboxPublisher: outboxPublisher,
+		renderBillPDF:   generateBillPDFBytes,
 	}
 }
 

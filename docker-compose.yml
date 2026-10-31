@@ -42,6 +42,7 @@ services:
       - ./pkg/db/migrations/0003_keyset_indexes.sql:/docker-entrypoint-initdb.d/12-0003-keyset-indexes.sql:ro
       - ./pkg/db/migrations/0004_typed_filter_indexes.sql:/docker-entrypoint-initdb.d/13-0004-typed-filter-indexes.sql:ro
       - ./pkg/db/runtime_migrations/0005_bill_total_backfill.sql:/docker-entrypoint-initdb.d/14-0005-bill-total-backfill.sql:ro
+      - ./pkg/db/migrations/0007_canonical_bill_identity.sql:/docker-entrypoint-initdb.d/15-0007-canonical-bill-identity.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
       interval: 5s

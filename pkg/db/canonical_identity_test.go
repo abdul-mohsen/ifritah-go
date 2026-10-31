@@ -24,21 +24,6 @@ func readDatabaseSource(t *testing.T, path ...string) string {
 	return string(data)
 }
 
-func tableSource(t *testing.T, schema, table string) string {
-	t.Helper()
-
-	start := strings.Index(schema, "CREATE TABLE `"+table+"`")
-	if start < 0 {
-		t.Fatalf("schema does not define table %q", table)
-	}
-
-	end := strings.Index(schema[start:], "\n--")
-	if end < 0 {
-		t.Fatalf("schema definition for table %q has no terminator", table)
-	}
-	return schema[start : start+end]
-}
-
 func requireSourceContains(t *testing.T, source, want string) {
 	t.Helper()
 	if !strings.Contains(source, want) {
@@ -47,51 +32,72 @@ func requireSourceContains(t *testing.T, source, want string) {
 }
 
 func TestCanonicalIdentityOwnershipSchema(t *testing.T) {
-	schema := readDatabaseSource(t, "schema", "schema.sql")
+	migration := readDatabaseSource(t, "migrations", "0007_canonical_bill_identity.sql")
 
-	for _, table := range []string{"bill", "outbox", "zatca_submission"} {
-		requireSourceContains(t, tableSource(t, schema, table), "`tenant_id`")
+	if strings.Contains(migration, "PREPARE") || strings.Contains(migration, "information_schema") {
+		t.Fatal("canonical identity migration must remain static")
+	}
+
+	for _, contract := range []string{
+		"CREATE TABLE IF NOT EXISTS `tenant`",
+		"ALTER TABLE `bill`",
+		"CREATE TABLE IF NOT EXISTS `outbox`",
+		"ALTER TABLE `zatca_submission`",
+	} {
+		requireSourceContains(t, migration, contract)
 	}
 }
 
 func TestCanonicalBillRequestIdentitySchema(t *testing.T) {
-	schema := readDatabaseSource(t, "schema", "schema.sql")
-	bill := tableSource(t, schema, "bill")
+	migration := readDatabaseSource(t, "migrations", "0007_canonical_bill_identity.sql")
 
 	for _, column := range []string{
-		"`tenant_id`",
-		"`pos_id`",
-		"`bill_request_id`",
-		"`request_fingerprint`",
-		"`request_fingerprint_version`",
-		"`invoice_uuid`",
+		"ADD COLUMN `tenant_id` bigint unsigned DEFAULT NULL",
+		"ADD COLUMN `pos_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL",
+		"ADD COLUMN `bill_request_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL",
+		"ADD COLUMN `request_fingerprint` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL",
+		"ADD COLUMN `request_fingerprint_version` smallint unsigned NOT NULL DEFAULT '1'",
 	} {
-		requireSourceContains(t, bill, column)
+		requireSourceContains(t, migration, column)
 	}
 
 	requireSourceContains(
 		t,
-		bill,
+		migration,
 		"UNIQUE KEY `uq_bill_tenant_pos_request` (`tenant_id`,`pos_id`,`bill_request_id`)",
 	)
 	requireSourceContains(
 		t,
-		bill,
+		migration,
 		"UNIQUE KEY `uq_bill_tenant_invoice_uuid` (`tenant_id`,`invoice_uuid`)",
 	)
 }
 
 func TestExistingCreateBillCanOmitC004IdentityFields(t *testing.T) {
-	schema := readDatabaseSource(t, "schema", "schema.sql")
-	bill := tableSource(t, schema, "bill")
+	migration := readDatabaseSource(t, "migrations", "0007_canonical_bill_identity.sql")
 
 	for _, column := range []string{
-		"`tenant_id` bigint unsigned DEFAULT NULL",
-		"`pos_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL",
-		"`bill_request_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL",
-		"`request_fingerprint` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL",
+		"ADD COLUMN `tenant_id` bigint unsigned DEFAULT NULL",
+		"ADD COLUMN `pos_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL",
+		"ADD COLUMN `bill_request_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL",
+		"ADD COLUMN `request_fingerprint` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL",
 	} {
-		requireSourceContains(t, bill, column)
+		requireSourceContains(t, migration, column)
+	}
+}
+
+func TestCanonicalIdentityIsMigrationOwned(t *testing.T) {
+	schema := readDatabaseSource(t, "schema", "schema.sql")
+
+	for _, directChange := range []string{
+		"CREATE TABLE `tenant`",
+		"CREATE TABLE `outbox`",
+		"`tenant_id` bigint unsigned DEFAULT NULL",
+		"Stable invoice UUID; distinct from bill_request_id",
+	} {
+		if strings.Contains(schema, directChange) {
+			t.Fatalf("canonical identity change %q must be migration-owned", directChange)
+		}
 	}
 }
 

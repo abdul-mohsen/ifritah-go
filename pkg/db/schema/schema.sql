@@ -465,6 +465,22 @@ CREATE TABLE `axles` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `tenant`
+--
+
+DROP TABLE IF EXISTS `tenant`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tenant` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `tenant_key` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_tenant_key` (`tenant_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `bill`
 --
 
@@ -486,7 +502,7 @@ CREATE TABLE `bill` (
   `client_id` int DEFAULT NULL,
   `user_phone_number` varchar(10) DEFAULT NULL,
   `qr_code` varchar(1000) DEFAULT NULL,
-  `invoice_uuid` char(36) DEFAULT NULL,
+  `invoice_uuid` char(36) COLLATE utf8mb4_unicode_ci DEFAULT (uuid()) COMMENT 'Stable invoice UUID; distinct from bill_request_id',
   `invoice_hash` varchar(128) DEFAULT NULL,
   `branch_id` int unsigned DEFAULT NULL,
   `payment_method` int NOT NULL DEFAULT '10' COMMENT 'ZATCA payment method: 10=Cash, 30=Credit, 42=Bank, 48=Card',
@@ -498,15 +514,54 @@ CREATE TABLE `bill` (
   `discount_amount` decimal(12,2) NOT NULL DEFAULT '0.00',
   `amount_paid` decimal(14,2) NOT NULL DEFAULT '0.00',
   `sequence_number_str` varchar(32) GENERATED ALWAYS AS (cast(`sequence_number` as char)) VIRTUAL,
+  `tenant_id` bigint unsigned NOT NULL,
+  `pos_id` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `bill_request_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `request_fingerprint` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `request_fingerprint_version` smallint unsigned NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
   KEY `fk_bill_branch` (`branch_id`),
   KEY `idx_bill_merchant_date` (`merchant_id`,`effective_date`),
   KEY `idx_bill_merchant_state` (`merchant_id`,`state`),
+  KEY `idx_bill_tenant_pos` (`tenant_id`,`pos_id`),
+  UNIQUE KEY `uq_bill_tenant_pos_request` (`tenant_id`,`pos_id`,`bill_request_id`),
+  UNIQUE KEY `uq_bill_tenant_invoice_uuid` (`tenant_id`,`invoice_uuid`),
+  UNIQUE KEY `uq_bill_tenant_pos_id` (`tenant_id`,`pos_id`,`id`),
   KEY `idx_bill_payment_method` (`payment_method`),
   KEY `idx_bill_deliver_date` (`deliver_date`),
   FULLTEXT KEY `note` (`note`,`userName`,`user_phone_number`),
+  CONSTRAINT `fk_bill_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `chk_bill_request_fingerprint` CHECK (regexp_like(`request_fingerprint`,_utf8mb4'^[0-9a-f]{64}$')),
+  CONSTRAINT `chk_bill_request_fingerprint_version` CHECK ((`request_fingerprint_version` > 0)),
+  CONSTRAINT `chk_bill_invoice_uuid` CHECK ((`invoice_uuid` is not null)),
   CONSTRAINT `fk_bill_branch` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=518 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `outbox`
+--
+
+DROP TABLE IF EXISTS `outbox`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `outbox` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `tenant_id` bigint unsigned NOT NULL,
+  `event_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT (uuid()),
+  `aggregate_type` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `aggregate_id` bigint unsigned NOT NULL,
+  `pos_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `bill_request_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `invoice_uuid` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `payload` json NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_outbox_tenant_event` (`tenant_id`,`event_id`),
+  KEY `idx_outbox_tenant_pending` (`tenant_id`,`created_at`,`id`),
+  CONSTRAINT `fk_outbox_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_outbox_invoice_identity` FOREIGN KEY (`tenant_id`,`invoice_uuid`) REFERENCES `bill` (`tenant_id`,`invoice_uuid`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2293,6 +2348,10 @@ DROP TABLE IF EXISTS `zatca_submission`;
 CREATE TABLE `zatca_submission` (
   `id` int NOT NULL AUTO_INCREMENT,
   `bill_id` bigint unsigned NOT NULL,
+  `tenant_id` bigint unsigned NOT NULL,
+  `pos_id` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `bill_request_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `invoice_uuid` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `status` tinyint NOT NULL DEFAULT '0' COMMENT '0=pending,1=submitted,2=accepted,3=rejected,4=warning',
   `rejection_code` varchar(32) DEFAULT NULL,
   `rejection_msg` varchar(512) DEFAULT NULL,
@@ -2303,10 +2362,14 @@ CREATE TABLE `zatca_submission` (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_zatca_bill` (`bill_id`),
+  UNIQUE KEY `uq_zatca_tenant_bill` (`tenant_id`,`bill_id`),
+  UNIQUE KEY `uq_zatca_tenant_pos_request` (`tenant_id`,`pos_id`,`bill_request_id`),
   KEY `idx_zatca_status` (`status`),
   KEY `idx_zatca_submitted` (`submitted_at`),
-  CONSTRAINT `fk_zatca_bill` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`) ON DELETE CASCADE
+  CONSTRAINT `fk_zatca_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_zatca_bill_identity` FOREIGN KEY (`tenant_id`,`pos_id`,`bill_request_id`) REFERENCES `bill` (`tenant_id`,`pos_id`,`bill_request_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_zatca_invoice_identity` FOREIGN KEY (`tenant_id`,`invoice_uuid`) REFERENCES `bill` (`tenant_id`,`invoice_uuid`) ON DELETE CASCADE,
+  CONSTRAINT `fk_zatca_bill_id` FOREIGN KEY (`tenant_id`,`pos_id`,`bill_id`) REFERENCES `bill` (`tenant_id`,`pos_id`,`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

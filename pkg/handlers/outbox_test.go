@@ -303,8 +303,9 @@ func outboxRows(event db.Outbox, status string) *sqlmock.Rows {
 		"pos_id",
 		"bill_request_id",
 		"invoice_uuid",
-		"egs_sequence_id",
 		"payload",
+		"created_at",
+		"egs_sequence_id",
 		"payload_fingerprint",
 		"content_hash",
 		"status",
@@ -316,7 +317,6 @@ func outboxRows(event db.Outbox, status string) *sqlmock.Rows {
 		"published_at",
 		"dead_lettered_at",
 		"manual_review_at",
-		"created_at",
 		"updated_at",
 	}).AddRow(
 		event.ID,
@@ -327,8 +327,9 @@ func outboxRows(event db.Outbox, status string) *sqlmock.Rows {
 		nullableValue(event.PosID),
 		nullStringValue(event.BillRequestID),
 		nullStringValue(event.InvoiceUuid),
-		nullableValue(event.EgsSequenceID),
 		[]byte(event.Payload),
+		event.CreatedAt,
+		nullableValue(event.EgsSequenceID),
 		nullStringValue(event.PayloadFingerprint),
 		nullStringValue(event.ContentHash),
 		event.Status,
@@ -340,7 +341,6 @@ func outboxRows(event db.Outbox, status string) *sqlmock.Rows {
 		nullableTimeValue(event.PublishedAt),
 		nullableTimeValue(event.DeadLetteredAt),
 		nullableTimeValue(event.ManualReviewAt),
-		event.CreatedAt,
 		event.UpdatedAt,
 	)
 }

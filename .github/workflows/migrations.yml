@@ -1,0 +1,68 @@
+# Verifies the goose migrations on every pull request and on pushes to dev and main.
+# The baseline must apply cleanly and match the legacy schema on each supported MySQL version,
+# and every migration after the baseline must roll back and re-apply.
+name: Migrations
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  goose:
+    name: goose MySQL ${{ matrix.mysql }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 8.0.28 is the oldest server the legacy schema supports. 8.0 and 8.4 are the current lines.
+        mysql: ["8.0.28", "8.0.44", "8.4"]
+
+    services:
+      mysql:
+        image: mysql:${{ matrix.mysql }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+          --health-start-period=30s
+
+    env:
+      HOST: 127.0.0.1:3306
+      DBUSER: root
+      PASSWORD: root
+      DBNAME: goose_ci
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.25'
+
+      - name: Create the CI database
+        run: |
+          docker run --rm --network host -e MYSQL_PWD=root "mysql:${{ matrix.mysql }}" \
+            mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root \
+            -e "CREATE DATABASE IF NOT EXISTS goose_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+
+      - name: Baseline, parity, and migration round trip
+        env:
+          GOOSE_PARITY_DSN: "root:root@tcp(127.0.0.1:3306)/?multiStatements=true&parseTime=true"
+        run: |
+          go test -count=1 -v ./pkg/db/goose/...
+          go run ./cmd/migrate up
+          go run ./cmd/migrate status
+          go run ./cmd/migrate roundtrip
+          go run ./cmd/migrate up
+          go run ./cmd/migrate version

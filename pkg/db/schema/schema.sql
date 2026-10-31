@@ -599,8 +599,13 @@ CREATE TABLE `outbox` (
   `aggregate_type` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,
   `aggregate_id` bigint unsigned NOT NULL,
   `pos_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `bill_request_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `document_type` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `source_id` bigint unsigned NOT NULL,
+  `request_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `invoice_uuid` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `original_document_type` varchar(32) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `original_source_id` bigint unsigned DEFAULT NULL,
+  `original_invoice_uuid` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `egs_sequence_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `icv` bigint unsigned DEFAULT NULL,
   `pih` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -620,13 +625,15 @@ CREATE TABLE `outbox` (
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_outbox_tenant_event` (`tenant_id`,`event_id`),
-  UNIQUE KEY `uq_outbox_tenant_pos_request` (`tenant_id`,`pos_id`,`bill_request_id`),
+  UNIQUE KEY `uq_outbox_tenant_document_source` (`tenant_id`,`document_type`,`source_id`),
+  UNIQUE KEY `uq_outbox_tenant_pos_request` (`tenant_id`,`pos_id`,`request_id`),
   UNIQUE KEY `uq_outbox_tenant_document_uuid` (`tenant_id`,`invoice_uuid`),
   UNIQUE KEY `uq_outbox_egs_icv` (`tenant_id`,`egs_sequence_id`,`icv`),
+  KEY `idx_outbox_tenant_source` (`tenant_id`,`document_type`,`source_id`),
   KEY `idx_outbox_tenant_pending` (`tenant_id`,`status`,`next_attempt_at`,`id`),
   KEY `idx_outbox_claim` (`status`,`next_attempt_at`,`lease_expires_at`,`id`),
   CONSTRAINT `fk_outbox_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT `fk_outbox_invoice_identity` FOREIGN KEY (`tenant_id`,`invoice_uuid`) REFERENCES `bill` (`tenant_id`,`invoice_uuid`) ON DELETE CASCADE
+  CONSTRAINT `chk_outbox_document_type` CHECK (`document_type` IN ('bill','credit','debit'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -640,6 +647,8 @@ DROP TABLE IF EXISTS `zatca_egs_document`;
 CREATE TABLE `zatca_egs_document` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `tenant_id` bigint unsigned NOT NULL,
+  `pos_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `request_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `egs_sequence_id` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
   `branch_id` int unsigned NOT NULL,
   `vat_number` varchar(15) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -647,6 +656,9 @@ CREATE TABLE `zatca_egs_document` (
   `document_uuid` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `document_type` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,
   `source_id` bigint unsigned NOT NULL,
+  `original_document_type` varchar(32) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `original_source_id` bigint unsigned DEFAULT NULL,
+  `original_invoice_uuid` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `outbox_event_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `icv` bigint unsigned NOT NULL,
   `pih` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -657,6 +669,7 @@ CREATE TABLE `zatca_egs_document` (
   UNIQUE KEY `uq_zatca_egs_document_uuid` (`tenant_id`,`document_uuid`),
   UNIQUE KEY `uq_zatca_egs_document_icv` (`egs_sequence_id`,`icv`),
   UNIQUE KEY `uq_zatca_egs_document_outbox` (`tenant_id`,`outbox_event_id`),
+  KEY `idx_zatca_egs_document_source` (`tenant_id`,`document_type`,`source_id`),
   KEY `idx_zatca_egs_document_state` (`tenant_id`,`egs_sequence_id`,`state`,`id`),
   CONSTRAINT `fk_zatca_egs_document_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_zatca_egs_document_sequence` FOREIGN KEY (`egs_sequence_id`) REFERENCES `egs_sequence` (`egs_sequence_id`) ON DELETE RESTRICT ON UPDATE CASCADE,
@@ -1152,6 +1165,7 @@ DROP TABLE IF EXISTS `credit_note`;
 CREATE TABLE `credit_note` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `bill_id` bigint unsigned NOT NULL,
+  `request_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT (uuid()),
   `state` int DEFAULT NULL,
   `NOTE` text,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
@@ -1161,6 +1175,7 @@ CREATE TABLE `credit_note` (
   `invoice_xml_path` varchar(500) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_bill_id` (`bill_id`),
+  UNIQUE KEY `uq_credit_note_request_id` (`request_id`),
   KEY `idx_cn_bill_id` (`bill_id`),
   CONSTRAINT `fk_credit_note` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=118 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -1224,6 +1239,7 @@ DROP TABLE IF EXISTS `debit_note`;
 CREATE TABLE `debit_note` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `bill_id` bigint unsigned NOT NULL,
+  `request_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT (uuid()),
   `state` int DEFAULT NULL COMMENT '1=pending, 3=submitted',
   `note` text COMMENT 'KSA-10 reason',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
@@ -1233,6 +1249,7 @@ CREATE TABLE `debit_note` (
   `invoice_xml_path` varchar(500) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_dn_bill_id` (`bill_id`),
+  UNIQUE KEY `uq_debit_note_request_id` (`request_id`),
   KEY `idx_dn_state` (`state`),
   CONSTRAINT `fk_debit_note_bill` FOREIGN KEY (`bill_id`) REFERENCES `bill` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -2448,11 +2465,15 @@ DROP TABLE IF EXISTS `zatca_submission`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `zatca_submission` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `bill_id` bigint unsigned NOT NULL,
   `tenant_id` bigint unsigned NOT NULL,
+  `document_type` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `source_id` bigint unsigned NOT NULL,
   `pos_id` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `bill_request_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `request_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `invoice_uuid` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `original_document_type` varchar(32) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `original_source_id` bigint unsigned DEFAULT NULL,
+  `original_invoice_uuid` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` tinyint NOT NULL DEFAULT '0' COMMENT '0=pending,1=submitted,2=accepted,3=rejected,4=warning',
   `rejection_code` varchar(32) DEFAULT NULL,
   `rejection_msg` varchar(512) DEFAULT NULL,
@@ -2463,16 +2484,69 @@ CREATE TABLE `zatca_submission` (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_zatca_tenant_bill` (`tenant_id`,`bill_id`),
-  UNIQUE KEY `uq_zatca_tenant_pos_request` (`tenant_id`,`pos_id`,`bill_request_id`),
+  UNIQUE KEY `uq_zatca_tenant_document_source` (`tenant_id`,`document_type`,`source_id`),
+  UNIQUE KEY `uq_zatca_tenant_pos_request` (`tenant_id`,`pos_id`,`request_id`),
+  UNIQUE KEY `uq_zatca_tenant_invoice_uuid` (`tenant_id`,`invoice_uuid`),
   KEY `idx_zatca_status` (`status`),
   KEY `idx_zatca_submitted` (`submitted_at`),
+  KEY `idx_zatca_source` (`tenant_id`,`document_type`,`source_id`),
   CONSTRAINT `fk_zatca_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT `fk_zatca_bill_identity` FOREIGN KEY (`tenant_id`,`pos_id`,`bill_request_id`) REFERENCES `bill` (`tenant_id`,`pos_id`,`bill_request_id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_zatca_invoice_identity` FOREIGN KEY (`tenant_id`,`invoice_uuid`) REFERENCES `bill` (`tenant_id`,`invoice_uuid`) ON DELETE CASCADE,
-  CONSTRAINT `fk_zatca_bill_id` FOREIGN KEY (`tenant_id`,`pos_id`,`bill_id`) REFERENCES `bill` (`tenant_id`,`pos_id`,`id`) ON DELETE CASCADE
+  CONSTRAINT `chk_zatca_document_type` CHECK (`document_type` IN ('bill','credit','debit'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- View structure for view `zatca_document_source`
+--
+
+DROP VIEW IF EXISTS `zatca_document_source`;
+CREATE VIEW `zatca_document_source` AS
+SELECT
+  b.tenant_id AS tenant_id,
+  'bill' AS document_type,
+  b.id AS source_id,
+  b.pos_id AS pos_id,
+  b.bill_request_id AS request_id,
+  b.invoice_uuid AS invoice_uuid,
+  b.branch_id AS branch_id,
+  b.sequence_number AS sequence_number,
+  CAST(NULL AS CHAR(32)) AS original_document_type,
+  CAST(NULL AS UNSIGNED) AS original_source_id,
+  CAST(NULL AS CHAR(36)) AS original_invoice_uuid
+FROM bill b
+WHERE b.tenant_id IS NOT NULL
+UNION ALL
+SELECT
+  b.tenant_id AS tenant_id,
+  'credit' AS document_type,
+  cn.id AS source_id,
+  b.pos_id AS pos_id,
+  cn.request_id AS request_id,
+  cn.invoice_uuid AS invoice_uuid,
+  b.branch_id AS branch_id,
+  b.sequence_number AS sequence_number,
+  'bill' AS original_document_type,
+  b.id AS original_source_id,
+  b.invoice_uuid AS original_invoice_uuid
+FROM credit_note cn
+JOIN bill b ON b.id = cn.bill_id
+WHERE b.tenant_id IS NOT NULL
+UNION ALL
+SELECT
+  b.tenant_id AS tenant_id,
+  'debit' AS document_type,
+  dn.id AS source_id,
+  b.pos_id AS pos_id,
+  dn.request_id AS request_id,
+  dn.invoice_uuid AS invoice_uuid,
+  b.branch_id AS branch_id,
+  b.sequence_number AS sequence_number,
+  'bill' AS original_document_type,
+  b.id AS original_source_id,
+  b.invoice_uuid AS original_invoice_uuid
+FROM debit_note dn
+JOIN bill b ON b.id = dn.bill_id
+WHERE b.tenant_id IS NOT NULL;
 
 --
 -- View structure for view `cash_voucher_summary`

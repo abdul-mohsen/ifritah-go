@@ -1,6 +1,6 @@
 -- Transactional outbox claim, retry, and operator-state commands.
 
--- name: GetOutboxEventBySaleIdentity :one
+-- name: GetOutboxEventByRequestIdentity :one
 SELECT
   o.id,
   o.tenant_id,
@@ -8,8 +8,13 @@ SELECT
   o.aggregate_type,
   o.aggregate_id,
   o.pos_id,
-  o.bill_request_id,
+  o.document_type,
+  o.source_id,
+  o.request_id,
   o.invoice_uuid,
+  o.original_document_type,
+  o.original_source_id,
+  o.original_invoice_uuid,
   o.egs_sequence_id,
   o.icv,
   o.pih,
@@ -30,7 +35,45 @@ SELECT
 FROM outbox AS o
 WHERE o.tenant_id = sqlc.arg('tenant_id')
   AND o.pos_id = sqlc.arg('pos_id')
-  AND o.bill_request_id = sqlc.arg('bill_request_id')
+  AND o.request_id = sqlc.arg('request_id')
+LIMIT 1;
+
+-- name: GetOutboxEventByDocument :one
+SELECT
+  o.id,
+  o.tenant_id,
+  o.event_id,
+  o.aggregate_type,
+  o.aggregate_id,
+  o.pos_id,
+  o.document_type,
+  o.source_id,
+  o.request_id,
+  o.invoice_uuid,
+  o.original_document_type,
+  o.original_source_id,
+  o.original_invoice_uuid,
+  o.egs_sequence_id,
+  o.icv,
+  o.pih,
+  o.payload,
+  o.payload_fingerprint,
+  o.content_hash,
+  o.status,
+  o.attempt_count,
+  o.next_attempt_at,
+  o.lease_owner,
+  o.lease_expires_at,
+  o.last_error,
+  o.published_at,
+  o.dead_lettered_at,
+  o.manual_review_at,
+  o.created_at,
+  o.updated_at
+FROM outbox AS o
+WHERE o.tenant_id = sqlc.arg('tenant_id')
+  AND o.document_type = sqlc.arg('document_type')
+  AND o.source_id = sqlc.arg('source_id')
 LIMIT 1;
 
 -- name: ClaimOutboxEvent :execresult

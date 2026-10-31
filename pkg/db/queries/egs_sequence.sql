@@ -60,11 +60,12 @@ WHERE egs_sequence_id = sqlc.arg('egs_sequence_id')
 
 -- name: InsertZatcaEGSDocument :execresult
 INSERT INTO zatca_egs_document (
-  tenant_id, egs_sequence_id, branch_id, vat_number, egs_id,
-  document_uuid, document_type, source_id, outbox_event_id,
-  icv, pih, document_snapshot, state
+  tenant_id, pos_id, request_id, egs_sequence_id, branch_id,
+  vat_number, egs_id, document_uuid, document_type, source_id,
+  original_document_type, original_source_id, original_invoice_uuid,
+  outbox_event_id, icv, pih, document_snapshot, state
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: CommitEGSSequence :execresult
 UPDATE egs_sequence AS s
@@ -132,6 +133,8 @@ WHERE egs_sequence_id = sqlc.arg('egs_sequence_id')
 SELECT
   id,
   tenant_id,
+  pos_id,
+  request_id,
   egs_sequence_id,
   branch_id,
   vat_number,
@@ -139,6 +142,9 @@ SELECT
   document_uuid,
   document_type,
   source_id,
+  original_document_type,
+  original_source_id,
+  original_invoice_uuid,
   outbox_event_id,
   icv,
   pih,
@@ -148,4 +154,32 @@ SELECT
 FROM zatca_egs_document
 WHERE tenant_id = sqlc.arg('tenant_id')
   AND document_uuid = sqlc.arg('document_uuid')
+LIMIT 1;
+
+-- name: GetZatcaEGSDocumentBySource :one
+SELECT
+  id,
+  tenant_id,
+  pos_id,
+  request_id,
+  egs_sequence_id,
+  branch_id,
+  vat_number,
+  egs_id,
+  document_uuid,
+  document_type,
+  source_id,
+  original_document_type,
+  original_source_id,
+  original_invoice_uuid,
+  outbox_event_id,
+  icv,
+  pih,
+  document_snapshot,
+  state,
+  created_at
+FROM zatca_egs_document
+WHERE tenant_id = sqlc.arg('tenant_id')
+  AND document_type = sqlc.arg('document_type')
+  AND source_id = sqlc.arg('source_id')
 LIMIT 1;

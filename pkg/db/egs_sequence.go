@@ -67,15 +67,18 @@ type EGSSequenceReservation struct {
 type EGSSequenceCommitRequest struct {
 	Reservation EGSSequenceReservation
 
-	DocumentType string
-	SourceID     uint64
-	State        string
-	Snapshot     json.RawMessage
+	DocumentType         string
+	SourceID             uint64
+	OriginalDocumentType *string
+	OriginalSourceID     *uint64
+	OriginalInvoiceUUID  sql.NullString
+	State                string
+	Snapshot             json.RawMessage
 
 	AggregateType string
 	AggregateID   uint64
 	PosID         *string
-	BillRequestID sql.NullString
+	RequestID     sql.NullString
 	Payload       json.RawMessage
 
 	PayloadFingerprint  sql.NullString
@@ -216,6 +219,7 @@ func (a *EGSSequenceAllocator) Commit(
 	ctx context.Context,
 	request EGSSequenceCommitRequest,
 ) error {
+	request.DocumentType = canonicalDocumentType(request.DocumentType)
 	if err := validateCommitRequest(request); err != nil {
 		return err
 	}
@@ -270,36 +274,46 @@ func (a *EGSSequenceAllocator) Commit(
 	icv := reservation.ICV
 
 	if _, err := qtx.InsertZatcaEGSDocument(ctx, generated.InsertZatcaEGSDocumentParams{
-		TenantID:         reservation.TenantID,
-		EgsSequenceID:    sequenceID,
-		BranchID:         reservation.BranchID,
-		VatNumber:        reservation.VATNumber,
-		EgsID:            reservation.EGSID,
-		DocumentUuid:     reservation.DocumentUUID,
-		DocumentType:     request.DocumentType,
-		SourceID:         request.SourceID,
-		OutboxEventID:    reservation.OutboxEventID,
-		Icv:              icv,
-		Pih:              pih,
-		DocumentSnapshot: snapshot,
-		State:            state,
+		TenantID:             reservation.TenantID,
+		PosID:                request.PosID,
+		RequestID:            request.RequestID,
+		EgsSequenceID:        sequenceID,
+		BranchID:             reservation.BranchID,
+		VatNumber:            reservation.VATNumber,
+		EgsID:                reservation.EGSID,
+		DocumentUuid:         reservation.DocumentUUID,
+		DocumentType:         request.DocumentType,
+		SourceID:             request.SourceID,
+		OriginalDocumentType: request.OriginalDocumentType,
+		OriginalSourceID:     request.OriginalSourceID,
+		OriginalInvoiceUuid:  request.OriginalInvoiceUUID,
+		OutboxEventID:        reservation.OutboxEventID,
+		Icv:                  icv,
+		Pih:                  pih,
+		DocumentSnapshot:     snapshot,
+		State:                state,
 	}); err != nil {
 		return fmt.Errorf("insert immutable EGS document %s: %w", reservation.DocumentUUID, err)
 	}
-	if _, err := qtx.InsertSaleOutbox(ctx, generated.InsertSaleOutboxParams{
-		TenantID:           reservation.TenantID,
-		EventID:            reservation.OutboxEventID,
-		AggregateType:      aggregateType,
-		AggregateID:        aggregateID,
-		PosID:              request.PosID,
-		BillRequestID:      request.BillRequestID,
-		InvoiceUuid:        sql.NullString{String: reservation.DocumentUUID, Valid: true},
-		EgsSequenceID:      stringPointer(sequenceID),
-		Icv:                &icv,
-		Pih:                pih,
-		Payload:            payload,
-		PayloadFingerprint: payloadFingerprint,
-		ContentHash:        contentHash,
+	if _, err := qtx.InsertZatcaOutbox(ctx, generated.InsertZatcaOutboxParams{
+		TenantID:             reservation.TenantID,
+		EventID:              reservation.OutboxEventID,
+		AggregateType:        aggregateType,
+		AggregateID:          aggregateID,
+		DocumentType:         request.DocumentType,
+		SourceID:             request.SourceID,
+		PosID:                request.PosID,
+		RequestID:            request.RequestID,
+		InvoiceUuid:          sql.NullString{String: reservation.DocumentUUID, Valid: true},
+		OriginalDocumentType: request.OriginalDocumentType,
+		OriginalSourceID:     request.OriginalSourceID,
+		OriginalInvoiceUuid:  request.OriginalInvoiceUUID,
+		EgsSequenceID:        stringPointer(sequenceID),
+		Icv:                  &icv,
+		Pih:                  pih,
+		Payload:              payload,
+		PayloadFingerprint:   payloadFingerprint,
+		ContentHash:          contentHash,
 	}); err != nil {
 		return fmt.Errorf("insert EGS outbox event %s: %w", reservation.OutboxEventID, err)
 	}
@@ -436,6 +450,14 @@ func validateCommitRequest(request EGSSequenceCommitRequest) error {
 	if strings.TrimSpace(request.DocumentType) == "" {
 		return errors.New("document type is required")
 	}
+	switch canonicalDocumentType(request.DocumentType) {
+	case "bill", "credit", "debit":
+	default:
+		return fmt.Errorf("invalid document type %q", request.DocumentType)
+	}
+	if request.SourceID == 0 {
+		return errors.New("source ID is required")
+	}
 	if request.State != "" {
 		switch request.State {
 		case EGSDocumentQueued, EGSDocumentSubmitted, EGSDocumentAccepted,
@@ -448,6 +470,19 @@ func validateCommitRequest(request EGSSequenceCommitRequest) error {
 		return errors.New("immutable document snapshot is required")
 	}
 	return nil
+}
+
+func canonicalDocumentType(documentType string) string {
+	switch strings.TrimSpace(documentType) {
+	case "invoice":
+		return "bill"
+	case "credit_note":
+		return "credit"
+	case "debit_note":
+		return "debit"
+	default:
+		return strings.TrimSpace(documentType)
+	}
 }
 
 func validateIdentity(identity EGSSequenceIdentity) error {

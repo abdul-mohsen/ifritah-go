@@ -44,8 +44,13 @@ SELECT
   o.aggregate_type,
   o.aggregate_id,
   o.pos_id,
-  o.bill_request_id,
+  o.document_type,
+  o.source_id,
+  o.request_id,
   o.invoice_uuid,
+  o.original_document_type,
+  o.original_source_id,
+  o.original_invoice_uuid,
   o.egs_sequence_id,
   o.icv,
   o.pih,
@@ -66,27 +71,4 @@ SELECT
 FROM outbox AS o
 WHERE o.tenant_id = sqlc.arg('tenant_id')
   AND o.event_id = sqlc.arg('event_id')
-LIMIT 1;
-
--- name: GetZatcaSubmissionByBillRequest :one
-SELECT
-  zs.id,
-  zs.tenant_id,
-  zs.pos_id,
-  zs.bill_id,
-  zs.bill_request_id,
-  zs.invoice_uuid,
-  zs.status,
-  zs.rejection_code,
-  zs.rejection_msg,
-  zs.submitted_at,
-  zs.cleared_at,
-  zs.response_xml,
-  zs.retry_count,
-  zs.created_at,
-  zs.updated_at
-FROM zatca_submission AS zs
-WHERE zs.tenant_id = sqlc.arg('tenant_id')
-  AND zs.pos_id = sqlc.arg('pos_id')
-  AND zs.bill_request_id = sqlc.arg('bill_request_id')
 LIMIT 1;

@@ -116,6 +116,7 @@ func TestCanonicalBillRequestResolutionContract(t *testing.T) {
 
 func TestCanonicalTenantSeparationContract(t *testing.T) {
 	queries := readDatabaseSource(t, "queries", "bill_identity.sql")
+	submissionQueries := readDatabaseSource(t, "queries", "zatca_submission.sql")
 
 	if strings.Contains(queries, "company_id = sqlc.arg('tenant_id')") ||
 		strings.Contains(queries, "merchant_id = sqlc.arg('tenant_id')") {
@@ -123,5 +124,5 @@ func TestCanonicalTenantSeparationContract(t *testing.T) {
 	}
 	requireSourceContains(t, queries, "WHERE b.tenant_id = sqlc.arg('tenant_id')")
 	requireSourceContains(t, queries, "WHERE o.tenant_id = sqlc.arg('tenant_id')")
-	requireSourceContains(t, queries, "WHERE zs.tenant_id = sqlc.arg('tenant_id')")
+	requireSourceContains(t, submissionQueries, "WHERE tenant_id = sqlc.arg('tenant_id')")
 }

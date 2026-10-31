@@ -33,10 +33,11 @@ INSERT INTO bill_payment (
 )
 VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
--- name: InsertSaleOutbox :execresult
+-- name: InsertZatcaOutbox :execresult
 INSERT INTO outbox (
-  tenant_id, event_id, aggregate_type, aggregate_id, pos_id,
-  bill_request_id, invoice_uuid, egs_sequence_id, icv, pih, payload,
-  payload_fingerprint, content_hash
+  tenant_id, event_id, aggregate_type, aggregate_id,
+  document_type, source_id, pos_id, request_id, invoice_uuid,
+  original_document_type, original_source_id, original_invoice_uuid,
+  egs_sequence_id, icv, pih, payload, payload_fingerprint, content_hash
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

@@ -44,13 +44,13 @@ type atomicSaleResponse struct {
 }
 
 type atomicSaleOutboxPayload struct {
-	DocType       string `json:"doc_type"`
-	ID            uint64 `json:"id"`
+	DocumentType  string `json:"document_type"`
+	SourceID      uint64 `json:"source_id"`
 	BranchID      uint32 `json:"branch_id"`
 	DBName        string `json:"db_name"`
 	TenantID      uint64 `json:"tenant_id"`
 	PosID         string `json:"pos_id"`
-	BillRequestID string `json:"bill_request_id"`
+	RequestID     string `json:"request_id"`
 	EventID       string `json:"event_id"`
 	EGSSequenceID string `json:"egs_sequence_id"`
 	InvoiceUUID   string `json:"invoice_uuid"`
@@ -285,13 +285,13 @@ func (h *handler) addAtomicSale(c *gin.Context) {
 		}
 		egsSequenceID := atomicSaleEGSSequenceID(request.BranchID, sequenceNumber)
 		payload, payloadHash, err := atomicSaleOutboxPayloadBytes(atomicSaleOutboxPayload{
-			DocType:       "bill",
-			ID:            uint64(billID),
+			DocumentType:  "bill",
+			SourceID:      uint64(billID),
 			BranchID:      request.BranchID,
 			DBName:        env("DBNAME", ""),
 			TenantID:      identity.TenantID,
 			PosID:         identity.PosID,
-			BillRequestID: identity.BillRequestID,
+			RequestID:     identity.BillRequestID,
 			EventID:       eventID,
 			EGSSequenceID: egsSequenceID,
 			InvoiceUUID:   invoiceUUID,
@@ -301,16 +301,21 @@ func (h *handler) addAtomicSale(c *gin.Context) {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
-		if err := insertAtomicSaleOutbox(ctx, qtx, db.InsertSaleOutboxParams{
-			TenantID:      identity.TenantID,
-			EventID:       eventID,
-			AggregateType: "bill",
-			AggregateID:   uint64(billID),
-			PosID:         &posID,
-			BillRequestID: billRequestID,
-			InvoiceUuid:   invoiceIdentity,
-			EgsSequenceID: stringPtr(egsSequenceID),
-			Payload:       json.RawMessage(payload),
+		if err := insertAtomicSaleOutbox(ctx, qtx, db.InsertZatcaOutboxParams{
+			TenantID:             identity.TenantID,
+			EventID:              eventID,
+			AggregateType:        "bill",
+			AggregateID:          uint64(billID),
+			DocumentType:         "bill",
+			SourceID:             uint64(billID),
+			PosID:                &posID,
+			RequestID:            billRequestID,
+			InvoiceUuid:          invoiceIdentity,
+			OriginalDocumentType: nil,
+			OriginalSourceID:     nil,
+			OriginalInvoiceUuid:  sql.NullString{},
+			EgsSequenceID:        stringPtr(egsSequenceID),
+			Payload:              json.RawMessage(payload),
 			PayloadFingerprint: sql.NullString{
 				String: payloadHash,
 				Valid:  true,

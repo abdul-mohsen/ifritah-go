@@ -26,13 +26,21 @@ type ZatcaBranchRow struct {
 
 // ZatcaSubmissionRow is one row in the GET /zatca/monitor/submissions response.
 type ZatcaSubmissionRow struct {
-	InvoiceID   int64   `json:"invoice_id"`
-	InvoiceNo   string  `json:"invoice_no"`
-	BranchID    *int64  `json:"branch_id"`
-	BranchName  string  `json:"branch_name"`
-	Status      string  `json:"status"`
-	StatusCode  int     `json:"status_code"`
-	ZatcaRef    *string `json:"zatca_ref"`
-	WarningMsg  *string `json:"warning_msg"`
-	SubmittedAt *string `json:"submitted_at"`
+	TenantID             int64   `json:"tenant_id"`
+	DocumentType         string  `json:"document_type"`
+	SourceID             int64   `json:"source_id"`
+	PosID                string  `json:"pos_id"`
+	RequestID            string  `json:"request_id"`
+	InvoiceUUID          string  `json:"invoice_uuid"`
+	OriginalDocumentType *string `json:"original_document_type"`
+	OriginalSourceID     *int64  `json:"original_source_id"`
+	OriginalInvoiceUUID  *string `json:"original_invoice_uuid"`
+	DocumentNumber       *string `json:"document_number"`
+	BranchID             *int64  `json:"branch_id"`
+	BranchName           string  `json:"branch_name"`
+	Status               string  `json:"status"`
+	StatusCode           int     `json:"status_code"`
+	ZatcaRef             *string `json:"zatca_ref"`
+	WarningMsg           *string `json:"warning_msg"`
+	SubmittedAt          *string `json:"submitted_at"`
 }

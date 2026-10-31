@@ -193,8 +193,8 @@ func validateOutboxPayload(event db.Outbox) error {
 	return nil
 }
 
-func insertAtomicSaleOutbox(ctx context.Context, qtx *db.Queries, params db.InsertSaleOutboxParams) error {
-	if _, err := qtx.InsertSaleOutbox(ctx, params); err == nil {
+func insertAtomicSaleOutbox(ctx context.Context, qtx *db.Queries, params db.InsertZatcaOutboxParams) error {
+	if _, err := qtx.InsertZatcaOutbox(ctx, params); err == nil {
 		return nil
 	} else if !IsDuplicate(err) {
 		return err
@@ -205,10 +205,10 @@ func insertAtomicSaleOutbox(ctx context.Context, qtx *db.Queries, params db.Inse
 		EventID:  params.EventID,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
-		existing, err = qtx.GetOutboxEventBySaleIdentity(ctx, db.GetOutboxEventBySaleIdentityParams{
-			TenantID:      params.TenantID,
-			PosID:         params.PosID,
-			BillRequestID: params.BillRequestID,
+		existing, err = qtx.GetOutboxEventByRequestIdentity(ctx, db.GetOutboxEventByRequestIdentityParams{
+			TenantID:  params.TenantID,
+			PosID:     params.PosID,
+			RequestID: params.RequestID,
 		})
 	}
 	if err != nil {
@@ -220,7 +220,7 @@ func insertAtomicSaleOutbox(ctx context.Context, qtx *db.Queries, params db.Inse
 	return fmt.Errorf("%w: event_id %s", ErrOutboxContentConflict, params.EventID)
 }
 
-func outboxEventMatches(existing db.Outbox, params db.InsertSaleOutboxParams) bool {
+func outboxEventMatches(existing db.Outbox, params db.InsertZatcaOutboxParams) bool {
 	if existing.TenantID != params.TenantID ||
 		existing.EventID != params.EventID ||
 		existing.AggregateType != params.AggregateType ||
@@ -231,8 +231,13 @@ func outboxEventMatches(existing db.Outbox, params db.InsertSaleOutboxParams) bo
 		return false
 	}
 	if !nullableStringEqual(existing.PosID, params.PosID) ||
-		!nullStringEqual(existing.BillRequestID, params.BillRequestID) ||
+		existing.DocumentType != params.DocumentType ||
+		existing.SourceID != params.SourceID ||
+		!nullStringEqual(existing.RequestID, params.RequestID) ||
 		!nullStringEqual(existing.InvoiceUuid, params.InvoiceUuid) ||
+		!nullableStringEqual(existing.OriginalDocumentType, params.OriginalDocumentType) ||
+		!nullableUint64Equal(existing.OriginalSourceID, params.OriginalSourceID) ||
+		!nullStringEqual(existing.OriginalInvoiceUuid, params.OriginalInvoiceUuid) ||
 		!nullableStringEqual(existing.EgsSequenceID, params.EgsSequenceID) ||
 		!nullableUint64Equal(existing.Icv, params.Icv) ||
 		!nullableStringEqual(existing.Pih, params.Pih) {

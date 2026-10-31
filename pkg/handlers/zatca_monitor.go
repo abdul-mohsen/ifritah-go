@@ -210,19 +210,38 @@ func (h *handler) ZatcaMonitorSubmissions(c *gin.Context) {
 	out := make([]model.ZatcaSubmissionRow, 0, len(rows))
 	for _, r := range rows {
 		item := model.ZatcaSubmissionRow{
-			InvoiceID:  int64(r.InvoiceID),
-			BranchName: r.BranchName,
-			StatusCode: int(r.Status),
-			Status:     statusToString(int(r.Status)),
+			TenantID:     int64(r.TenantID),
+			DocumentType: r.DocumentType,
+			SourceID:     int64(r.SourceID),
+			PosID:        r.PosID,
+			RequestID:    r.RequestID,
+			InvoiceUUID:  r.InvoiceUuid,
+			BranchName:   r.BranchName,
+			StatusCode:   int(r.Status),
+			Status:       statusToString(int(r.Status)),
 		}
 		if r.SequenceNumber != nil {
-			item.InvoiceNo = "INV-" + strconv.FormatUint(*r.SequenceNumber, 10)
+			v := strconv.FormatUint(*r.SequenceNumber, 10)
+			item.DocumentNumber = &v
 		} else {
-			item.InvoiceNo = "INV-" + strconv.FormatUint(r.InvoiceID, 10)
+			v := strconv.FormatUint(r.SourceID, 10)
+			item.DocumentNumber = &v
 		}
 		if r.BranchID != nil {
 			v := int64(*r.BranchID)
 			item.BranchID = &v
+		}
+		if r.OriginalDocumentType != nil {
+			v := *r.OriginalDocumentType
+			item.OriginalDocumentType = &v
+		}
+		if r.OriginalSourceID != nil {
+			v := int64(*r.OriginalSourceID)
+			item.OriginalSourceID = &v
+		}
+		if r.OriginalInvoiceUuid.Valid {
+			v := r.OriginalInvoiceUuid.String
+			item.OriginalInvoiceUUID = &v
 		}
 		if r.RejectionCode != nil {
 			v := *r.RejectionCode

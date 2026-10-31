@@ -229,6 +229,17 @@ func TestEGSSequenceSourceContract(t *testing.T) {
 	requireSourceContains(t, sequence, "UNIQUE KEY `uq_egs_sequence_owner` (`tenant_id`,`branch_id`,`vat_number`,`egs_id`)")
 	requireSourceContains(t, document, "UNIQUE KEY `uq_zatca_egs_document_icv` (`egs_sequence_id`,`icv`)")
 	requireSourceContains(t, document, "UNIQUE KEY `uq_zatca_egs_document_uuid` (`tenant_id`,`document_uuid`)")
+	for _, column := range []string{
+		"`pos_id`",
+		"`request_id`",
+		"`document_type`",
+		"`source_id`",
+		"`original_document_type`",
+		"`original_source_id`",
+		"`original_invoice_uuid`",
+	} {
+		requireSourceContains(t, document, column)
+	}
 	requireSourceContains(t, outbox, "`icv` bigint unsigned DEFAULT NULL")
 	requireSourceContains(t, outbox, "`pih` varchar(255)")
 	requireSourceContains(t, outbox, "UNIQUE KEY `uq_outbox_egs_icv` (`tenant_id`,`egs_sequence_id`,`icv`)")
@@ -239,6 +250,7 @@ func TestEGSSequenceSourceContract(t *testing.T) {
 	for _, contract := range []string{
 		"-- name: ReserveEGSSequence :execresult",
 		"-- name: CommitEGSSequence :execresult",
+		"-- name: GetZatcaEGSDocumentBySource :one",
 		"AND EXISTS (",
 		"d.state NOT IN ('rejected', 'ambiguous')",
 		"AND s.tenant_id = sqlc.arg('tenant_id')",

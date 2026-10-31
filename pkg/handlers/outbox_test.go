@@ -246,15 +246,17 @@ func TestOutboxDispatcherRetainsRetryableEventAfterPublishFailure(t *testing.T) 
 	}
 }
 
-func testOutboxParams(payload []byte) db.InsertSaleOutboxParams {
+func testOutboxParams(payload []byte) db.InsertZatcaOutboxParams {
 	hash := hashPayload(payload)
-	return db.InsertSaleOutboxParams{
+	return db.InsertZatcaOutboxParams{
 		TenantID:      42,
 		EventID:       "event-1",
 		AggregateType: "bill",
 		AggregateID:   99,
+		DocumentType:  "bill",
+		SourceID:      99,
 		PosID:         stringPtr("pos-1"),
-		BillRequestID: sql.NullString{String: "request-1", Valid: true},
+		RequestID:     sql.NullString{String: "request-1", Valid: true},
 		InvoiceUuid:   sql.NullString{String: "invoice-99", Valid: true},
 		EgsSequenceID: stringPtr("7:1"),
 		Payload:       payload,
@@ -269,26 +271,31 @@ func testOutboxParams(payload []byte) db.InsertSaleOutboxParams {
 	}
 }
 
-func outboxEventFromParams(params db.InsertSaleOutboxParams, status string) db.Outbox {
+func outboxEventFromParams(params db.InsertZatcaOutboxParams, status string) db.Outbox {
 	return db.Outbox{
-		ID:                 1,
-		TenantID:           params.TenantID,
-		EventID:            params.EventID,
-		AggregateType:      params.AggregateType,
-		AggregateID:        params.AggregateID,
-		PosID:              params.PosID,
-		BillRequestID:      params.BillRequestID,
-		InvoiceUuid:        params.InvoiceUuid,
-		EgsSequenceID:      params.EgsSequenceID,
-		Payload:            params.Payload,
-		PayloadFingerprint: params.PayloadFingerprint,
-		ContentHash:        params.ContentHash,
-		Status:             status,
-		NextAttemptAt:      time.Unix(1, 0),
-		LeaseOwner:         stringPtr("test-owner"),
-		LeaseExpiresAt:     timePtr(time.Unix(900, 0)),
-		CreatedAt:          time.Unix(1, 0),
-		UpdatedAt:          time.Unix(1, 0),
+		ID:                   1,
+		TenantID:             params.TenantID,
+		EventID:              params.EventID,
+		AggregateType:        params.AggregateType,
+		AggregateID:          params.AggregateID,
+		PosID:                params.PosID,
+		DocumentType:         params.DocumentType,
+		SourceID:             params.SourceID,
+		RequestID:            params.RequestID,
+		InvoiceUuid:          params.InvoiceUuid,
+		OriginalDocumentType: params.OriginalDocumentType,
+		OriginalSourceID:     params.OriginalSourceID,
+		OriginalInvoiceUuid:  params.OriginalInvoiceUuid,
+		EgsSequenceID:        params.EgsSequenceID,
+		Payload:              params.Payload,
+		PayloadFingerprint:   params.PayloadFingerprint,
+		ContentHash:          params.ContentHash,
+		Status:               status,
+		NextAttemptAt:        time.Unix(1, 0),
+		LeaseOwner:           stringPtr("test-owner"),
+		LeaseExpiresAt:       timePtr(time.Unix(900, 0)),
+		CreatedAt:            time.Unix(1, 0),
+		UpdatedAt:            time.Unix(1, 0),
 	}
 }
 
@@ -301,8 +308,13 @@ func outboxRows(event db.Outbox, status string) *sqlmock.Rows {
 		"aggregate_type",
 		"aggregate_id",
 		"pos_id",
-		"bill_request_id",
+		"document_type",
+		"source_id",
+		"request_id",
 		"invoice_uuid",
+		"original_document_type",
+		"original_source_id",
+		"original_invoice_uuid",
 		"egs_sequence_id",
 		"icv",
 		"pih",
@@ -327,8 +339,13 @@ func outboxRows(event db.Outbox, status string) *sqlmock.Rows {
 		event.AggregateType,
 		event.AggregateID,
 		nullableValue(event.PosID),
-		nullStringValue(event.BillRequestID),
+		event.DocumentType,
+		event.SourceID,
+		nullStringValue(event.RequestID),
 		nullStringValue(event.InvoiceUuid),
+		nullableValue(event.OriginalDocumentType),
+		nullableUint64Value(event.OriginalSourceID),
+		nullStringValue(event.OriginalInvoiceUuid),
 		nullableValue(event.EgsSequenceID),
 		nullableUint64Value(event.Icv),
 		nullableValue(event.Pih),
@@ -388,13 +405,13 @@ func timePtr(value time.Time) *time.Time {
 
 func TestOutboxPayloadHashIsStableJSON(t *testing.T) {
 	payload := atomicSaleOutboxPayload{
-		DocType:       "bill",
-		ID:            99,
+		DocumentType:  "bill",
+		SourceID:      99,
 		BranchID:      7,
 		DBName:        "tenant_db",
 		TenantID:      42,
 		PosID:         "pos-1",
-		BillRequestID: "request-1",
+		RequestID:     "request-1",
 		EventID:       "event-1",
 		EGSSequenceID: "7:1",
 		InvoiceUUID:   "invoice-99",

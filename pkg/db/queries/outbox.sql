@@ -11,6 +11,8 @@ SELECT
   o.bill_request_id,
   o.invoice_uuid,
   o.egs_sequence_id,
+  o.icv,
+  o.pih,
   o.payload,
   o.payload_fingerprint,
   o.content_hash,

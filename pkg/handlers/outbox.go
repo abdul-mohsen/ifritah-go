@@ -233,13 +233,26 @@ func outboxEventMatches(existing db.Outbox, params db.InsertSaleOutboxParams) bo
 	if !nullableStringEqual(existing.PosID, params.PosID) ||
 		!nullStringEqual(existing.BillRequestID, params.BillRequestID) ||
 		!nullStringEqual(existing.InvoiceUuid, params.InvoiceUuid) ||
-		!nullableStringEqual(existing.EgsSequenceID, params.EgsSequenceID) {
+		!nullableStringEqual(existing.EgsSequenceID, params.EgsSequenceID) ||
+		!nullableUint64Equal(existing.Icv, params.Icv) ||
+		!nullableStringEqual(existing.Pih, params.Pih) {
 		return false
 	}
 	return true
 }
 
 func nullableStringEqual(left, right *string) bool {
+	switch {
+	case left == nil && right == nil:
+		return true
+	case left == nil || right == nil:
+		return false
+	default:
+		return *left == *right
+	}
+}
+
+func nullableUint64Equal(left, right *uint64) bool {
 	switch {
 	case left == nil && right == nil:
 		return true

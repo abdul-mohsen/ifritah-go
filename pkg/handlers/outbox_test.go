@@ -304,6 +304,8 @@ func outboxRows(event db.Outbox, status string) *sqlmock.Rows {
 		"bill_request_id",
 		"invoice_uuid",
 		"egs_sequence_id",
+		"icv",
+		"pih",
 		"payload",
 		"payload_fingerprint",
 		"content_hash",
@@ -328,6 +330,8 @@ func outboxRows(event db.Outbox, status string) *sqlmock.Rows {
 		nullStringValue(event.BillRequestID),
 		nullStringValue(event.InvoiceUuid),
 		nullableValue(event.EgsSequenceID),
+		nullableUint64Value(event.Icv),
+		nullableValue(event.Pih),
 		[]byte(event.Payload),
 		nullStringValue(event.PayloadFingerprint),
 		nullStringValue(event.ContentHash),
@@ -351,6 +355,13 @@ func hashPayload(payload []byte) string {
 }
 
 func nullableValue(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func nullableUint64Value(value *uint64) any {
 	if value == nil {
 		return nil
 	}

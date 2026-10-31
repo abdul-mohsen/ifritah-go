@@ -81,6 +81,20 @@ func TestCanonicalBillRequestIdentitySchema(t *testing.T) {
 	)
 }
 
+func TestExistingCreateBillCanOmitC004IdentityFields(t *testing.T) {
+	schema := readDatabaseSource(t, "schema", "schema.sql")
+	bill := tableSource(t, schema, "bill")
+
+	for _, column := range []string{
+		"`tenant_id` bigint unsigned DEFAULT NULL",
+		"`pos_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL",
+		"`bill_request_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL",
+		"`request_fingerprint` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL",
+	} {
+		requireSourceContains(t, bill, column)
+	}
+}
+
 func TestCanonicalBillRequestResolutionContract(t *testing.T) {
 	queries := readDatabaseSource(t, "queries", "bill_identity.sql")
 

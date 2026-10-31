@@ -1,6 +1,11 @@
 -- name: CreateBill :execresult
-  insert into bill (effective_date, payment_due_date, state, discount, store_id, sequence_number, merchant_id, maintenance_cost, note, userName, client_id, user_phone_number, payment_method, branch_id, deliver_date)
-  values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+  insert into bill (
+    effective_date, payment_due_date, state, discount, store_id, sequence_number,
+    merchant_id, maintenance_cost, note, userName, client_id, user_phone_number,
+    payment_method, branch_id, deliver_date, amount_paid, tenant_id, pos_id,
+    bill_request_id, request_fingerprint, request_fingerprint_version, invoice_uuid
+  )
+  values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetAllBill :many
 SELECT bill.id AS id,

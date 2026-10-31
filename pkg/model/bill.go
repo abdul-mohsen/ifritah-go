@@ -48,6 +48,9 @@ type BillRequestFilter struct {
 }
 
 type AddBillRequest struct {
+	TenantID        uint64          `json:"tenant_id"`
+	PosID           string          `json:"pos_id"`
+	BillRequestID   string          `json:"bill_request_id"`
 	StoreId         int32           `json:"store_id" binding:"required"`
 	State           int32           `json:"state"`
 	EffectiveDate   *time.Time      `json:"effective_date"`
@@ -63,6 +66,7 @@ type AddBillRequest struct {
 	ManualProducts  []BillProduct   `json:"manual_products" binding:"required,dive"`
 	ClientID        *int32          `json:"client_id" `
 	PaymentMethod   int32           `json:"payment_method" binding:"required"`
+	CurrencyID      int32           `json:"currency_id"`
 	BranchID        uint32          `json:"branch_id" binding:"required"`
 	DeliverDate     *time.Time      `json:"deliver_date"`
 }

@@ -36,7 +36,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 -- name: InsertSaleOutbox :execresult
 INSERT INTO outbox (
   tenant_id, event_id, aggregate_type, aggregate_id, pos_id,
-  bill_request_id, invoice_uuid, egs_sequence_id, payload,
+  bill_request_id, invoice_uuid, egs_sequence_id, icv, pih, payload,
   payload_fingerprint, content_hash
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

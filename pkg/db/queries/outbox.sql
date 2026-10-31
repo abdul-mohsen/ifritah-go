@@ -1,7 +1,32 @@
 -- Transactional outbox claim, retry, and operator-state commands.
 
 -- name: GetOutboxEventBySaleIdentity :one
-SELECT o.*
+SELECT
+  o.id,
+  o.tenant_id,
+  o.event_id,
+  o.aggregate_type,
+  o.aggregate_id,
+  o.pos_id,
+  o.bill_request_id,
+  o.invoice_uuid,
+  o.egs_sequence_id,
+  o.icv,
+  o.pih,
+  o.payload,
+  o.payload_fingerprint,
+  o.content_hash,
+  o.status,
+  o.attempt_count,
+  o.next_attempt_at,
+  o.lease_owner,
+  o.lease_expires_at,
+  o.last_error,
+  o.published_at,
+  o.dead_lettered_at,
+  o.manual_review_at,
+  o.created_at,
+  o.updated_at
 FROM outbox AS o
 WHERE o.tenant_id = sqlc.arg('tenant_id')
   AND o.pos_id = sqlc.arg('pos_id')

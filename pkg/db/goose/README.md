@@ -26,6 +26,7 @@ go run ./cmd/migrate version
 - File name `NNNNN_snake_case.sql` with the next free five-digit version. sqlc reads
   migration folders in name order, so the zero padding matters.
 - Each file has `-- +goose Up` and `-- +goose Down`. The Down section must reverse the Up section.
+- Views and other stored objects must not name a fixed `DEFINER`. Use `DEFINER=CURRENT_USER` or omit it, so a tenant account can create them.
 - CI runs `roundtrip` against MySQL 8.0.28, 8.0.44 and 8.4. A migration whose Down does not
   work fails the pull request.
 
@@ -35,3 +36,4 @@ go run ./cmd/migrate version
   after the baseline, and (when `GOOSE_PARITY_DSN` is set) a comparison of the baseline with the
   legacy SQL, table by table.
 - `cmd/migrate up`, `status`, `roundtrip`, `up`, `version` on a fresh database.
+- The baseline replayed by a tenant account that has only `ALL` on its own database. `ALL` does not include `SUPER` or `SET_USER_ID`.

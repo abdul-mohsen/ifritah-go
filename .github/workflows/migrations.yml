@@ -66,3 +66,11 @@ jobs:
           go run ./cmd/migrate roundtrip
           go run ./cmd/migrate up
           go run ./cmd/migrate version
+
+      - name: Replay the baseline as a tenant account
+        run: |
+          docker run --rm --network host -e MYSQL_PWD=root "mysql:${{ matrix.mysql }}" \
+            mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root \
+            -e "CREATE DATABASE goose_tenant CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER 'tenant'@'%' IDENTIFIED BY 'tenant'; GRANT ALL PRIVILEGES ON goose_tenant.* TO 'tenant'@'%';"
+          docker run --rm --network host -e MYSQL_PWD=tenant -v "$PWD/pkg/db/goose:/sql:ro" "mysql:${{ matrix.mysql }}" \
+            sh -c 'mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u tenant goose_tenant < /sql/00001_baseline.sql'

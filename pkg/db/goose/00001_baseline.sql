@@ -6,6 +6,7 @@
 --   --no-tablespaces --set-gtid-purged=OFF --skip-triggers
 -- Existing tenant databases are adopted at version 1 and never re-run this file.
 -- The baseline has no Down section, so goose never drops the schema.
+-- The view cash_voucher_summary uses DEFINER=CURRENT_USER, not root, so an account with ALL on the database can replay this file.
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
@@ -1790,7 +1791,7 @@ CREATE TABLE `zatca_submission` (
 /*!50001 SET character_set_results     = utf8mb4 */;
 /*!50001 SET collation_connection      = utf8mb4_0900_ai_ci */;
 /*!50001 CREATE ALGORITHM=UNDEFINED */
-/*!50013 DEFINER=`root`@`localhost` SQL SECURITY INVOKER */
+/*!50013 DEFINER=CURRENT_USER SQL SECURITY INVOKER */
 /*!50001 VIEW `cash_voucher_summary` AS select `cash_voucher`.`voucher_type` AS `voucher_type`,`cash_voucher`.`state` AS `state`,`cash_voucher`.`merchant_id` AS `merchant_id`,count(0) AS `voucher_count`,sum(`cash_voucher`.`amount`) AS `total_amount`,date_format(`cash_voucher`.`effective_date`,'%Y-%m') AS `month` from `cash_voucher` group by `cash_voucher`.`voucher_type`,`cash_voucher`.`state`,`cash_voucher`.`merchant_id`,date_format(`cash_voucher`.`effective_date`,'%Y-%m') */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;

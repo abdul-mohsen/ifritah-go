@@ -121,6 +121,16 @@ func main() {
 		authorized.GET("branch/:id/zatca", h.GetBranchZatcaConfig)
 		authorized.PUT("branch/:id/zatca", admin, h.UpdateBranchZatcaConfig)
 		authorized.POST("branch/:id/zatca/onboard", admin, h.OnboardBranchZatca)
+		authorized.GET("branch/:id/zatca/credentials", h.ListZatcaCredentials)
+		authorized.GET("branch/:id/zatca/credentials/:egs_sequence_id", h.GetZatcaCredential)
+		authorized.POST("branch/:id/zatca/credentials", admin, h.CreateZatcaCredential)
+		authorized.POST("branch/:id/zatca/credentials/:egs_sequence_id/renew", admin, h.RequestZatcaCredentialRenewal)
+		authorized.POST("branch/:id/zatca/credentials/:egs_sequence_id/revoke", admin, h.RequestZatcaCredentialRevocation)
+		authorized.POST("branch/:id/zatca/credentials/:egs_sequence_id/activate", admin, h.RecordZatcaCredentialIssued)
+		authorized.POST("branch/:id/zatca/credentials/:egs_sequence_id/renewal-failed", admin, h.MarkZatcaCredentialRenewalFailed)
+		authorized.POST("branch/:id/zatca/credentials/:egs_sequence_id/expire", admin, h.MarkZatcaCredentialExpired)
+		authorized.POST("branch/:id/zatca/credentials/:egs_sequence_id/revoked", admin, h.MarkZatcaCredentialRevoked)
+		authorized.GET("zatca/credentials/lifecycle", admin, h.ListZatcaCredentialLifecycle)
 
 		// ── Stores (write is admin-only) ───────────────────────────────
 		authorized.GET("stores/all", h.GetStores)

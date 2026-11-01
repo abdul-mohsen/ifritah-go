@@ -52,6 +52,7 @@ COPY --from=sqlc/sqlc:1.27.0 /workspace/sqlc /usr/local/bin/sqlc
 # `COPY . .` which can leak local state into the image (Sonar docker:S6470).
 COPY main.go ./
 COPY pkg ./pkg
+COPY cmd ./cmd
 COPY fonts ./fonts
 COPY sqlc.yaml ./
 COPY VERSION ./VERSION
@@ -95,6 +96,7 @@ RUN set -eu; \
     ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.BuiltAt=$image_built_at"; \
     ldflags="$ldflags -X ifritah/web-service-gin/pkg/buildinfo.ImageRef=$APP_IMAGE_REF"; \
     CGO_ENABLED=0 GOOS=linux go build -ldflags="$ldflags" -o /out/ifritah .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 
 # ---- Runtime stage ----
 FROM alpine:3.20
@@ -164,9 +166,8 @@ RUN apk add --no-cache ca-certificates tzdata wget \
 WORKDIR /app
 
 COPY --from=builder /out/ifritah /app/ifritah
-COPY --chown=app:app pkg/db/schema /app/db/schema
-COPY --chown=app:app pkg/db/migrations /app/db/migrations
-COPY --chown=app:app pkg/db/runtime_migrations /app/db/migrations
+# Schema changes run through /app/migrate (goose), the same command CI runs. The image holds no SQL.
+COPY --from=builder /out/migrate /app/migrate
 
 RUN mkdir -p /app/uploads /app/data && chown -R app:app /app
 

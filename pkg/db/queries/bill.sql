@@ -1,6 +1,6 @@
 -- name: CreateBill :execresult
-  insert into bill (effective_date, payment_due_date, state, discount, store_id, sequence_number, merchant_id, maintenance_cost, note, userName, client_id, user_phone_number, payment_method, branch_id, deliver_date)
-  values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+  insert into bill (effective_date, payment_due_date, state, discount, store_id, sequence_number, merchant_id, maintenance_cost, note, userName, client_id, user_phone_number, payment_method, branch_id, deliver_date, pos_id, bill_request_id, invoice_uuid)
+  values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetAllBill :many
 SELECT bill.id AS id,
@@ -147,7 +147,10 @@ client_id = ?,
 user_phone_number = ?,
 payment_method = ?,
 branch_id = ?,
-deliver_date = ?
+deliver_date = ?,
+pos_id = ?,
+bill_request_id = ?,
+invoice_uuid = ?
 WHERE id = ?;
 
 -- name: AddProductToBill :exec
@@ -178,8 +181,8 @@ SELECT bp.id, bp.product_id, bp.quantity, b.store_id, b.sequence_number
 		 JOIN bill b ON bp.bill_id = b.id
 		 WHERE bp.bill_id = ? AND bp.product_id IS NOT NULL;
 
--- name: GetMaxSequenceNumber :one
-select CAST(COALESCE(max(sequence_number), 1) AS UNSIGNED) from bill;
+-- name: GetBillStateForUpdate :one
+SELECT state FROM bill WHERE id = ? FOR UPDATE;
 
 -- name: GetBillProductsWithArticle :many
 SELECT bp.product_id, bp.price, bp.quantity,

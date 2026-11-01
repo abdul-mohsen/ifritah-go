@@ -6,15 +6,13 @@ package handlers
 // Copy this file to replace: pkg/handlers/credit.go
 //
 // Stock changes vs original:
-//   1. CreditBill — wrapped in transaction, calls recordCreditNoteMovements()
+//   1. CreditBill — disabled until ZATCA submission of credit notes moves to the outbox (B6)
 //
 // GetCreditBillPDF is unchanged from the original.
 // ============================================================================
 
 import (
-	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -31,72 +29,13 @@ type BillCredit struct {
 	Note   string `json:"note" binding:"required"`
 }
 
+// CreditBill is disabled until ZATCA submission of credit notes uses the outbox contract (B6). The old flow
+// sent credit notes with the legacy envelope, which the clean daemon rejects, so the request is refused
+// before anything is written.
 func (h *handler) CreditBill(c *gin.Context) {
-
-	var request BillCredit
-
-	if err := c.BindJSON(&request); err != nil {
-		log.Printf("CreditBill: %v", err)
-		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	userSession := GetSessionInfo(c)
-
-	// Use a transaction so credit note creation + stock restoration are atomic
-	tx, err := h.DB.Begin()
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-	defer tx.Rollback()
-	qtx := h.queries.WithTx(tx)
-
-	// Insert the credit note
-	var one int32 = 1
-	args := db.InsertCreditNoteParams{
-		BillID: request.BillId,
-		State:  &one,
-		Note:   &request.Note,
-	}
-	res, err := qtx.InsertCreditNote(c.Request.Context(), args)
-
-	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
-		return
-	}
-
-	CreditNoteID, err := res.LastInsertId()
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-	creditNoteID := uint64(CreditNoteID)
-
-	// ── Stock tracking: restore stock for all catalog items on the original bill ──
-	if err := h.recordCreditNoteMovements(
-		qtx, c, creditNoteID, request.BillId, int32(userSession.id),
-	); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"detail": err.Error(),
-			"type":   "stock_error",
-		})
-		return
-	}
-
-	branchID, err := qtx.GetBranchByBillID(c.Request.Context(), request.BillId)
-	if err != nil {
-		log.Printf("GetBranchByBillID failed for credit note %d: %s", CreditNoteID, sanitizeForLog(err.Error()))
-	} else if err := h.pub.SubmitCredit(CreditNoteID, int64(branchID)); err != nil {
-		log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
-	}
-
-	if err := tx.Commit(); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	c.Status(http.StatusCreated)
+	c.AbortWithStatusJSON(http.StatusNotImplemented, gin.H{
+		"message": "credit notes are unavailable until their ZATCA submission moves to the outbox (B6)",
+	})
 }
 
 func (h *handler) GetCreditBillPDF(c *gin.Context) {

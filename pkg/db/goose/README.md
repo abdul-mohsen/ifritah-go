@@ -20,6 +20,8 @@ go run ./cmd/migrate roundtrip  # roll back everything above the baseline, then 
 go run ./cmd/migrate version
 ```
 
+The compose stack runs `/app/migrate up` once, in its `migrate` service, before the API starts. CI runs `go run ./cmd/migrate up`. Deployment moves to the same command in DP1.
+
 ## Rules for new migrations
 
 - New schema changes go only in this folder. sqlc reads it, so no other file needs to change.

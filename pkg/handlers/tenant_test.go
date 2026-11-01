@@ -82,21 +82,29 @@ func TestQueriesNeverWriteTheTenantKey(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, block := range strings.Split(string(body), "-- name:")[1:] {
-			header, text, _ := strings.Cut(block, "\n")
-			name, _, _ := strings.Cut(strings.TrimSpace(header), " ")
-			if name == tenantKeyQuery {
-				found = true
-			}
-			if !strings.Contains(strings.ToLower(text), "tenant_key") {
-				continue
-			}
-			if name != tenantKeyQuery || writeStatement.MatchString(text) {
-				t.Errorf("%s: query %s names tenant_key and is not a read of it; deployment owns that column", filepath.Base(file), name)
-			}
+		if checkTenantKeyQueries(t, filepath.Base(file), string(body)) {
+			found = true
 		}
 	}
 	if !found {
 		t.Fatalf("%s is not in the query files", tenantKeyQuery)
 	}
+}
+
+// checkTenantKeyQueries reports each query in one file that names company.tenant_key other than as a
+// read of it. It reports whether the file defines GetTenantKey.
+func checkTenantKeyQueries(t *testing.T, file, body string) bool {
+	t.Helper()
+	defines := false
+	for _, block := range strings.Split(body, "-- name:")[1:] {
+		header, text, _ := strings.Cut(block, "\n")
+		name, _, _ := strings.Cut(strings.TrimSpace(header), " ")
+		if name == tenantKeyQuery {
+			defines = true
+		}
+		if strings.Contains(strings.ToLower(text), "tenant_key") && (name != tenantKeyQuery || writeStatement.MatchString(text)) {
+			t.Errorf("%s: query %s names tenant_key and is not a read of it; deployment owns that column", file, name)
+		}
+	}
+	return defines
 }

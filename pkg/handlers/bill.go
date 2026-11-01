@@ -243,21 +243,7 @@ func (h *handler) AddBill(c *gin.Context) {
 		return
 	}
 
-	// TODO @ssda work around when the frontend send id when he should not
-	for i := range request.ManualProducts {
-		request.ManualProducts[i].ProductId = nil
-	}
-
-	products := append(request.Products, request.ManualProducts...)
-
-	if request.MaintenanceCost.GreaterThan(decimal.Zero) {
-		product := model.BillProduct{
-			Name:     model.MaintenanceCost,
-			Price:    request.MaintenanceCost,
-			Quantity: decimal.NewFromInt(1),
-		}
-		products = append(products, product)
-	}
+	products := saleProducts(&request)
 
 	if err := addProductToBill(qtx, c, products, uint64(id)); err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
@@ -270,34 +256,25 @@ func (h *handler) AddBill(c *gin.Context) {
 		return
 	}
 
-	// ── Stock tracking: deduct stock for catalog products ──
-	enforcement := h.getStockEnforcementMode(c)
-	if enforcement != model.StockEnforcementDisable && request.State > 0 {
-		warnings, err := recordSaleMovements(
-			qtx, c, uint64(id), int32(request.StoreId),
-			request.Products, int32(squenceNumber),
-			enforcement, int32(userSession.id),
-		)
-		if err != nil {
-			log.Printf("AddBill: %s", sanitizeForLog(err.Error()))
-			// enforce mode: block if insufficient stock
-			c.JSON(http.StatusBadRequest, gin.H{
-				"detail": err.Error(),
-				"type":   "stock_insufficient",
-			})
-			return
-		}
-		if len(warnings) > 0 {
-			// warn mode: set header with stock warnings
-			c.Header("X-Stock-Warning", "true")
-		}
+	// Stock tracking: deduct stock for catalog products
+	warned, err := h.recordSaleStock(c, qtx, &request, uint64(id), squenceNumber, int32(userSession.id))
+	if err != nil {
+		log.Printf("AddBill: %s", sanitizeForLog(err.Error()))
+		// enforce mode: block if insufficient stock
+		c.JSON(http.StatusBadRequest, gin.H{
+			"detail": err.Error(),
+			"type":   "stock_insufficient",
+		})
+		return
+	}
+	if warned {
+		// warn mode: set header with stock warnings
+		c.Header("X-Stock-Warning", "true")
 	}
 
-	if request.State > 0 {
-		if err := h.queueBillEvent(c, tx, uint64(id), request.BranchID); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
+	if err := h.queueSaleEvent(c, tx, uint64(id), &request); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -486,6 +463,50 @@ func (h *handler) queueBillEvent(c *gin.Context, tx *sql.Tx, billID uint64, bran
 		return err
 	}
 	return outbox.Append(c.Request.Context(), tx, event)
+}
+
+// saleProducts returns the lines of a sale: the catalog products, then the manual products, then the
+// maintenance cost as a line of its own when it is positive.
+func saleProducts(request *model.AddBillRequest) []model.BillProduct {
+	// TODO @ssda work around when the frontend send id when he should not
+	for i := range request.ManualProducts {
+		request.ManualProducts[i].ProductId = nil
+	}
+
+	products := append(request.Products, request.ManualProducts...)
+
+	if request.MaintenanceCost.GreaterThan(decimal.Zero) {
+		product := model.BillProduct{
+			Name:     model.MaintenanceCost,
+			Price:    request.MaintenanceCost,
+			Quantity: decimal.NewFromInt(1),
+		}
+		products = append(products, product)
+	}
+	return products
+}
+
+// recordSaleStock deducts the catalog products of a final sale from stock, in the enforcement mode of the
+// settings. It reports whether a product was short in warn mode. In enforce mode a short product is an error.
+func (h *handler) recordSaleStock(c *gin.Context, qtx *db.Queries, request *model.AddBillRequest, billID uint64, sequence uint64, userID int32) (bool, error) {
+	enforcement := h.getStockEnforcementMode(c)
+	if enforcement == model.StockEnforcementDisable || request.State <= 0 {
+		return false, nil
+	}
+	warnings, err := recordSaleMovements(
+		qtx, c, billID, request.StoreId,
+		request.Products, int32(sequence),
+		enforcement, userID,
+	)
+	return len(warnings) > 0, err
+}
+
+// queueSaleEvent writes the ZATCA event of a final sale into the sale's transaction. A draft has no event.
+func (h *handler) queueSaleEvent(c *gin.Context, tx *sql.Tx, billID uint64, request *model.AddBillRequest) error {
+	if request.State <= 0 {
+		return nil
+	}
+	return h.queueBillEvent(c, tx, billID, request.BranchID)
 }
 
 func getNextSquenceNumber(qtx *db.Queries, c *gin.Context) uint64 {

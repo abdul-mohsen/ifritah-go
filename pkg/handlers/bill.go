@@ -19,6 +19,7 @@ import (
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
+	"ifritah/web-service-gin/pkg/outbox"
 	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"math/big"
@@ -293,8 +294,9 @@ func (h *handler) AddBill(c *gin.Context) {
 	}
 
 	if request.State > 0 {
-		if err := h.pub.SubmitBill(id, int64(request.BranchID)); err != nil {
-			log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
+		if err := h.queueBillEvent(c, tx, uint64(id), request.BranchID); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 	}
 
@@ -430,8 +432,9 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 	}
 
 	if request.State > 0 {
-		if err := h.pub.SubmitBill(BillID, int64(request.BranchID)); err != nil {
-			log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
+		if err := h.queueBillEvent(c, tx, billID, request.BranchID); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
 	}
 
@@ -473,6 +476,16 @@ func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.BillProd
 	}
 
 	return nil
+}
+
+// queueBillEvent writes the ZATCA submission of a bill into the sale's transaction. The drainer
+// publishes it after the transaction commits, so ZATCA never hears about a sale that rolls back.
+func (h *handler) queueBillEvent(c *gin.Context, tx *sql.Tx, billID uint64, branchID uint32) error {
+	event, err := h.pub.BillEvent(billID, branchID)
+	if err != nil {
+		return err
+	}
+	return outbox.Append(c.Request.Context(), tx, event)
 }
 
 func getNextSquenceNumber(qtx *db.Queries, c *gin.Context) uint64 {

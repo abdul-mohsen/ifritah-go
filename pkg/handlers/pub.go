@@ -10,6 +10,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
+	"ifritah/web-service-gin/pkg/identity"
 	"ifritah/web-service-gin/pkg/outbox"
 )
 
@@ -25,18 +26,25 @@ type Message struct {
 }
 
 type ZatcaPublisher struct {
-	js     nats.JetStreamContext
-	nc     *nats.Conn
-	dbName string
-	once   sync.Once
+	js        nats.JetStreamContext
+	nc        *nats.Conn
+	dbName    string
+	tenantKey string
+	once      sync.Once
 }
 
+// NewZATCAPublisher connects to NATS. DBNAME names the tenant database in every subject. TENANT_KEY
+// is the tenant's stable key, the value of zatca_master.tenant.tenant_key, and it is required.
 func NewZATCAPublisher() (*ZatcaPublisher, error) {
 	natsURL := env("NATS_URL", "nats://localhost:4222")
 	dbName := env("DBNAME", "")
 
 	if dbName == "" {
 		return nil, fmt.Errorf("DBNAME env var is required")
+	}
+	tenantKey := env("TENANT_KEY", "")
+	if err := identity.ValidateTenantKey(tenantKey); err != nil {
+		return nil, fmt.Errorf("TENANT_KEY env var: %w", err)
 	}
 
 	nc, err := nats.Connect(natsURL,
@@ -65,7 +73,7 @@ func NewZATCAPublisher() (*ZatcaPublisher, error) {
 		return nil, fmt.Errorf("jetstream: %w", err)
 	}
 
-	return &ZatcaPublisher{js: js, nc: nc, dbName: dbName}, nil
+	return &ZatcaPublisher{js: js, nc: nc, dbName: dbName, tenantKey: tenantKey}, nil
 
 }
 
@@ -73,8 +81,33 @@ func (p *ZatcaPublisher) Close() {
 	p.once.Do(func() { p.nc.Close() })
 }
 
-func (p *ZatcaPublisher) SubmitBill(billID, branchID int64) error {
-	return p.publish(Message{DocType: "bill", ID: billID, BranchID: branchID, DBName: p.dbName})
+// BillEvent returns the outbox event that asks ZATCA to submit a bill. A sale writes the event in
+// its own transaction, and the drainer publishes it after that transaction commits. The subject and
+// the message are the ones the daemon has always read.
+func (p *ZatcaPublisher) BillEvent(billID uint64, branchID uint32) (outbox.Event, error) {
+	eventID, err := outbox.NewEventID()
+	if err != nil {
+		return outbox.Event{}, err
+	}
+	documentKey, err := identity.DocumentKey(p.tenantKey, uint64(branchID), identity.DocBill, billID)
+	if err != nil {
+		return outbox.Event{}, err
+	}
+	payload, err := json.Marshal(Message{
+		DocType:  identity.DocBill,
+		ID:       int64(billID),
+		BranchID: int64(branchID),
+		DBName:   p.dbName,
+	})
+	if err != nil {
+		return outbox.Event{}, fmt.Errorf("marshal: %w", err)
+	}
+	return outbox.Event{
+		EventID:     eventID,
+		DocumentKey: documentKey,
+		Subject:     fmt.Sprintf("zatca.%s.%s.%d", identity.DocBill, p.dbName, branchID),
+		Payload:     payload,
+	}, nil
 }
 
 func (p *ZatcaPublisher) SubmitCredit(creditNotID, branchID int64) error {

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"ifritah/web-service-gin/pkg/buildinfo"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/handlers"
+	"ifritah/web-service-gin/pkg/outbox"
 
 	"log"
 	"os"
@@ -34,6 +37,15 @@ func main() {
 
 	handlers.EnvSetup()
 	h := handlers.New(DB, queries, pub)
+
+	host, _ := os.Hostname()
+	drainer, drainInterval, err := outbox.DrainerFromEnv(DB, pub, fmt.Sprintf("%s-%d", host, os.Getpid()))
+	if err != nil {
+		log.Fatal(err)
+	}
+	drainCtx, stopDrainer := context.WithCancel(context.Background())
+	defer stopDrainer()
+	go drainer.Run(drainCtx, drainInterval)
 
 	router := gin.Default()
 	store := persistence.NewInMemoryStore(time.Second)

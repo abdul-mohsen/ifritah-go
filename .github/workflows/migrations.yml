@@ -59,8 +59,9 @@ jobs:
       - name: Baseline, parity, and migration round trip
         env:
           GOOSE_PARITY_DSN: "root:root@tcp(127.0.0.1:3306)/?multiStatements=true&parseTime=true"
+          TEST_MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/?parseTime=true"
         run: |
-          go test -count=1 -v ./pkg/db/goose/...
+          go test -count=1 -v ./pkg/db/goose/... ./pkg/outbox/...
           go run ./cmd/migrate up
           go run ./cmd/migrate status
           go run ./cmd/migrate roundtrip

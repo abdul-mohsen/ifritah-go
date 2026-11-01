@@ -9,7 +9,12 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+
+	"ifritah/web-service-gin/pkg/outbox"
 )
+
+// The outbox drainer publishes through ZatcaPublisher.
+var _ outbox.Publisher = (*ZatcaPublisher)(nil)
 
 type Message struct {
 	DocType  string `json:"doc_type"`
@@ -82,6 +87,15 @@ func (p *ZatcaPublisher) SubmitDebit(debitNoteID, branchID int64) error {
 
 func (p *ZatcaPublisher) OnboadBranch(branchID int64, otp string) error {
 	return p.publish(Message{DocType: "onboard", ID: branchID, BranchID: branchID, DBName: p.dbName, OTP: otp})
+}
+
+// Publish sends a raw message. msgID is the event ID, so JetStream drops a repeat of the same
+// event inside its duplicate window.
+func (p *ZatcaPublisher) Publish(subject string, data []byte, msgID string) error {
+	if _, err := p.js.Publish(subject, data, nats.MsgId(msgID)); err != nil {
+		return fmt.Errorf("publish to %s: %w", subject, err)
+	}
+	return nil
 }
 
 func (p *ZatcaPublisher) publish(msg Message) error {

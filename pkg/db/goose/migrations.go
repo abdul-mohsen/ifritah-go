@@ -1,8 +1,9 @@
 // Package goosemigrations embeds the goose migrations for the tenant database.
 //
-// Only the numbered files in this directory are applied by goose. The legacy SQL under
-// pkg/db/schema and pkg/db/migrations still drives sqlc and the existing replay check until
-// the deployment tooling moves to goose.
+// Only the numbered files in this directory are applied by goose. sqlc reads this directory for
+// the tenant schema, and pkg/db/schema/car_part.sql stays a separate sqlc input. The legacy
+// folders pkg/db/migrations and pkg/db/runtime_migrations only drive the replay check until the
+// deployment tooling moves to goose.
 package goosemigrations
 
 import "embed"

@@ -14,10 +14,10 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-// TestBaselineMatchesLegacySchema applies the legacy SQL files and the goose baseline to two
-// fresh databases and requires identical table definitions. It needs a MySQL server:
-// GOOSE_PARITY_DSN must set multiStatements=true, and the account must be allowed to create
-// and drop goose_parity_legacy and goose_parity_baseline.
+// TestBaselineMatchesLegacySchema applies the legacy SQL files and the goose baseline (version 1)
+// to two fresh databases and requires identical table definitions. Later migrations are not
+// part of this comparison. It needs a MySQL server: GOOSE_PARITY_DSN must set multiStatements=true,
+// and the account must be allowed to create and drop goose_parity_legacy and goose_parity_baseline.
 func TestBaselineMatchesLegacySchema(t *testing.T) {
 	dsn := os.Getenv("GOOSE_PARITY_DSN")
 	if dsn == "" {
@@ -43,8 +43,8 @@ func TestBaselineMatchesLegacySchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.Up(context.Background()); err != nil {
-		t.Fatalf("goose up on the baseline: %v", err)
+	if _, err := provider.UpTo(context.Background(), BaselineVersion); err != nil {
+		t.Fatalf("goose up to the baseline: %v", err)
 	}
 
 	compareTableDefinitions(t, legacy, baseline)

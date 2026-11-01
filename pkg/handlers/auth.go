@@ -474,9 +474,7 @@ func (h *handler) ForgotPassword(c *gin.Context) {
 		log.Printf("ForgotPassword: insert reset token: %v", err)
 	}
 
-	// TODO: Send email with reset link containing the raw resetToken
-	// For now, log it (remove in production)
-	fmt.Printf("[FORGOT-PASSWORD] Reset token for user %d: %s\n", userID, resetToken)
+	// TODO: send the raw resetToken by email. Until a sender exists, the token is not shown anywhere.
 
 	c.JSON(http.StatusOK, gin.H{"detail": "if the email exists, a reset link has been sent"})
 }

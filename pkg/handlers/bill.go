@@ -322,8 +322,6 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		PaidAmount:    decimal.NewFromInt(0),
 	}
 
-	log.Print(request)
-
 	if err := c.BindJSON(&request); err != nil {
 		log.Printf("SubmitDraftBill: %v", err)
 		c.Status(http.StatusBadRequest)

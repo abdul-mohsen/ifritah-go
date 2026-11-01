@@ -50,6 +50,14 @@ jobs:
         with:
           go-version: '1.25'
 
+      - name: Install sqlc
+        uses: sqlc-dev/setup-sqlc@c0209b9199cd1cce6a14fc27cabcec491b651761 # v4
+        with:
+          sqlc-version: '1.27.0'
+
+      - name: Generate sqlc code
+        run: sqlc generate
+
       - name: Create the CI database
         run: |
           docker run --rm --network host -e MYSQL_PWD=root "mysql:${{ matrix.mysql }}" \
@@ -59,8 +67,9 @@ jobs:
       - name: Baseline, parity, and migration round trip
         env:
           GOOSE_PARITY_DSN: "root:root@tcp(127.0.0.1:3306)/?multiStatements=true&parseTime=true"
+          TEST_MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/?parseTime=true"
         run: |
-          go test -count=1 -v ./pkg/db/goose/...
+          go test -count=1 -v ./pkg/db/goose/... ./pkg/outbox/...
           go run ./cmd/migrate up
           go run ./cmd/migrate status
           go run ./cmd/migrate roundtrip

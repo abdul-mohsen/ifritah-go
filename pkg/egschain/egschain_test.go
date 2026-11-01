@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -16,12 +17,16 @@ import (
 // t0 is the clock for these tests. Leases are compared with it in Go, so no database clock is used.
 var t0 = time.Date(2026, time.November, 1, 12, 0, 0, 0, time.UTC)
 
-const (
-	databaseName  = "egschain_test"
-	committedHash = "hash-1"
-)
+// egschainTables are the tables that the EGS tests write, children before parents.
+var egschainTables = []string{"branch_zatca_config", "branches", "company"}
 
-// newBranch adds a branch to company 1. The fresh test database has no company, so the helper
+const committedHash = "hash-1"
+
+func TestMain(m *testing.M) {
+	os.Exit(testdb.Main(m, "egschain_test"))
+}
+
+// newBranch adds a branch to company 1. The test database starts with no company, so the helper
 // creates it first.
 func newBranch(t *testing.T, db *sql.DB, name string) uint32 {
 	t.Helper()
@@ -97,7 +102,7 @@ func chainState(t *testing.T, db *sql.DB, branchID uint32) (last uint64, previou
 }
 
 func TestFirstDocumentStartsTheChain(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranchWithEGS(t, db, "first")
 
 	r, err := reserve(db, branchID, "acme:first:bill:1", t0)
@@ -114,7 +119,7 @@ func TestFirstDocumentStartsTheChain(t *testing.T) {
 }
 
 func TestNextDocumentChainsOnTheCommittedHash(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranchWithEGS(t, db, "next")
 
 	first, err := reserve(db, branchID, "acme:next:bill:1", t0)
@@ -131,7 +136,7 @@ func TestNextDocumentChainsOnTheCommittedHash(t *testing.T) {
 }
 
 func TestSameDocumentGetsItsLiveReservationBack(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranchWithEGS(t, db, "same")
 
 	first, err := reserve(db, branchID, "acme:same:bill:1", t0)
@@ -148,7 +153,7 @@ func TestSameDocumentGetsItsLiveReservationBack(t *testing.T) {
 }
 
 func TestOtherDocumentWaitsForTheChain(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranchWithEGS(t, db, "wait")
 
 	if _, err := reserve(db, branchID, "acme:wait:bill:1", t0); err != nil {
@@ -165,7 +170,7 @@ func TestOtherDocumentWaitsForTheChain(t *testing.T) {
 }
 
 func TestExpiredReservationIsTakenOverByItsOwnDocumentOnly(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranchWithEGS(t, db, "takeover")
 
 	old, err := reserve(db, branchID, "acme:takeover:bill:1", t0)
@@ -185,7 +190,7 @@ func TestExpiredReservationIsTakenOverByItsOwnDocumentOnly(t *testing.T) {
 }
 
 func TestReleaseKeepsTheICVForTheNextDocument(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranchWithEGS(t, db, "release")
 
 	r, err := reserve(db, branchID, "acme:release:bill:1", t0)
@@ -205,7 +210,7 @@ func TestReleaseKeepsTheICVForTheNextDocument(t *testing.T) {
 }
 
 func TestCommitRefusesAStaleOrRepeatedOwner(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranchWithEGS(t, db, "stale")
 
 	r, err := reserve(db, branchID, "acme:stale:bill:1", t0)
@@ -236,7 +241,7 @@ func TestCommitRefusesAStaleOrRepeatedOwner(t *testing.T) {
 }
 
 func TestBranchWithoutEGSIsRejected(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranch(t, db, "no-egs")
 
 	if _, err := reserve(db, branchID, "acme:no-egs:bill:1", t0); !errors.Is(err, ErrNotFound) {
@@ -245,7 +250,7 @@ func TestBranchWithoutEGSIsRejected(t *testing.T) {
 }
 
 func TestBranchesHaveIndependentChains(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	a := newBranchWithEGS(t, db, "branch-a")
 	b := newBranchWithEGS(t, db, "branch-b")
 
@@ -260,7 +265,7 @@ func TestBranchesHaveIndependentChains(t *testing.T) {
 }
 
 func TestInvalidInputIsRefused(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranchWithEGS(t, db, "invalid")
 
 	if _, err := reserve(db, branchID, "", t0); err == nil {
@@ -282,7 +287,7 @@ func TestInvalidInputIsRefused(t *testing.T) {
 }
 
 func TestReservationColumnsAreSetTogether(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranchWithEGS(t, db, "together")
 
 	_, err := db.Exec("UPDATE branch_zatca_config SET icv_reservation_key = 'acme:together:bill:1' WHERE branch_id = ?", branchID)
@@ -291,11 +296,37 @@ func TestReservationColumnsAreSetTogether(t *testing.T) {
 	}
 }
 
+// TestReserveDoesNotQueueBehindALockedBranch checks that Reserve fails at once when another
+// transaction holds the branch row. A caller that waited would hold a pool connection until the
+// server's lock wait timeout, which is 50 seconds by default.
+func TestReserveDoesNotQueueBehindALockedBranch(t *testing.T) {
+	db := testdb.Open(t, egschainTables...)
+	branchID := newBranchWithEGS(t, db, "locked")
+
+	holder, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Rollback()
+	if _, err := holder.Exec("SELECT branch_id FROM branch_zatca_config WHERE branch_id = ? FOR UPDATE", branchID); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	_, err = reserve(db, branchID, "acme:locked:bill:1", t0)
+	if !errors.Is(err, ErrBusy) {
+		t.Fatalf("reserve while another transaction holds the row: %v; want ErrBusy", err)
+	}
+	if waited := time.Since(start); waited > 5*time.Second {
+		t.Fatalf("reserve took %s; it should fail at once", waited)
+	}
+}
+
 // TestConcurrentDocumentsGetOneOwnerAtATime starts ten documents at once for the same EGS. One of
 // them must get the reservation, and the others must be refused. Each round commits the owner, so
 // the ICVs of the three rounds are 1, 2 and 3 with no repeats.
 func TestConcurrentDocumentsGetOneOwnerAtATime(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranchWithEGS(t, db, "race")
 	const documents = 10
 
@@ -337,10 +368,12 @@ func TestConcurrentDocumentsGetOneOwnerAtATime(t *testing.T) {
 	}
 }
 
-// TestConcurrentCallsForOneDocumentShareOneReservation checks that a document asked for by many
-// workers at once gets one reservation, not one ICV per caller.
+// TestConcurrentCallsForOneDocumentShareOneReservation starts ten calls for one document at once.
+// A call that finds the branch row locked fails with ErrBusy at once, so it may not get the
+// reservation. Every call that gets one must get the same reservation, and a call made afterwards
+// gets it too.
 func TestConcurrentCallsForOneDocumentShareOneReservation(t *testing.T) {
-	db := testdb.Open(t, databaseName)
+	db := testdb.Open(t, egschainTables...)
 	branchID := newBranchWithEGS(t, db, "same-race")
 	const callers = 10
 
@@ -356,9 +389,37 @@ func TestConcurrentCallsForOneDocumentShareOneReservation(t *testing.T) {
 	}
 	wg.Wait()
 
-	for i := range results {
-		if errs[i] != nil || results[i].Token != results[0].Token || results[i].ICV != 1 {
-			t.Fatalf("caller %d = %+v, %v; want the one shared reservation with ICV 1", i, results[i], errs[i])
-		}
+	shared, granted := sharedReservation(t, results, errs)
+	if granted == 0 {
+		t.Fatal("no call got the reservation")
 	}
+	again, err := reserve(db, branchID, "acme:same-race:bill:1", t0)
+	if err != nil || again.Token != shared.Token || again.ICV != 1 {
+		t.Fatalf("call after the race = %+v, %v; want the shared reservation", again, err)
+	}
+}
+
+// sharedReservation checks that every call that got a reservation got the same one, with ICV 1,
+// and that every other call failed with ErrBusy. It returns the shared reservation and how many
+// calls got it.
+func sharedReservation(t *testing.T, results []Reservation, errs []error) (Reservation, int) {
+	t.Helper()
+	var shared Reservation
+	granted := 0
+	for i, err := range errs {
+		if err != nil {
+			if !errors.Is(err, ErrBusy) {
+				t.Fatalf("call %d: %v; want the reservation or ErrBusy", i, err)
+			}
+			continue
+		}
+		if granted == 0 {
+			shared = results[i]
+		}
+		if results[i].Token != shared.Token || results[i].ICV != 1 {
+			t.Fatalf("call %d = %+v; want the one shared reservation %+v", i, results[i], shared)
+		}
+		granted++
+	}
+	return shared, granted
 }

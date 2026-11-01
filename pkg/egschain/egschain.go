@@ -13,15 +13,18 @@ import (
 	"errors"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
+
 	db "ifritah/web-service-gin/pkg/db/gen"
 )
 
 var (
 	// ErrNotFound means the branch has no EGS row.
 	ErrNotFound = errors.New("egschain: the branch has no EGS")
-	// ErrBusy means another document holds the chain. That includes an expired reservation for
-	// another document: its ICV is never given to a different document.
-	ErrBusy = errors.New("egschain: another document holds the EGS chain")
+	// ErrBusy means the branch row is locked by another transaction, or another document holds
+	// the chain. That includes an expired reservation for another document: its ICV is never
+	// given to a different document. The caller retries later.
+	ErrBusy = errors.New("egschain: the EGS chain is busy")
 	// ErrNotOwner means the reservation was committed, released, or taken over by another owner.
 	ErrNotOwner = errors.New("egschain: the reservation is not owned by the caller")
 
@@ -53,16 +56,20 @@ type Reservation struct {
 //   - A key whose lease has expired takes the reservation over with a new token and the same ICV.
 //     The previous owner's token stops working.
 //   - Any other key gets ErrBusy, whether the other reservation is live or expired.
+//   - If another transaction holds the branch row, Reserve returns ErrBusy at once. It never
+//     waits for the row, so a worker does not hold a pool connection while it queues.
 func Reserve(ctx context.Context, tx *sql.Tx, branchID uint32, documentKey string, now time.Time, lease time.Duration) (Reservation, error) {
 	if branchID == 0 || documentKey == "" || len(documentKey) > maxKeyLen || lease <= 0 {
 		return Reservation{}, errors.New("egschain: a branch, a document key and a lease are required")
 	}
 	q := db.New(tx)
 	chain, err := q.LockEGSChain(ctx, branchID)
-	if errors.Is(err, sql.ErrNoRows) {
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
 		return Reservation{}, ErrNotFound
-	}
-	if err != nil {
+	case isRowLocked(err):
+		return Reservation{}, ErrBusy
+	case err != nil:
 		return Reservation{}, err
 	}
 	if chain.IcvReservationKey != nil {
@@ -168,4 +175,13 @@ func newToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// mysqlErrLockNoWait is the MySQL error for a NOWAIT lock that another transaction holds.
+const mysqlErrLockNoWait = 3572
+
+// isRowLocked reports whether err means that another transaction holds the row.
+func isRowLocked(err error) bool {
+	var mysqlErr *mysql.MySQLError
+	return errors.As(err, &mysqlErr) && mysqlErr.Number == mysqlErrLockNoWait
 }

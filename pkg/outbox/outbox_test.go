@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -13,6 +14,10 @@ import (
 
 	"ifritah/web-service-gin/pkg/testdb"
 )
+
+func TestMain(m *testing.M) {
+	os.Exit(testdb.Main(m, "outbox_test"))
+}
 
 const (
 	eventA = "1d2b3c4d-0000-4000-8000-00000000000a"
@@ -59,12 +64,6 @@ func testEvent(eventID string) Event {
 		Subject:     "zatca.bill.acme.7",
 		Payload:     json.RawMessage(`{"doc_type":"bill","id":42}`),
 	}
-}
-
-// newOutboxDB returns a fresh migrated database for one test.
-func newOutboxDB(t *testing.T) *sql.DB {
-	t.Helper()
-	return testdb.Open(t, "outbox_test")
 }
 
 // appendCommitted writes the events in one committed transaction.
@@ -139,7 +138,7 @@ func countWhere(t *testing.T, db *sql.DB, where string) int {
 }
 
 func TestAppendIsRolledBackWithItsTransaction(t *testing.T) {
-	db := newOutboxDB(t)
+	db := testdb.Open(t, "outbox")
 	ctx := context.Background()
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -157,7 +156,7 @@ func TestAppendIsRolledBackWithItsTransaction(t *testing.T) {
 }
 
 func TestDrainOncePublishesCommittedEventsOnce(t *testing.T) {
-	db := newOutboxDB(t)
+	db := testdb.Open(t, "outbox")
 	appendCommitted(t, db, testEvent(eventA), testEvent(eventB))
 	pub := &fakePublisher{}
 	d := testDrainer(db, pub, drainClock())
@@ -183,7 +182,7 @@ func TestDrainOncePublishesCommittedEventsOnce(t *testing.T) {
 }
 
 func TestFailedPublishIsRetriedThenDeadLettered(t *testing.T) {
-	db := newOutboxDB(t)
+	db := testdb.Open(t, "outbox")
 	appendCommitted(t, db, testEvent(eventA))
 	base := drainClock()
 	pub := &fakePublisher{failOn: map[string]bool{eventA: true}}
@@ -213,7 +212,7 @@ func TestFailedPublishIsRetriedThenDeadLettered(t *testing.T) {
 }
 
 func TestExpiredLeaseIsReclaimedAndLiveLeaseIsNot(t *testing.T) {
-	db := newOutboxDB(t)
+	db := testdb.Open(t, "outbox")
 	appendCommitted(t, db, testEvent(eventA), testEvent(eventB))
 	base := drainClock()
 	// A worker that crashed while holding eventA, and a worker that still holds eventB.

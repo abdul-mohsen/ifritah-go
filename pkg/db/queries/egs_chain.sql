@@ -1,6 +1,7 @@
 -- EGS chain reservation (B4). Each statement runs inside the caller's transaction, through
 -- pkg/egschain. A reservation is owned by its token. Every write after the lock also names the
--- owner, so a stale owner cannot change the chain.
+-- owner, so a stale owner cannot change the chain. The branch row is read with NOWAIT: a row that
+-- another transaction holds fails at once, and pkg/egschain returns ErrBusy instead of queueing.
 
 -- name: LockEGSChain :one
 SELECT branch_id,
@@ -12,7 +13,7 @@ SELECT branch_id,
        reservation_lease_expires_at
 FROM branch_zatca_config
 WHERE branch_id = sqlc.arg('branch_id')
-FOR UPDATE;
+FOR UPDATE NOWAIT;
 
 -- name: StartEGSChainReservation :execresult
 UPDATE branch_zatca_config

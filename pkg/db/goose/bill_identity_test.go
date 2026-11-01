@@ -5,8 +5,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/pressly/goose/v3"
 )
 
 // TestBillIdentityContract checks what 00002 adds to bill. A (pos_id, bill_request_id) pair is
@@ -18,19 +16,7 @@ func TestBillIdentityContract(t *testing.T) {
 		t.Skip("GOOSE_PARITY_DSN is not set")
 	}
 
-	const name = "goose_bill_identity"
-	admin := openTestDB(t, dsn, "")
-	defer admin.Close()
-	mustExec(t, admin, "DROP DATABASE IF EXISTS `"+name+"`")
-	mustExec(t, admin, "CREATE DATABASE `"+name+"` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-	defer mustExec(t, admin, "DROP DATABASE IF EXISTS `"+name+"`")
-
-	db := openTestDB(t, dsn, name)
-	defer db.Close()
-	provider, err := goose.NewProvider(goose.DialectMySQL, db, FS)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db, provider := openFreshGooseDB(t, dsn, "goose_bill_identity")
 	if _, err := provider.Up(context.Background()); err != nil {
 		t.Fatalf("goose up: %v", err)
 	}

@@ -3,6 +3,16 @@
 -- columns for compatibility. From now on outcome_state is the source of truth. Attempts,
 -- outcomes and artifacts are separate tables. The claim table lets the daemon process each
 -- request once. Columns are appended, because sqlc appends them too.
+
+-- The six states are stored once, here, and every state column points at this table.
+CREATE TABLE zatca_outcome_state (
+  state VARCHAR(32) NOT NULL,
+  PRIMARY KEY (state)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT INTO zatca_outcome_state (state) VALUES
+  ('pending'), ('accepted'), ('accepted_with_warning'), ('rejected'), ('ambiguous'), ('terminal_failure');
+
 ALTER TABLE zatca_submission
   ADD COLUMN outcome_state VARCHAR(32) NOT NULL DEFAULT 'pending',
   ADD COLUMN provider_code VARCHAR(64) NULL,
@@ -16,26 +26,24 @@ ALTER TABLE zatca_submission
   ADD COLUMN cleared_xml_path VARCHAR(500) NULL,
   ADD KEY idx_zatca_outcome_state (outcome_state),
   ADD KEY idx_zatca_retry (next_retry_at),
-  ADD CONSTRAINT chk_zatca_submission_outcome_state CHECK (outcome_state IN ('pending', 'accepted', 'accepted_with_warning', 'rejected', 'ambiguous', 'terminal_failure'));
+  ADD CONSTRAINT fk_zatca_submission_outcome_state FOREIGN KEY (outcome_state) REFERENCES zatca_outcome_state (state);
 
 -- Existing rows: the outcome follows the numeric status (2 accepted, 3 rejected, 4 warning).
+-- Every other row keeps the default, pending.
 UPDATE zatca_submission
 SET outcome_state = CASE status
   WHEN 2 THEN 'accepted'
   WHEN 3 THEN 'rejected'
   WHEN 4 THEN 'accepted_with_warning'
-  ELSE 'pending'
-END;
+END
+WHERE status IN (2, 3, 4);
 
+-- An attempt is one try to submit a document. The provider's answer is an outcome.
 CREATE TABLE zatca_submission_attempt (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   submission_id INT NOT NULL,
   attempt_number INT UNSIGNED NOT NULL,
-  attempt_state VARCHAR(32) NOT NULL DEFAULT 'pending',
-  provider_code VARCHAR(64) NULL,
-  provider_warning_code VARCHAR(64) NULL,
-  provider_warning_message VARCHAR(1024) NULL,
-  provider_reference VARCHAR(255) NULL,
+  attempt_state VARCHAR(32) NOT NULL,
   error_code VARCHAR(64) NULL,
   error_message VARCHAR(1024) NULL,
   started_at DATETIME NOT NULL,
@@ -43,7 +51,7 @@ CREATE TABLE zatca_submission_attempt (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_zatca_attempt_number (submission_id, attempt_number),
-  CONSTRAINT chk_zatca_attempt_state CHECK (attempt_state IN ('pending', 'accepted', 'accepted_with_warning', 'rejected', 'ambiguous', 'terminal_failure')),
+  CONSTRAINT fk_zatca_attempt_state FOREIGN KEY (attempt_state) REFERENCES zatca_outcome_state (state),
   CONSTRAINT fk_zatca_attempt_submission FOREIGN KEY (submission_id) REFERENCES zatca_submission (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -63,7 +71,7 @@ CREATE TABLE zatca_submission_outcome (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_zatca_outcome_latest (submission_id, observed_at, id),
-  CONSTRAINT chk_zatca_outcome_state CHECK (outcome_state IN ('pending', 'accepted', 'accepted_with_warning', 'rejected', 'ambiguous', 'terminal_failure')),
+  CONSTRAINT fk_zatca_outcome_state FOREIGN KEY (outcome_state) REFERENCES zatca_outcome_state (state),
   CONSTRAINT fk_zatca_outcome_submission FOREIGN KEY (submission_id) REFERENCES zatca_submission (id) ON DELETE CASCADE,
   CONSTRAINT fk_zatca_outcome_attempt FOREIGN KEY (attempt_id) REFERENCES zatca_submission_attempt (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -113,7 +121,7 @@ DROP TABLE zatca_submission_artifact;
 DROP TABLE zatca_submission_outcome;
 DROP TABLE zatca_submission_attempt;
 ALTER TABLE zatca_submission
-  DROP CHECK chk_zatca_submission_outcome_state,
+  DROP FOREIGN KEY fk_zatca_submission_outcome_state,
   DROP INDEX idx_zatca_retry,
   DROP INDEX idx_zatca_outcome_state,
   DROP COLUMN cleared_xml_path,
@@ -126,3 +134,4 @@ ALTER TABLE zatca_submission
   DROP COLUMN provider_warning_code,
   DROP COLUMN provider_code,
   DROP COLUMN outcome_state;
+DROP TABLE zatca_outcome_state;

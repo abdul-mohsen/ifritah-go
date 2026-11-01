@@ -6,6 +6,10 @@
 // crash after publishing and before recording the result publishes the event again, so delivery
 // is at least once. Consumers deduplicate by EventID. JetStream also drops a repeat that carries
 // the same message ID, inside the stream's duplicate window.
+//
+// A claim is built to hold few locks. It runs at READ COMMITTED, which takes no gap locks, so a
+// claim does not block an insert into the outbox. It reads its rows in index order and stops at
+// its batch size, so it locks about the batch and nothing more.
 package outbox
 
 import (
@@ -74,10 +78,18 @@ type Drainer struct {
 	MaxAttempts uint32
 	// Now returns the current time. When it is nil, the drainer uses the UTC clock.
 	Now func() time.Time
+	// afterLease, when set, runs inside the claim transaction after the batch is leased. Tests use
+	// it to inspect the locks that the claim holds.
+	afterLease func(tx *sql.Tx)
 }
 
-// DrainOnce claims a batch of due events, publishes each one, and records the result. It
-// returns how many events were published.
+// DrainOnce claims a batch of due events, publishes them, and records the results. It returns how
+// many events were published.
+//
+// The events that were published are marked in one statement. A failed publish is recorded on its
+// own event, so one bad event does not hold back the others. If a database error stops the drain,
+// the leases of the events not yet marked run out, and those events are published again after
+// that. JetStream drops the repeat, because the message ID is the event ID.
 func (d *Drainer) DrainOnce(ctx context.Context) (int, error) {
 	if d.Owner == "" || d.BatchSize <= 0 || d.Lease <= 0 || d.MaxAttempts == 0 {
 		return 0, errors.New("outbox: drainer needs an owner, a batch size, a lease and max attempts")
@@ -88,48 +100,65 @@ func (d *Drainer) DrainOnce(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	queries := db.New(d.DB)
-	published := 0
+	var sent []uint64
 	for _, ev := range events {
 		if pubErr := d.Publisher.Publish(ev.Subject, ev.Payload, ev.EventID); pubErr != nil {
 			if err := d.recordFailure(ctx, queries, ev, now, pubErr); err != nil {
-				return published, err
+				return 0, err
 			}
 			continue
 		}
-		if err := queries.MarkOutboxPublished(ctx, db.MarkOutboxPublishedParams{
-			ID:          ev.ID,
-			LeaseOwner:  &d.Owner,
-			PublishedAt: &now,
-		}); err != nil {
-			return published, err
-		}
-		published++
+		sent = append(sent, ev.ID)
 	}
-	return published, nil
+	if len(sent) == 0 {
+		return 0, nil
+	}
+	if err := queries.MarkOutboxEventsPublished(ctx, db.MarkOutboxEventsPublishedParams{
+		PublishedAt: &now,
+		LeaseOwner:  &d.Owner,
+		Ids:         sent,
+	}); err != nil {
+		return 0, err
+	}
+	return len(sent), nil
 }
 
-// claim leases the due events in one transaction, so no other worker can claim them meanwhile.
-func (d *Drainer) claim(ctx context.Context, now time.Time) ([]db.ListDueOutboxEventsRow, error) {
-	tx, err := d.DB.BeginTx(ctx, nil)
+// claim leases up to BatchSize due events in one transaction. The pending events that are due come
+// first, in the order of idx_outbox_due. The rest of the batch comes from events whose lease has
+// expired. The rows are locked and leased in the same transaction, so no two drainers hold the same
+// event.
+func (d *Drainer) claim(ctx context.Context, now time.Time) ([]db.Outbox, error) {
+	tx, err := d.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
 	q := db.New(tx)
-	events, err := q.ListDueOutboxEvents(ctx, db.ListDueOutboxEventsParams{DueAt: now, ExpiredAt: &now, Limit: d.BatchSize})
+	events, err := q.ListDuePendingOutboxEvents(ctx, db.ListDuePendingOutboxEventsParams{DueAt: now, Limit: d.BatchSize})
 	if err != nil {
 		return nil, err
 	}
-	leaseExpires := now.Add(d.Lease)
-	for _, ev := range events {
-		if err := q.LeaseOutboxEvent(ctx, db.LeaseOutboxEventParams{
-			ID:             ev.ID,
-			LeaseOwner:     &d.Owner,
-			LeaseExpiresAt: &leaseExpires,
-		}); err != nil {
+	if room := d.BatchSize - int32(len(events)); room > 0 {
+		expired, err := q.ListExpiredOutboxEvents(ctx, db.ListExpiredOutboxEventsParams{ExpiredAt: &now, Limit: room})
+		if err != nil {
 			return nil, err
 		}
+		events = append(events, expired...)
+	}
+	if len(events) == 0 {
+		return nil, nil
+	}
+	ids := make([]uint64, len(events))
+	for i, ev := range events {
+		ids[i] = ev.ID
+	}
+	leaseExpires := now.Add(d.Lease)
+	if err := q.LeaseOutboxEvents(ctx, db.LeaseOutboxEventsParams{Ids: ids, LeaseOwner: &d.Owner, LeaseExpiresAt: &leaseExpires}); err != nil {
+		return nil, err
+	}
+	if d.afterLease != nil {
+		d.afterLease(tx)
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
@@ -140,7 +169,7 @@ func (d *Drainer) claim(ctx context.Context, now time.Time) ([]db.ListDueOutboxE
 // recordFailure schedules a retry with backoff, or dead-letters the event once its last allowed
 // attempt has failed. ev.AttemptCount counts the attempts before this one, because the lease
 // increments it.
-func (d *Drainer) recordFailure(ctx context.Context, q *db.Queries, ev db.ListDueOutboxEventsRow, now time.Time, cause error) error {
+func (d *Drainer) recordFailure(ctx context.Context, q *db.Queries, ev db.Outbox, now time.Time, cause error) error {
 	lastError := truncate(cause.Error(), maxErrorLen)
 	attempt := ev.AttemptCount + 1
 	if attempt >= d.MaxAttempts {

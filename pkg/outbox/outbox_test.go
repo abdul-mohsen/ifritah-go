@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -22,6 +23,7 @@ func TestMain(m *testing.M) {
 const (
 	eventA = "1d2b3c4d-0000-4000-8000-00000000000a"
 	eventB = "1d2b3c4d-0000-4000-8000-00000000000b"
+	eventC = "1d2b3c4d-0000-4000-8000-00000000000c"
 )
 
 // fakePublisher records each message and fails for the event IDs it is told to fail.
@@ -265,5 +267,135 @@ func TestBackoffDoublesAndStopsAtFiveMinutes(t *testing.T) {
 		if got := backoff(attempts); got != wait {
 			t.Fatalf("backoff(%d) = %v, want %v", attempts, got, wait)
 		}
+	}
+}
+
+// loadBacklog stores published events and then due pending events, so the due events are the newest
+// rows, as they are after NATS has been down for a while. The due events are older than the clock
+// that the tests drain with.
+func loadBacklog(t *testing.T, db *sql.DB, due, published int) {
+	t.Helper()
+	at := time.Now().UTC().Add(-time.Minute)
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < due+published; i++ {
+		status := "published"
+		if i >= published {
+			status = "pending"
+		}
+		if _, err := tx.Exec("INSERT INTO outbox (event_id, document_key, subject, payload, status, next_attempt_at) VALUES (?, ?, 'zatca.bill.acme.1', '{}', ?, ?)",
+			fmt.Sprintf("1d2b3c4d-0001-4000-8000-%012d", i), fmt.Sprintf("acme:1:bill:%d", i), status, at); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// recordLocks counts the record locks that open transactions hold on the outbox table.
+func recordLocks(t *testing.T, db *sql.DB) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRow("SELECT COUNT(*) FROM performance_schema.data_locks WHERE OBJECT_SCHEMA = DATABASE() AND OBJECT_NAME = 'outbox' AND LOCK_TYPE = 'RECORD'").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// appendFromOtherConnection writes e on its own connection, with a short lock wait. An insert that
+// the claim blocks then fails the test, instead of waiting for the server's 50 second default.
+func appendFromOtherConnection(db *sql.DB, e Event) error {
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "SET SESSION innodb_lock_wait_timeout = 2"); err != nil {
+		return err
+	}
+	defer conn.ExecContext(ctx, "SET SESSION innodb_lock_wait_timeout = DEFAULT")
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if err := Append(ctx, tx, e); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// TestSaleInsertIsNotBlockedByAClaim checks that an event written while a claim is open goes through
+// at once. Under REPEATABLE READ the claim locked the gap after its last due event, so the insert of
+// a sale's event had to wait for the claim to finish.
+func TestSaleInsertIsNotBlockedByAClaim(t *testing.T) {
+	db := testdb.Open(t, "outbox")
+	appendCommitted(t, db, testEvent(eventA))
+	loadBacklog(t, db, 0, 1)
+	d := testDrainer(db, &fakePublisher{}, drainClock())
+	var insertErr error
+	d.afterLease = func(*sql.Tx) {
+		insertErr = appendFromOtherConnection(db, testEvent(eventB))
+	}
+
+	if n, err := d.DrainOnce(context.Background()); err != nil || n != 1 {
+		t.Fatalf("DrainOnce = %d, %v; want 1, nil", n, err)
+	}
+	if insertErr != nil {
+		t.Fatalf("an insert while the claim was open failed: %v", insertErr)
+	}
+}
+
+// TestClaimLocksOnlyItsBatchUnderBacklog checks how many locks a claim holds while a backlog waits.
+// The claim must lock about its batch, not every row that it reads on the way. Under REPEATABLE READ
+// the claim used to lock every published event it walked past, which is thousands of locks with a
+// backlog.
+func TestClaimLocksOnlyItsBatchUnderBacklog(t *testing.T) {
+	db := testdb.Open(t, "outbox")
+	loadBacklog(t, db, 200, 300)
+	d := testDrainer(db, &fakePublisher{}, drainClock())
+	var locks int
+	d.afterLease = func(*sql.Tx) {
+		locks = recordLocks(t, db)
+	}
+
+	n, err := d.DrainOnce(context.Background())
+	if err != nil || n != int(d.BatchSize) {
+		t.Fatalf("DrainOnce = %d, %v; want %d, nil", n, err, d.BatchSize)
+	}
+	t.Logf("record locks held by a claim of %d events, with 200 due and 300 published: %d", d.BatchSize, locks)
+	// A claimed event is locked twice: its entry in the index the claim reads, and its row. The limit
+	// allows twice that, so a small change to the claim passes, while a scan of the backlog fails.
+	if limit := 4 * int(d.BatchSize); locks > limit {
+		t.Fatalf("the claim holds %d record locks; want at most %d for a batch of %d", locks, limit, d.BatchSize)
+	}
+}
+
+// TestMixedBatchMarksSuccessesAndRetriesTheFailure checks that one failed publish in a batch does not
+// hold back the events published before and after it.
+func TestMixedBatchMarksSuccessesAndRetriesTheFailure(t *testing.T) {
+	db := testdb.Open(t, "outbox")
+	appendCommitted(t, db, testEvent(eventA), testEvent(eventB), testEvent(eventC))
+	pub := &fakePublisher{failOn: map[string]bool{eventB: true}}
+
+	n, err := testDrainer(db, pub, drainClock()).DrainOnce(context.Background())
+	if err != nil || n != 2 {
+		t.Fatalf("DrainOnce = %d, %v; want 2, nil", n, err)
+	}
+	if ids := pub.msgIDs(); len(ids) != 2 || ids[0] != eventA || ids[1] != eventC {
+		t.Fatalf("published %v, want [%s %s]", ids, eventA, eventC)
+	}
+	for _, id := range []string{eventA, eventC} {
+		if status, _, _ := row(t, db, id); status != "published" {
+			t.Fatalf("event %s is %q, want published", id, status)
+		}
+	}
+	if status, attempts, lastError := row(t, db, eventB); status != "pending" || attempts != 1 || lastError == "" {
+		t.Fatalf("failed event: status %q, attempts %d, last error %q; want pending, 1, and an error", status, attempts, lastError)
 	}
 }

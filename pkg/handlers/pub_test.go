@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 )
 
@@ -47,6 +48,17 @@ func TestBillEventCarriesTheCanonicalEnvelope(t *testing.T) {
 	}
 	if len(event.EventID) != 36 {
 		t.Errorf("event id %q is not a UUID", event.EventID)
+	}
+}
+
+// The envelope's id is a signed 64-bit integer, so a bill id above that limit cannot be sent.
+func TestBillEventRefusesAnIDTheEnvelopeCannotCarry(t *testing.T) {
+	p := &ZatcaPublisher{tenantKey: "acme", dbName: "acme_db"}
+	if _, err := p.BillEvent(math.MaxInt64+1, 7, billIdentity{}); err == nil {
+		t.Fatal("BillEvent accepted a bill id above the signed 64-bit envelope limit")
+	}
+	if _, err := p.BillEvent(math.MaxInt64, 7, billIdentity{}); err != nil {
+		t.Fatalf("BillEvent refused the largest envelope id: %v", err)
 	}
 }
 

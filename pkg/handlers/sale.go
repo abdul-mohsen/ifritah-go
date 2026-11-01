@@ -91,7 +91,7 @@ func nullableString(s string) sql.NullString {
 // saleProducts returns the lines of a sale: the catalog products, then the manual products, then the
 // maintenance cost as a line of its own when it is positive.
 func saleProducts(request *model.AddBillRequest) []model.BillProduct {
-	// TODO @ssda work around when the frontend send id when he should not
+	// A manual line has no catalog product, so a product id that the frontend sends with it is dropped.
 	for i := range request.ManualProducts {
 		request.ManualProducts[i].ProductId = nil
 	}

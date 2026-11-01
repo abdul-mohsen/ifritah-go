@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"sync"
@@ -92,6 +93,9 @@ func (p *ZatcaPublisher) Close() {
 // own transaction, and the drainer publishes it after the commit. The event ID is created here, once, and
 // every retry publishes with the same ID.
 func (p *ZatcaPublisher) BillEvent(billID uint64, branchID uint32, ident billIdentity) (outbox.Event, error) {
+	if billID > math.MaxInt64 {
+		return outbox.Event{}, fmt.Errorf("bill id %d is above the envelope limit %d", billID, math.MaxInt64)
+	}
 	eventID, err := identity.NewUUID()
 	if err != nil {
 		return outbox.Event{}, err

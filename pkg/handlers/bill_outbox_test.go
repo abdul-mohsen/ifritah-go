@@ -84,14 +84,6 @@ func TestBillEventIsKeyedByTheConfiguredTenant(t *testing.T) {
 	}
 }
 
-func TestNewZATCAPublisherRequiresTheTenantKey(t *testing.T) {
-	t.Setenv("DBNAME", "acme_db")
-	t.Setenv("TENANT_KEY", "")
-	if _, err := NewZATCAPublisher(); err == nil || !strings.Contains(err.Error(), "TENANT_KEY") {
-		t.Fatalf("NewZATCAPublisher without TENANT_KEY = %v; want an error that names TENANT_KEY", err)
-	}
-}
-
 // A sale writes the ZATCA event in its own transaction, after the bill and its products, and before the
 // commit. The event is published only after the commit, by the drainer.
 func TestAddBillWritesTheZatcaEventInTheSaleTransaction(t *testing.T) {

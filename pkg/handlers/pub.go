@@ -33,18 +33,14 @@ type ZatcaPublisher struct {
 	once      sync.Once
 }
 
-// NewZATCAPublisher connects to NATS. DBNAME names the tenant database in every subject. TENANT_KEY
-// is the tenant's stable key, the value of zatca_master.tenant.tenant_key, and it is required.
-func NewZATCAPublisher() (*ZatcaPublisher, error) {
+// NewZATCAPublisher connects to NATS for the tenant. DBNAME names the tenant database in every subject,
+// and tenantKey is company.tenant_key, as LoadTenantKey reads it. Every document key starts with it.
+func NewZATCAPublisher(tenantKey string) (*ZatcaPublisher, error) {
 	natsURL := env("NATS_URL", "nats://localhost:4222")
 	dbName := env("DBNAME", "")
 
 	if dbName == "" {
 		return nil, fmt.Errorf("DBNAME env var is required")
-	}
-	tenantKey := env("TENANT_KEY", "")
-	if err := identity.ValidateTenantKey(tenantKey); err != nil {
-		return nil, fmt.Errorf("TENANT_KEY env var: %w", err)
 	}
 
 	nc, err := nats.Connect(natsURL,

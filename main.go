@@ -29,7 +29,11 @@ func main() {
 	DB := db.Connect()
 	queries := db.New(DB)
 
-	pub, err := handlers.NewZATCAPublisher()
+	tenantKey, err := handlers.LoadTenantKey(context.Background(), queries)
+	if err != nil {
+		log.Fatal(err)
+	}
+	pub, err := handlers.NewZATCAPublisher(tenantKey)
 	if err != nil {
 		log.Fatal(err)
 	}

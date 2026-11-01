@@ -32,7 +32,7 @@ func ValidateTenantKey(tenantKey string) error {
 }
 
 // DocumentKey returns tenant_key:branch_id:doc_type:source_id. The same document always gets the
-// same key. The tenant key comes from the server config and is the value of
+// same key. The tenant key is company.tenant_key in the tenant database, the value of
 // zatca_master.tenant.tenant_key for that tenant.
 func DocumentKey(tenantKey string, branchID uint64, docType string, sourceID uint64) (string, error) {
 	if err := ValidateTenantKey(tenantKey); err != nil {

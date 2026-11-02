@@ -475,6 +475,29 @@ func TestSubmitDraftBillReplacesTheEarlierPayment(t *testing.T) {
 	}
 }
 
+// A final sale is refused when its lines cannot be reported: no lines, a line with no quantity, or a negative price. Nothing is read or
+// written, so the cashier sees the reason and can fix the sale.
+func TestAddBillRefusesAFinalSaleThatCannotBeVerified(t *testing.T) {
+	const head = `{"store_id":1,"state":1,"discount":"0","maintenance_cost":"0","payment_method":1,"branch_id":7,"pos_id":"pos-1","bill_request_id":"` + saleRequestID + `",`
+	cases := map[string]struct{ body, want string }{
+		"no lines":       {head + `"products":[],"manual_products":[]}`, "at least one line"},
+		"zero quantity":  {head + `"products":[{"product_id":null,"name":"Brake pad","price":"10","quantity":"0","discount":"0"}],"manual_products":[]}`, "quantity must be positive"},
+		"negative price": {head + `"products":[{"product_id":null,"name":"Brake pad","price":"-10","quantity":"1","discount":"0"}],"manual_products":[]}`, "price must not be negative"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			h, mock := newSaleTestHandler(t)
+			w := runSaleRequest(t, h.AddBill, "/bill", tc.body, nil)
+			if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), tc.want) {
+				t.Fatalf("AddBill = %d %q; want 400 about %q", w.Code, w.Body.String(), tc.want)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 // Credit notes are disabled until their ZATCA submission uses the outbox (B6). The request is refused before anything is read or written.
 func TestCreditBillIsDisabledUntilItUsesTheOutbox(t *testing.T) {
 	h, mock := newSaleTestHandler(t)

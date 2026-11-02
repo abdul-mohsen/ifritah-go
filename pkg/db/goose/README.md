@@ -1,11 +1,8 @@
 # Tenant database migrations (goose)
 
-`00001_baseline.sql` is the squashed tenant schema. It replaces the legacy chain
-`pkg/db/schema/schema.sql` + `pkg/db/migrations/*.sql` + `pkg/db/runtime_migrations/*.sql`
-for new tenant databases. Existing tenant databases are adopted at version 1 by the
-deployment change that follows this PR, so goose never re-runs the baseline.
+`00001_baseline.sql` is the tenant schema. Every tenant database is built from it by `migrate up`. There is one migration path: no legacy SQL and no adoption.
 
-`sqlc.yaml` reads this folder for the main tenant schema, so every goose migration reaches the generated code. `pkg/db/schema/car_part.sql` stays a separate sqlc input: it is another database, and sqlc reads it first (see the comment in `sqlc.yaml`). The legacy `pkg/db/migrations` and `pkg/db/runtime_migrations` folders are no longer read by sqlc. They drive only the replay check (`.github/workflows/mysql-schema.yml`) until the deployment tooling moves to goose.
+`sqlc.yaml` reads this folder for the main tenant schema, so every goose migration reaches the generated code. `pkg/db/schema/car_part.sql` stays a separate sqlc input: it is another database, and sqlc reads it first (see the comment in `sqlc.yaml`).
 `pkg/db/gen` is git-ignored: `go.yml` regenerates it before every build.
 
 ## Commands
@@ -35,8 +32,8 @@ The compose stack runs `/app/migrate up` once, in its `migrate` service, before 
 ## What CI checks
 
 - `go test ./pkg/db/goose/...`: file names and versions, a Down section for every migration
-  after the baseline, and (when `GOOSE_PARITY_DSN` is set) a comparison of the baseline with the
-  legacy SQL, table by table.
+  after the baseline.
+  
 - `cmd/migrate up`, `status`, `roundtrip`, `up`, `version` on a fresh database.
 - `.github/scripts/test-sqlc-goose.sh` (sqlc 1.27.0, the CI version): a probe migration with a Down section reaches the generated model, and the Down is ignored.
 - The baseline replayed by a tenant account that has only `ALL` on its own database. `ALL` does not include `SUPER` or `SET_USER_ID`.

@@ -8,7 +8,6 @@
 //	migrate roundtrip  roll back every migration above the baseline, then apply them again
 //	migrate status     list every migration and whether it is applied
 //	migrate version    print the current database version
-//	migrate adopt      record the baseline as applied in a database built before goose; refuses unless it matches the baseline
 package main
 
 import (
@@ -53,8 +52,6 @@ func main() {
 		err = status(ctx, provider)
 	case "version":
 		err = version(ctx, provider)
-	case "adopt":
-		err = adopt(ctx, db, provider)
 	default:
 		usage()
 	}
@@ -133,16 +130,8 @@ func version(ctx context.Context, provider *goose.Provider) error {
 	return nil
 }
 
-func adopt(ctx context.Context, db *sql.DB, provider *goose.Provider) error {
-	if err := goosemigrations.Adopt(ctx, db, provider); err != nil {
-		return err
-	}
-	fmt.Println("adopted: the baseline is recorded as applied; run migrate up next")
-	return nil
-}
-
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: migrate up|down|roundtrip|status|version|adopt")
+	fmt.Fprintln(os.Stderr, "usage: migrate up|down|roundtrip|status|version")
 	os.Exit(2)
 }
 

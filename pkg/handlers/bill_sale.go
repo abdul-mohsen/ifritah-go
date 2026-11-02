@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
@@ -73,6 +74,10 @@ func (h *handler) saveSale(c *gin.Context, request *model.AddBillRequest, draftI
 		return 0, false
 	}
 	if err := paidAmountError(request.PaidAmount); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return 0, false
+	}
+	if err := verifyFinalSale(request); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return 0, false
 	}
@@ -153,6 +158,27 @@ func (h *handler) finishSale(c *gin.Context, tx *sql.Tx, qtx *db.Queries, reques
 		return false
 	}
 	return true
+}
+
+// verifyFinalSale checks a final sale before anything is numbered or written, so a bill that cannot be reported is refused while the
+// cashier can still fix it. These are the checks the sale can make from its own request. The branch's seller data is checked by the
+// daemon before it books an invoice number.
+func verifyFinalSale(request *model.AddBillRequest) error {
+	if request.State <= 0 {
+		return nil
+	}
+	if len(request.Products)+len(request.ManualProducts) == 0 && !request.MaintenanceCost.IsPositive() {
+		return errors.New("a final sale needs at least one line")
+	}
+	for i, line := range slices.Concat(request.Products, request.ManualProducts) {
+		switch {
+		case !line.Quantity.IsPositive():
+			return fmt.Errorf("line %d: quantity must be positive", i+1)
+		case line.Price.IsNegative():
+			return fmt.Errorf("line %d: price must not be negative", i+1)
+		}
+	}
+	return nil
 }
 
 // paymentCurrencyCode is the currency that every payment is recorded in.

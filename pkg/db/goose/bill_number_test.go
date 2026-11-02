@@ -38,8 +38,8 @@ func TestBillNumberCounter(t *testing.T) {
 		}
 	}
 
-	if _, err := provider.Down(ctx); err != nil {
-		t.Fatalf("goose down 00008: %v", err)
+	if _, err := provider.DownTo(ctx, 7); err != nil {
+		t.Fatalf("goose down to 00007: %v", err)
 	}
 	var remaining int
 	scanOne(t, db, &remaining, "SELECT COUNT(*) FROM branch_sequence WHERE scope = 'bill'")

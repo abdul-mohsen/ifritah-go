@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -68,6 +69,10 @@ func newSaleRequest() model.AddBillRequest {
 func (h *handler) saveSale(c *gin.Context, request *model.AddBillRequest, draftID *uint64) (uint64, bool) {
 	ident, err := finalSaleIdentity(request)
 	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return 0, false
+	}
+	if err := paidAmountError(request.PaidAmount); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return 0, false
 	}
@@ -140,7 +145,69 @@ func (h *handler) finishSale(c *gin.Context, tx *sql.Tx, qtx *db.Queries, reques
 	if !h.completeSale(c, qtx, tx, request, sale, userID) {
 		return false
 	}
+	if !recordSalePayment(c, qtx, request, sale.billID, draftID, userID) {
+		return false
+	}
 	if err := tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return false
+	}
+	return true
+}
+
+// paymentCurrencyCode is the currency that every payment is recorded in.
+const paymentCurrencyCode = "SAR"
+
+// paidAmountError refuses a paid amount that is negative or has more than two decimal places.
+func paidAmountError(paid decimal.Decimal) error {
+	switch {
+	case paid.IsNegative():
+		return errors.New("paid_amount must not be negative")
+	case !paid.Round(2).Equal(paid):
+		return errors.New("paid_amount must have at most two decimal places")
+	}
+	return nil
+}
+
+// recordSalePayment writes the payment of a sale in the sale's transaction. A draft's earlier payment is replaced, so a draft that is
+// saved and then submitted is paid once. A payment above the bill's total is refused.
+func recordSalePayment(c *gin.Context, qtx *db.Queries, request *model.AddBillRequest, billID uint64, draftID *uint64, userID int32) bool {
+	ctx := c.Request.Context()
+	if draftID != nil {
+		if err := qtx.DeleteBillPayments(ctx, billID); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return false
+		}
+	}
+	if !request.PaidAmount.IsPositive() {
+		return true
+	}
+	total, err := qtx.GetBillTotal(ctx, billID)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return false
+	}
+	if request.PaidAmount.GreaterThan(total) {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": "paid_amount is more than the bill total"})
+		return false
+	}
+	currencyID, err := qtx.GetCurrencyIDByCode(ctx, paymentCurrencyCode)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("payment currency %s: %w", paymentCurrencyCode, err))
+		return false
+	}
+	paidAt := effectiveDateOr(request.EffectiveDate)
+	recordedBy := userID
+	err = qtx.InsertBillPayment(ctx, db.InsertBillPaymentParams{
+		BillID:        billID,
+		Date:          paidAt,
+		PaidAt:        paidAt,
+		Amount:        request.PaidAmount,
+		CurrencyID:    currencyID,
+		PaymentMethod: request.PaymentMethod,
+		RecordedBy:    &recordedBy,
+	})
+	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return false
 	}
@@ -284,5 +351,6 @@ func updateSaleBill(c *gin.Context, qtx *db.Queries, request *model.AddBillReque
 		InvoiceUuid:               nullableString(ident.InvoiceUUID),
 		RequestFingerprint:        nullableString(ident.Fingerprint),
 		RequestFingerprintVersion: identity.FingerprintVersion,
+		AmountPaid:                request.PaidAmount,
 	})
 }

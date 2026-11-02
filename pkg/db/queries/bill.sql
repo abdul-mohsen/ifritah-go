@@ -152,7 +152,8 @@ pos_id = ?,
 bill_request_id = ?,
 invoice_uuid = ?,
 request_fingerprint = ?,
-request_fingerprint_version = ?
+request_fingerprint_version = ?,
+amount_paid = ?
 WHERE id = ?;
 
 -- name: GetBillByRequestIdentity :one

@@ -310,6 +310,7 @@ func TestSubmitDraftBillFinalizesTheBillWithItsZatcaEvent(t *testing.T) {
 	mock.ExpectExec("DELETE FROM bill_product").WillReturnResult(sqlmock.NewResult(0, 1))
 	expectSaleLines(mock)
 	expectSaleEvent(mock)
+	mock.ExpectExec("DELETE FROM bill_payment").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	w := runSaleRequest(t, h.SubmitDraftBill, "/bill/42", saleFinalBody, gin.Params{{Key: "id", Value: "42"}})
@@ -369,6 +370,105 @@ func TestSubmitDraftBillRefusesARequestRecordedForAnotherBill(t *testing.T) {
 	w := runSaleRequest(t, h.SubmitDraftBill, "/bill/42", saleFinalBody, gin.Params{{Key: "id", Value: "42"}})
 	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), requestConflictCode) {
 		t.Fatalf("SubmitDraftBill with another bill's request = %d %q; want 409 %s", w.Code, w.Body.String(), requestConflictCode)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// withPaidAmount is a sale body with a paid_amount added.
+func withPaidAmount(body, paid string) string {
+	return strings.Replace(body, `"store_id":1,`, `"store_id":1,"paid_amount":"`+paid+`",`, 1)
+}
+
+// expectPaymentWrite is the payment of a sale: the bill total is read, SAR is looked up, and the payment row is written.
+func expectPaymentWrite(mock sqlmock.Sqlmock, total string) {
+	mock.ExpectQuery(`SELECT total FROM bill WHERE id = \?`).WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(total))
+	mock.ExpectQuery(`SELECT id FROM currency WHERE code = \?`).WithArgs("SAR").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+	mock.ExpectExec("INSERT INTO bill_payment").WillReturnResult(sqlmock.NewResult(1, 1))
+}
+
+// A payment is written in the sale's transaction, after the lines and totals, and the sale commits with it.
+func TestAddBillRecordsThePaymentInTheSaleTransaction(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
+	expectBillRow(mock, 42)
+	expectNumberAllocation(mock, 1)
+	expectBillWrite(mock)
+	expectSaleLines(mock)
+	expectSaleEvent(mock)
+	expectPaymentWrite(mock, "30.00")
+	mock.ExpectCommit()
+
+	w := runSaleRequest(t, h.AddBill, "/bill", withPaidAmount(saleFinalBody, "10.00"), nil)
+	if w.Code != http.StatusCreated || strings.TrimSpace(w.Body.String()) != "42" {
+		t.Fatalf("AddBill with a payment = %d %q; want 201 with bill id 42", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A payment above the bill's total is refused, and the sale rolls back with nothing recorded.
+func TestAddBillRefusesAPaymentAboveTheTotal(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
+	expectBillRow(mock, 42)
+	expectNumberAllocation(mock, 1)
+	expectBillWrite(mock)
+	expectSaleLines(mock)
+	expectSaleEvent(mock)
+	mock.ExpectQuery(`SELECT total FROM bill WHERE id = \?`).WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow("10.00"))
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.AddBill, "/bill", withPaidAmount(saleFinalBody, "25.00"), nil)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "more than the bill total") {
+		t.Fatalf("AddBill above the total = %d %q; want 400 about the total", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A negative amount, or one with more than two decimal places, is refused before anything is read or written.
+func TestAddBillRefusesAnInvalidPaidAmount(t *testing.T) {
+	cases := map[string]string{"negative": "-1.00", "three decimals": "10.005"}
+	for name, paid := range cases {
+		t.Run(name, func(t *testing.T) {
+			h, mock := newSaleTestHandler(t)
+			w := runSaleRequest(t, h.AddBill, "/bill", withPaidAmount(saleFinalBody, paid), nil)
+			if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "paid_amount") {
+				t.Fatalf("AddBill with paid %s = %d %q; want 400 naming paid_amount", paid, w.Code, w.Body.String())
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// A draft's payment is replaced when the draft is submitted, so the payment is recorded once.
+func TestSubmitDraftBillReplacesTheEarlierPayment(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectDraftState(mock, 0)
+	expectNumberAllocation(mock, 1)
+	expectBillWrite(mock)
+	mock.ExpectExec("DELETE FROM bill_product").WillReturnResult(sqlmock.NewResult(0, 1))
+	expectSaleLines(mock)
+	expectSaleEvent(mock)
+	mock.ExpectExec("DELETE FROM bill_payment").WillReturnResult(sqlmock.NewResult(0, 1))
+	expectPaymentWrite(mock, "30.00")
+	mock.ExpectCommit()
+
+	w := runSaleRequest(t, h.SubmitDraftBill, "/bill/42", withPaidAmount(saleFinalBody, "10.00"), gin.Params{{Key: "id", Value: "42"}})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("SubmitDraftBill with a payment = %d; want 201", w.Code)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	// The blank import is what enables the go:embed directive for baselineDigests.
 	_ "embed"
 	"encoding/hex"
 	"fmt"

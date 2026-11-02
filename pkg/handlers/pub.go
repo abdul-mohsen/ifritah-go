@@ -19,22 +19,48 @@ import (
 // The outbox drainer publishes through ZatcaPublisher.
 var _ outbox.Publisher = (*ZatcaPublisher)(nil)
 
-// Message is the envelope the ZATCA daemon reads. The backend sets every field of a bill message. The
-// daemon never generates tenant, request, event, EGS or invoice identity. An onboarding message carries
-// only the first group of fields and the OTP.
+// onboardTimeout bounds the wait for the daemon's answer to an onboarding request. The daemon answers at once, and the
+// onboarding itself runs after the answer.
+const onboardTimeout = 10 * time.Second
+
+// Message is the envelope the ZATCA daemon reads for one final sale. The backend sets every field. The daemon never generates
+// tenant, request, event, EGS, or invoice identity.
 type Message struct {
 	DocType            string `json:"doc_type"`
 	ID                 int64  `json:"id"`
 	BranchID           int64  `json:"branch_id"`
 	DBName             string `json:"db_name"`
-	OTP                string `json:"otp,omitempty"`
-	TenantKey          string `json:"tenant_key,omitempty"`
-	PosID              string `json:"pos_id,omitempty"`
-	BillRequestID      string `json:"bill_request_id,omitempty"`
-	EventID            string `json:"event_id,omitempty"`
-	EGSSequenceID      string `json:"egs_sequence_id,omitempty"`
-	InvoiceUUID        string `json:"invoice_uuid,omitempty"`
-	RequestFingerprint string `json:"request_fingerprint,omitempty"`
+	TenantKey          string `json:"tenant_key"`
+	PosID              string `json:"pos_id"`
+	BillRequestID      string `json:"bill_request_id"`
+	EventID            string `json:"event_id"`
+	EGSSequenceID      string `json:"egs_sequence_id"`
+	InvoiceUUID        string `json:"invoice_uuid"`
+	RequestFingerprint string `json:"request_fingerprint"`
+}
+
+// OnboardRequest asks the daemon to onboard a branch with the OTP from the Fatoora portal. It is a request and not an outbox
+// event, because the OTP is a one-time secret: it is never written to MySQL, and the daemon keeps it in memory only (D18).
+type OnboardRequest struct {
+	DBName    string `json:"db_name"`
+	TenantKey string `json:"tenant_key"`
+	BranchID  int64  `json:"branch_id"`
+	OTP       string `json:"otp"`
+}
+
+// OnboardReply is the daemon's answer to an OnboardRequest. It never repeats the OTP.
+type OnboardReply struct {
+	Accepted bool   `json:"accepted"`
+	Error    string `json:"error,omitempty"`
+}
+
+// OnboardRejectedError means the daemon refused an onboarding request, with the reason it gave.
+type OnboardRejectedError struct {
+	Reason string
+}
+
+func (e *OnboardRejectedError) Error() string {
+	return "onboarding refused: " + e.Reason
 }
 
 type ZatcaPublisher struct {
@@ -129,26 +155,41 @@ func (p *ZatcaPublisher) BillEvent(billID uint64, branchID uint32, ident billIde
 	}, nil
 }
 
-// OnboadBranch asks the daemon to onboard a branch with the OTP from the Fatoora portal. Onboarding is a control
-// message, not part of a sale. It is the one control-plane exception to the outbox rule (D18): the OTP is a one-time secret, so it is
-// not stored in the outbox, and a publish that JetStream rejects fails the request.
-func (p *ZatcaPublisher) OnboadBranch(branchID int64, otp string) error {
-	data, err := json.Marshal(Message{
-		DocType:   "onboard",
-		ID:        branchID,
-		BranchID:  branchID,
-		DBName:    p.dbName,
-		TenantKey: p.tenantKey,
-		OTP:       otp,
-	})
+// OnboardBranch asks the daemon to onboard a branch with the OTP from the Fatoora portal. The daemon checks the request and
+// answers at once, and the onboarding itself runs after the answer. A refusal is an *OnboardRejectedError. A daemon that does
+// not answer is nats.ErrNoResponders or nats.ErrTimeout.
+func (p *ZatcaPublisher) OnboardBranch(branchID int64, otp string) error {
+	data, err := json.Marshal(OnboardRequest{DBName: p.dbName, TenantKey: p.tenantKey, BranchID: branchID, OTP: otp})
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
-	subject := fmt.Sprintf("zatca.onboard.%s.%d", p.dbName, branchID)
-	if _, err := p.js.Publish(subject, data); err != nil {
-		return fmt.Errorf("publish to %s: %w", subject, err)
+	subject := onboardSubject(p.dbName, branchID)
+	reply, err := p.nc.Request(subject, data, onboardTimeout)
+	if err != nil {
+		return fmt.Errorf("onboarding request %s: %w", subject, err)
 	}
-	log.Printf("[zatca-publisher] published onboarding for branch %d", branchID)
+	if err := parseOnboardReply(reply.Data); err != nil {
+		return err
+	}
+	log.Printf("[zatca-publisher] onboarding of branch %d accepted", branchID)
+	return nil
+}
+
+// onboardSubject is the subject of one branch's onboarding request. It sits outside the ZATCA stream (zatca.>), so JetStream
+// never stores the request.
+func onboardSubject(dbName string, branchID int64) string {
+	return fmt.Sprintf("control.zatca.onboard.%s.%d", dbName, branchID)
+}
+
+// parseOnboardReply reads the daemon's answer. A refusal is an *OnboardRejectedError.
+func parseOnboardReply(data []byte) error {
+	var reply OnboardReply
+	if err := json.Unmarshal(data, &reply); err != nil {
+		return fmt.Errorf("read onboarding reply: %w", err)
+	}
+	if !reply.Accepted {
+		return &OnboardRejectedError{Reason: reply.Error}
+	}
 	return nil
 }
 

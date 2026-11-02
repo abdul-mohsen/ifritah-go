@@ -16,6 +16,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
@@ -553,6 +554,22 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	}
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
+
+	// Only a draft can be deleted. A final sale is an issued document, and a cancellation is a credit note (B6). The row lock
+	// taken here holds the sale until this transaction ends, and the check runs before any stock is put back.
+	state, err := qtx.GetBillStateForUpdate(c.Request.Context(), billID)
+	if errors.Is(err, sql.ErrNoRows) {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	if state != 0 {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "a final sale cannot be deleted; cancel it with a credit note"})
+		return
+	}
 
 	// ── Stock tracking: restore stock BEFORE deleting the bill (need bill data intact) ──
 	if err := h.reverseSaleMovements(qtx, c, billID, int32(userSession.id)); err != nil {

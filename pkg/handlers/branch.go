@@ -1,9 +1,9 @@
 package handlers
 
 import (
+	"errors"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/pagination"
-	"errors"
 	"log"
 	"net/http"
 	"strconv"

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -34,12 +35,18 @@ func saleBody(state int, posID, requestID string) string {
 	return "{" + strings.Join(append(fields, saleLines), ",") + "}"
 }
 
-// saleFinalBody is a final sale with its point-of-sale identity. saleDraftBody is the same sale saved as a draft: no
-// identity, no number, and no event.
+// saleFinalBody is a final sale with its point-of-sale identity. saleDraftBody is the same sale saved as a draft: no identity,
+// no number, and no event.
 var (
 	saleFinalBody = saleBody(1, "pos-1", saleRequestID)
 	saleDraftBody = saleBody(0, "", "")
 )
+
+// recordedRequest is the bill that already recorded a sale's request id, as the lookup returns it.
+type recordedRequest struct {
+	id          int64
+	fingerprint string
+}
 
 func newSaleTestHandler(t *testing.T) (*handler, sqlmock.Sqlmock) {
 	t.Helper()
@@ -65,9 +72,33 @@ func runSaleRequest(t *testing.T, handlerFunc gin.HandlerFunc, path, body string
 	return w
 }
 
+// fingerprintOf is the fingerprint the handler computes for a sale body.
+func fingerprintOf(t *testing.T, body string) string {
+	t.Helper()
+	request := newSaleRequest()
+	if err := json.Unmarshal([]byte(body), &request); err != nil {
+		t.Fatal(err)
+	}
+	fingerprint, err := saleFingerprint(&request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fingerprint
+}
+
 // expectSaleStoreAccess is the store check that runs before a sale is written.
 func expectSaleStoreAccess(mock sqlmock.Sqlmock) {
 	mock.ExpectQuery("select store.id from store").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+}
+
+// expectRequestRecord is the read of the bill that recorded a sale's request id. A nil record means none.
+func expectRequestRecord(mock sqlmock.Sqlmock, record *recordedRequest) {
+	rows := sqlmock.NewRows([]string{"id", "request_fingerprint", "request_fingerprint_version"})
+	if record != nil {
+		rows.AddRow(record.id, record.fingerprint, 1)
+	}
+	mock.ExpectQuery(`SELECT id, request_fingerprint, request_fingerprint_version FROM bill WHERE pos_id = \? AND bill_request_id = \?`).
+		WillReturnRows(rows)
 }
 
 // expectBillRow is the bill row that a sale creates before its fields are written.
@@ -112,6 +143,7 @@ func TestAddBillWritesTheSaleAndItsZatcaEventInOneTransaction(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
 	expectBillRow(mock, 42)
 	expectNumberAllocation(mock, 1)
 	expectBillWrite(mock)
@@ -146,7 +178,7 @@ func TestAddBillSavesADraftWithoutANumberOrAnEvent(t *testing.T) {
 	}
 }
 
-// A final sale must name its point of sale and its request. Each case is refused before anything is written, and each
+// A final sale must name its point of sale and its request. Each case is refused before anything is read or written, and each
 // case fails on its own validator.
 func TestAddBillRefusesAFinalSaleWithoutItsIdentity(t *testing.T) {
 	cases := map[string]struct {
@@ -177,6 +209,7 @@ func TestAddBillRollsBackWhenTheNumberCannotBeAllocated(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
 	expectBillRow(mock, 42)
 	mock.ExpectExec("INSERT INTO branch_sequence").WillReturnError(errors.New("lock wait timeout"))
 	mock.ExpectRollback()
@@ -190,16 +223,73 @@ func TestAddBillRollsBackWhenTheNumberCannotBeAllocated(t *testing.T) {
 	}
 }
 
-// A retry with the same pos_id and bill_request_id hits the unique key on the update. It gets 409, and no second bill,
-// event or stock movement is written.
-func TestAddBillReportsADuplicateSaleRequest(t *testing.T) {
+// A retry of a sale that was recorded returns the original bill. It writes nothing: no bill, no number, no event, no stock.
+func TestAddBillReplaysTheOriginalSaleForTheSameContent(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
-	expectBillRow(mock, 42)
+	expectRequestRecord(mock, &recordedRequest{id: 42, fingerprint: fingerprintOf(t, saleFinalBody)})
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.AddBill, "/bill", saleFinalBody, nil)
+	if w.Code != http.StatusCreated || strings.TrimSpace(w.Body.String()) != "42" {
+		t.Fatalf("AddBill retry = %d %q; want 201 with the original bill id 42", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The same request id with different content is a conflict. The record is left as it was.
+func TestAddBillRefusesADifferentSaleUnderARecordedRequest(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectRequestRecord(mock, &recordedRequest{id: 42, fingerprint: strings.Repeat("0", 64)})
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.AddBill, "/bill", saleFinalBody, nil)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), requestConflictCode) {
+		t.Fatalf("AddBill with changed content = %d %q; want 409 %s", w.Code, w.Body.String(), requestConflictCode)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Two requests with the same id can race past the check. The second one loses on the unique key, rolls back, and then
+// replays the first one's bill, because that bill is committed by the time it reads again.
+func TestAddBillReplaysTheWinnerOfARace(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
+	expectBillRow(mock, 43)
 	expectNumberAllocation(mock, 1)
 	mock.ExpectExec("UPDATE bill SET").WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry"})
 	mock.ExpectRollback()
+	expectRequestRecord(mock, &recordedRequest{id: 42, fingerprint: fingerprintOf(t, saleFinalBody)})
+
+	w := runSaleRequest(t, h.AddBill, "/bill", saleFinalBody, nil)
+	if w.Code != http.StatusCreated || strings.TrimSpace(w.Body.String()) != "42" {
+		t.Fatalf("AddBill that lost a race = %d %q; want 201 with the winner's bill id 42", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A duplicate whose winner cannot be read again is refused with the duplicate message. Nothing is recorded twice.
+func TestAddBillReportsADuplicateWhenTheWinnerCannotBeRead(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
+	expectBillRow(mock, 43)
+	expectNumberAllocation(mock, 1)
+	mock.ExpectExec("UPDATE bill SET").WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry"})
+	mock.ExpectRollback()
+	expectRequestRecord(mock, nil)
 
 	w := runSaleRequest(t, h.AddBill, "/bill", saleFinalBody, nil)
 	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), duplicateSaleMessage) {
@@ -231,25 +321,61 @@ func TestSubmitDraftBillFinalizesTheBillWithItsZatcaEvent(t *testing.T) {
 	}
 }
 
-// A bill that is already final is never numbered again, so its counter is not touched.
+// A submit of a draft that is already final, with a request id nothing recorded, is refused. The bill is never numbered again.
 func TestSubmitDraftBillRefusesABillThatIsAlreadyFinal(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
 	expectDraftState(mock, 1)
+	expectRequestRecord(mock, nil)
 	mock.ExpectRollback()
 
 	w := runSaleRequest(t, h.SubmitDraftBill, "/bill/42", saleFinalBody, gin.Params{{Key: "id", Value: "42"}})
-	if w.Code != http.StatusConflict {
-		t.Fatalf("SubmitDraftBill on a final bill = %d; want 409", w.Code)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "already final") {
+		t.Fatalf("SubmitDraftBill on a final bill = %d %q; want 409 already final", w.Code, w.Body.String())
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Credit notes are disabled until their ZATCA submission uses the outbox (B6). The request is refused before anything
-// is read or written.
+// A submit repeated after it succeeded gets the original result, and no second finalization happens.
+func TestSubmitDraftBillReplaysTheSameSubmit(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectDraftState(mock, 1)
+	expectRequestRecord(mock, &recordedRequest{id: 42, fingerprint: fingerprintOf(t, saleFinalBody)})
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.SubmitDraftBill, "/bill/42", saleFinalBody, gin.Params{{Key: "id", Value: "42"}})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("SubmitDraftBill retry = %d; want 201", w.Code)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A request id recorded on another bill cannot finalize this draft.
+func TestSubmitDraftBillRefusesARequestRecordedForAnotherBill(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectDraftState(mock, 1)
+	expectRequestRecord(mock, &recordedRequest{id: 99, fingerprint: fingerprintOf(t, saleFinalBody)})
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.SubmitDraftBill, "/bill/42", saleFinalBody, gin.Params{{Key: "id", Value: "42"}})
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), requestConflictCode) {
+		t.Fatalf("SubmitDraftBill with another bill's request = %d %q; want 409 %s", w.Code, w.Body.String(), requestConflictCode)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Credit notes are disabled until their ZATCA submission uses the outbox (B6). The request is refused before anything is read or written.
 func TestCreditBillIsDisabledUntilItUsesTheOutbox(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 

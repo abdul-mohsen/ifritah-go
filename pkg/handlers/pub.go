@@ -23,17 +23,18 @@ var _ outbox.Publisher = (*ZatcaPublisher)(nil)
 // daemon never generates tenant, request, event, EGS or invoice identity. An onboarding message carries
 // only the first group of fields and the OTP.
 type Message struct {
-	DocType       string `json:"doc_type"`
-	ID            int64  `json:"id"`
-	BranchID      int64  `json:"branch_id"`
-	DBName        string `json:"db_name"`
-	OTP           string `json:"otp,omitempty"`
-	TenantKey     string `json:"tenant_key,omitempty"`
-	PosID         string `json:"pos_id,omitempty"`
-	BillRequestID string `json:"bill_request_id,omitempty"`
-	EventID       string `json:"event_id,omitempty"`
-	EGSSequenceID string `json:"egs_sequence_id,omitempty"`
-	InvoiceUUID   string `json:"invoice_uuid,omitempty"`
+	DocType            string `json:"doc_type"`
+	ID                 int64  `json:"id"`
+	BranchID           int64  `json:"branch_id"`
+	DBName             string `json:"db_name"`
+	OTP                string `json:"otp,omitempty"`
+	TenantKey          string `json:"tenant_key,omitempty"`
+	PosID              string `json:"pos_id,omitempty"`
+	BillRequestID      string `json:"bill_request_id,omitempty"`
+	EventID            string `json:"event_id,omitempty"`
+	EGSSequenceID      string `json:"egs_sequence_id,omitempty"`
+	InvoiceUUID        string `json:"invoice_uuid,omitempty"`
+	RequestFingerprint string `json:"request_fingerprint,omitempty"`
 }
 
 type ZatcaPublisher struct {
@@ -105,16 +106,17 @@ func (p *ZatcaPublisher) BillEvent(billID uint64, branchID uint32, ident billIde
 		return outbox.Event{}, err
 	}
 	payload, err := json.Marshal(Message{
-		DocType:       identity.DocBill,
-		ID:            int64(billID),
-		BranchID:      int64(branchID),
-		DBName:        p.dbName,
-		TenantKey:     p.tenantKey,
-		PosID:         ident.PosID,
-		BillRequestID: ident.BillRequestID,
-		EventID:       eventID,
-		EGSSequenceID: strconv.FormatUint(uint64(branchID), 10),
-		InvoiceUUID:   ident.InvoiceUUID,
+		DocType:            identity.DocBill,
+		ID:                 int64(billID),
+		BranchID:           int64(branchID),
+		DBName:             p.dbName,
+		TenantKey:          p.tenantKey,
+		PosID:              ident.PosID,
+		BillRequestID:      ident.BillRequestID,
+		EventID:            eventID,
+		EGSSequenceID:      strconv.FormatUint(uint64(branchID), 10),
+		InvoiceUUID:        ident.InvoiceUUID,
+		RequestFingerprint: ident.Fingerprint,
 	})
 	if err != nil {
 		return outbox.Event{}, fmt.Errorf("marshal: %w", err)
@@ -128,7 +130,8 @@ func (p *ZatcaPublisher) BillEvent(billID uint64, branchID uint32, ident billIde
 }
 
 // OnboadBranch asks the daemon to onboard a branch with the OTP from the Fatoora portal. Onboarding is a control
-// message, not part of a sale, so it is published directly. The OTP is not stored in the outbox.
+// message, not part of a sale. It is the one control-plane exception to the outbox rule (D18): the OTP is a one-time secret, so it is
+// not stored in the outbox, and a publish that JetStream rejects fails the request.
 func (p *ZatcaPublisher) OnboadBranch(branchID int64, otp string) error {
 	data, err := json.Marshal(Message{
 		DocType:   "onboard",

@@ -26,6 +26,7 @@ type billIdentity struct {
 	PosID         string
 	BillRequestID string
 	InvoiceUUID   string
+	Fingerprint   string
 }
 
 // finalSale is a sale as it is written: the bill, its number in the branch series, and its identity.
@@ -51,7 +52,20 @@ func finalSaleIdentity(request *model.AddBillRequest) (billIdentity, error) {
 	if err != nil {
 		return billIdentity{}, err
 	}
-	return billIdentity{PosID: request.PosID, BillRequestID: request.BillRequestID, InvoiceUUID: invoiceUUID}, nil
+	fingerprint, err := saleFingerprint(request)
+	if err != nil {
+		return billIdentity{}, err
+	}
+	return billIdentity{PosID: request.PosID, BillRequestID: request.BillRequestID, InvoiceUUID: invoiceUUID, Fingerprint: fingerprint}, nil
+}
+
+// saleFingerprint identifies the content of a sale request, which is the request without its point-of-sale identity.
+// The same sale sent again has the same fingerprint, and a different sale under the same identity does not.
+func saleFingerprint(request *model.AddBillRequest) (string, error) {
+	content := *request
+	content.PosID = ""
+	content.BillRequestID = ""
+	return identity.Fingerprint(content)
 }
 
 // allocateBillNumber takes the next number of the branch's bill series. The increment locks the branch's

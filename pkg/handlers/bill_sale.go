@@ -10,10 +10,17 @@ import (
 	"github.com/shopspring/decimal"
 
 	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/identity"
 	"ifritah/web-service-gin/pkg/model"
 )
 
-// AddBill saves a new sale or draft and answers with the new bill id.
+// A sale whose request id was already used for other content, or for another bill, is answered with this code.
+const (
+	requestConflictCode    = "request_conflict"
+	requestConflictMessage = "this sale request id was already used for a different sale or bill"
+)
+
+// AddBill saves a new sale or draft and answers with the bill id.
 func (h *handler) AddBill(c *gin.Context) {
 	request := newSaleRequest()
 	if err := c.BindJSON(&request); err != nil {
@@ -56,9 +63,8 @@ func newSaleRequest() model.AddBillRequest {
 	}
 }
 
-// saveSale writes a sale in one transaction. A nil draftID creates a bill, and a draft id finalizes that draft. A final
-// sale (state above 0) is numbered, identified, and queued for ZATCA in the same transaction. It returns the bill id.
-// On failure it has already written the error response.
+// saveSale writes a sale in one transaction. A nil draftID creates a bill, and a draft id finalizes that draft. It returns the
+// bill id, and on failure it has already written the error response.
 func (h *handler) saveSale(c *gin.Context, request *model.AddBillRequest, draftID *uint64) (uint64, bool) {
 	ident, err := finalSaleIdentity(request)
 	if err != nil {
@@ -76,41 +82,75 @@ func (h *handler) saveSale(c *gin.Context, request *model.AddBillRequest, draftI
 		return 0, false
 	}
 	defer tx.Rollback()
-	qtx := h.queries.WithTx(tx)
-	userID := int32(userSession.id)
+	return h.writeSale(c, tx, request, ident, draftID, int32(userSession.id))
+}
 
-	billID, ok := openSaleBill(c, qtx, request, draftID, userID)
+// writeSale is the transaction of a sale. A sale whose request id is already recorded writes nothing: the same content for the
+// same bill gets the original result, and anything else is refused.
+func (h *handler) writeSale(c *gin.Context, tx *sql.Tx, request *model.AddBillRequest, ident billIdentity, draftID *uint64, userID int32) (uint64, bool) {
+	qtx := h.queries.WithTx(tx)
+	if draftID == nil {
+		original, found, ok := requestRecord(c, qtx, ident)
+		if !ok {
+			return 0, false
+		}
+		if found {
+			return answerRecordedRequest(c, original, ident, nil)
+		}
+	}
+
+	billID, final, ok := openSaleBill(c, qtx, request, draftID, userID)
 	if !ok {
 		return 0, false
+	}
+	if final {
+		return answerFinalDraft(c, qtx, ident, draftID)
 	}
 	number, sequence, ok := numberSale(c, qtx, request)
 	if !ok {
 		return 0, false
 	}
-	if !updateSaleBill(c, qtx, request, billID, sequence, ident, userID) {
-		return 0, false
-	}
-	if draftID != nil {
-		if err := qtx.DeleteProductToBill(c.Request.Context(), billID); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
+	if err := updateSaleBill(c, qtx, request, billID, sequence, ident, userID); err != nil {
+		if !IsDuplicate(err) {
+			log.Printf("sale update: %v", err)
+			c.AbortWithError(http.StatusInternalServerError, err)
 			return 0, false
 		}
+		// A concurrent request recorded this request id after the check above. The transaction is rolled back, and the
+		// record is read again outside it, where the committed row is visible.
+		_ = tx.Rollback()
+		return answerLostRace(c, h.queries, ident, draftID)
 	}
 	sale := finalSale{billID: billID, number: number, identity: ident}
-	if !h.completeSale(c, qtx, tx, request, sale, userID) {
-		return 0, false
-	}
-	if err := tx.Commit(); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+	if !h.finishSale(c, tx, qtx, request, sale, draftID, userID) {
 		return 0, false
 	}
 	return billID, true
 }
 
-// openSaleBill returns the bill that a sale writes. A new sale gets a bill row with only the columns that have no value
-// yet, and updateSaleBill writes the rest. A draft is locked and must still be open, because a final bill is never
-// written again.
-func openSaleBill(c *gin.Context, qtx *db.Queries, request *model.AddBillRequest, draftID *uint64, userID int32) (uint64, bool) {
+// finishSale writes what follows the bill row. A draft's old lines are removed first. Then the sale's lines, totals, stock
+// movements and ZATCA event are written, and the transaction commits.
+func (h *handler) finishSale(c *gin.Context, tx *sql.Tx, qtx *db.Queries, request *model.AddBillRequest, sale finalSale, draftID *uint64, userID int32) bool {
+	if draftID != nil {
+		if err := qtx.DeleteProductToBill(c.Request.Context(), sale.billID); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+			return false
+		}
+	}
+	if !h.completeSale(c, qtx, tx, request, sale, userID) {
+		return false
+	}
+	if err := tx.Commit(); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return false
+	}
+	return true
+}
+
+// openSaleBill returns the bill that a sale writes, and whether a draft is already final. A new sale gets a bill row with only the
+// columns that have no value yet, and updateSaleBill writes the rest. A draft is locked before it is read, so two submits of one
+// draft cannot both see it open.
+func openSaleBill(c *gin.Context, qtx *db.Queries, request *model.AddBillRequest, draftID *uint64, userID int32) (uint64, bool, bool) {
 	if draftID == nil {
 		res, err := qtx.CreateBill(c.Request.Context(), db.CreateBillParams{
 			EffectiveDate:   effectiveDateOr(nil),
@@ -121,29 +161,88 @@ func openSaleBill(c *gin.Context, qtx *db.Queries, request *model.AddBillRequest
 		})
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
-			return 0, false
+			return 0, false, false
 		}
 		id, err := res.LastInsertId()
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
-			return 0, false
+			return 0, false, false
 		}
-		return uint64(id), true
+		return uint64(id), false, true
 	}
 
 	state, err := qtx.GetBillStateForUpdate(c.Request.Context(), *draftID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		c.AbortWithStatus(http.StatusNotFound)
-		return 0, false
+		return 0, false, false
 	case err != nil:
 		c.AbortWithError(http.StatusInternalServerError, err)
-		return 0, false
-	case state > 0:
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "bill is already final"})
+		return 0, false, false
+	}
+	return *draftID, state > 0, true
+}
+
+// answerFinalDraft answers a submit of a draft that is already final. The same request id on this bill is a retry, and it gets the
+// original result. Any other submit is refused as already final.
+func answerFinalDraft(c *gin.Context, qtx *db.Queries, ident billIdentity, draftID *uint64) (uint64, bool) {
+	original, found, ok := requestRecord(c, qtx, ident)
+	if !ok {
 		return 0, false
 	}
-	return *draftID, true
+	if found {
+		return answerRecordedRequest(c, original, ident, draftID)
+	}
+	c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "bill is already final"})
+	return 0, false
+}
+
+// answerLostRace answers a sale whose request id a concurrent request recorded after the check. It reads the record with the given
+// queries, which run outside the rolled-back transaction.
+func answerLostRace(c *gin.Context, q *db.Queries, ident billIdentity, draftID *uint64) (uint64, bool) {
+	original, found, ok := requestRecord(c, q, ident)
+	if !ok {
+		return 0, false
+	}
+	if found {
+		return answerRecordedRequest(c, original, ident, draftID)
+	}
+	c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": duplicateSaleMessage})
+	return 0, false
+}
+
+// requestRecord looks up the bill that recorded a sale's request id. A draft has no request id, so it has no record. A database error
+// writes the error response.
+func requestRecord(c *gin.Context, q *db.Queries, ident billIdentity) (db.GetBillByRequestIdentityRow, bool, bool) {
+	if ident.PosID == "" {
+		return db.GetBillByRequestIdentityRow{}, false, true
+	}
+	row, err := q.GetBillByRequestIdentity(c.Request.Context(), db.GetBillByRequestIdentityParams{
+		PosID:         nilIfEmpty(ident.PosID),
+		BillRequestID: nullableString(ident.BillRequestID),
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return row, false, true
+	case err != nil:
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return row, false, false
+	}
+	return row, true, true
+}
+
+// answerRecordedRequest answers a sale whose request id is already recorded on a bill. The same content for the same bill is a retry:
+// it gets the original bill and writes nothing. Anything else is a conflict.
+func answerRecordedRequest(c *gin.Context, original db.GetBillByRequestIdentityRow, ident billIdentity, draftID *uint64) (uint64, bool) {
+	sameBill := draftID == nil || *draftID == original.ID
+	sameContent := original.RequestFingerprint.Valid &&
+		original.RequestFingerprint.String == ident.Fingerprint &&
+		original.RequestFingerprintVersion == identity.FingerprintVersion
+	if sameBill && sameContent {
+		return original.ID, true
+	}
+	c.AbortWithStatusJSON(http.StatusConflict, gin.H{"code": requestConflictCode, "message": requestConflictMessage})
+	return 0, false
 }
 
 // numberSale takes the next number of a final sale's branch series. A draft gets no number.
@@ -159,38 +258,31 @@ func numberSale(c *gin.Context, qtx *db.Queries, request *model.AddBillRequest) 
 	return number, &number, true
 }
 
-// updateSaleBill writes a sale's fields, number and identity to its bill row. A new sale and a draft take this same
-// statement, so the bill's columns are listed in one place.
-func updateSaleBill(c *gin.Context, qtx *db.Queries, request *model.AddBillRequest, billID uint64, sequence *uint64, ident billIdentity, userID int32) bool {
-	err := qtx.UpdateBillByID(c.Request.Context(), db.UpdateBillByIDParams{
-		ID:              billID,
-		EffectiveDate:   effectiveDateOr(request.EffectiveDate),
-		PaymentDueDate:  request.PaymentDueDate,
-		State:           request.State,
-		Discount:        request.Discount,
-		StoreID:         request.StoreId,
-		SequenceNumber:  sequence,
-		MerchantID:      userID,
-		MaintenanceCost: request.MaintenanceCost,
-		Note:            request.Note,
-		Username:        request.UserName,
-		ClientID:        request.ClientID,
-		UserPhoneNumber: request.UserPhoneNumber,
-		PaymentMethod:   request.PaymentMethod,
-		BranchID:        &request.BranchID,
-		DeliverDate:     request.DeliverDate,
-		PosID:           nilIfEmpty(ident.PosID),
-		BillRequestID:   nullableString(ident.BillRequestID),
-		InvoiceUuid:     nullableString(ident.InvoiceUUID),
+// updateSaleBill writes a sale's fields, number, identity and request fingerprint to its bill row. A new sale and a draft take this
+// same statement, so the bill's columns are listed once. It returns the database error as it is, so a lost race can be told apart
+// from a failure.
+func updateSaleBill(c *gin.Context, qtx *db.Queries, request *model.AddBillRequest, billID uint64, sequence *uint64, ident billIdentity, userID int32) error {
+	return qtx.UpdateBillByID(c.Request.Context(), db.UpdateBillByIDParams{
+		ID:                        billID,
+		EffectiveDate:             effectiveDateOr(request.EffectiveDate),
+		PaymentDueDate:            request.PaymentDueDate,
+		State:                     request.State,
+		Discount:                  request.Discount,
+		StoreID:                   request.StoreId,
+		SequenceNumber:            sequence,
+		MerchantID:                userID,
+		MaintenanceCost:           request.MaintenanceCost,
+		Note:                      request.Note,
+		Username:                  request.UserName,
+		ClientID:                  request.ClientID,
+		UserPhoneNumber:           request.UserPhoneNumber,
+		PaymentMethod:             request.PaymentMethod,
+		BranchID:                  &request.BranchID,
+		DeliverDate:               request.DeliverDate,
+		PosID:                     nilIfEmpty(ident.PosID),
+		BillRequestID:             nullableString(ident.BillRequestID),
+		InvoiceUuid:               nullableString(ident.InvoiceUUID),
+		RequestFingerprint:        nullableString(ident.Fingerprint),
+		RequestFingerprintVersion: identity.FingerprintVersion,
 	})
-	if err == nil {
-		return true
-	}
-	log.Printf("sale update: %v", err)
-	if IsDuplicate(err) {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": duplicateSaleMessage})
-	} else {
-		c.AbortWithError(http.StatusInternalServerError, err)
-	}
-	return false
 }

@@ -150,8 +150,13 @@ branch_id = ?,
 deliver_date = ?,
 pos_id = ?,
 bill_request_id = ?,
-invoice_uuid = ?
+invoice_uuid = ?,
+request_fingerprint = ?,
+request_fingerprint_version = ?
 WHERE id = ?;
+
+-- name: GetBillByRequestIdentity :one
+SELECT id, request_fingerprint, request_fingerprint_version FROM bill WHERE pos_id = ? AND bill_request_id = ?;
 
 -- name: AddProductToBill :exec
 insert into bill_product (name, product_id, price, quantity, bill_id, part_name) values (?, ?, ?, ?, ?, ?);

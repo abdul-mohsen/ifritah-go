@@ -13,6 +13,7 @@ func TestBillEventCarriesTheCanonicalEnvelope(t *testing.T) {
 		PosID:         "pos-1",
 		BillRequestID: "3f2b9c1e-7a4d-4e8b-9c21-5d0e6f7a8b9c",
 		InvoiceUUID:   "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+		Fingerprint:   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	}
 	event, err := p.BillEvent(42, 7, ident)
 	if err != nil {
@@ -27,16 +28,17 @@ func TestBillEventCarriesTheCanonicalEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]any{
-		"doc_type":        "bill",
-		"id":              float64(42),
-		"branch_id":       float64(7),
-		"db_name":         "acme_db",
-		"tenant_key":      "acme",
-		"pos_id":          ident.PosID,
-		"bill_request_id": ident.BillRequestID,
-		"event_id":        event.EventID,
-		"egs_sequence_id": "7",
-		"invoice_uuid":    ident.InvoiceUUID,
+		"doc_type":            "bill",
+		"id":                  float64(42),
+		"branch_id":           float64(7),
+		"db_name":             "acme_db",
+		"tenant_key":          "acme",
+		"pos_id":              ident.PosID,
+		"bill_request_id":     ident.BillRequestID,
+		"event_id":            event.EventID,
+		"egs_sequence_id":     "7",
+		"invoice_uuid":        ident.InvoiceUUID,
+		"request_fingerprint": ident.Fingerprint,
 	}
 	if len(envelope) != len(want) {
 		t.Fatalf("envelope has %d fields %v; want %d", len(envelope), envelope, len(want))

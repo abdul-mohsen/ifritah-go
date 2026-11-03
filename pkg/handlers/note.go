@@ -336,8 +336,7 @@ func debitRecordOf(c *gin.Context, q *db.Queries, ident billIdentity) (noteRecor
 	return noteRecord{id: row.ID, billID: row.BillID, fingerprint: row.RequestFingerprint, version: row.RequestFingerprintVersion}, true, nil
 }
 
-// billRequestTaken reports whether a bill already has the request id of a note. The daemon claims each request id once in the tenant
-// database, for bills and notes alike, so a note cannot reuse the request id of a bill.
+// billRequestTaken reports whether a bill already has the request id.
 func billRequestTaken(c *gin.Context, qtx *db.Queries, ident billIdentity) (bool, error) {
 	_, err := qtx.GetBillByRequestIdentity(c.Request.Context(), db.GetBillByRequestIdentityParams{
 		PosID:         nilIfEmpty(ident.PosID),
@@ -350,6 +349,23 @@ func billRequestTaken(c *gin.Context, qtx *db.Queries, ident billIdentity) (bool
 		return false, err
 	}
 	return true, nil
+}
+
+// otherNoteRequestTaken reports whether a request id is already used by a bill, or by a note of the other kind. The daemon claims each
+// request id once for the whole tenant database, for bills and for both kinds of note. A note that shares its id with another document
+// would be refused by the daemon and never invoiced, so the backend refuses it first. A note of the same kind is checked by its writer.
+func otherNoteRequestTaken(c *gin.Context, qtx *db.Queries, ident billIdentity, docType string) (bool, error) {
+	taken, err := billRequestTaken(c, qtx, ident)
+	if err != nil || taken {
+		return taken, err
+	}
+	var found bool
+	if docType == identity.DocCredit {
+		_, found, err = debitRecordOf(c, qtx, ident)
+	} else {
+		_, found, err = creditRecordOf(c, qtx, ident)
+	}
+	return found, err
 }
 
 // answerRecordedNote answers a note whose request id is already recorded. The same content for the same bill is a retry: it gets the

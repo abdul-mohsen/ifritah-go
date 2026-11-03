@@ -28,6 +28,7 @@ const (
 	importInvalidRequest      = "invalid_request"
 	importNotFinal            = "not_final"
 	importStoreNotAllowed     = "store_not_allowed"
+	importStoreNotInBranch    = "store_not_in_branch"
 	importBranchNotFound      = "branch_not_found"
 	importBranchNotRegistered = "branch_not_registered"
 	importSellerVATMissing    = "seller_vat_missing"
@@ -137,6 +138,11 @@ func (k *importChecker) checkRow(c *gin.Context, index int, raw json.RawMessage)
 		return row, err
 	}
 	row.Errors = append(row.Errors, k.saleIssues(&request)...)
+	issues, err := k.storeBranchIssues(c, &request)
+	if err != nil {
+		return row, err
+	}
+	row.Errors = append(row.Errors, issues...)
 	row.Errors = append(row.Errors, storedScaleIssues(&request)...)
 	if request.EffectiveDate != nil {
 		errs, warns := dateIssues(savedEffectiveDate(*request.EffectiveDate), k.now)
@@ -206,6 +212,22 @@ func (k *importChecker) saleIssues(request *model.AddBillRequest) []importIssue 
 		issues = append(issues, importIssue{Code: importStoreNotAllowed, Message: fmt.Sprintf("store %d is not one of the stores you can sell from", request.StoreId)})
 	}
 	return issues
+}
+
+// storeBranchIssues checks that the store of a row belongs to the row's branch, as the sale path checks it before it writes a sale. A row
+// with no branch is not read: the request refuses it on its own rules.
+func (k *importChecker) storeBranchIssues(c *gin.Context, request *model.AddBillRequest) ([]importIssue, error) {
+	if request.BranchID == 0 {
+		return nil, nil
+	}
+	storeBranch, err := k.h.queries.GetStoreBranchID(c.Request.Context(), request.StoreId)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	if storeBranch == nil || *storeBranch != request.BranchID {
+		return []importIssue{{Code: importStoreNotInBranch, Message: "store does not belong to the branch"}}, nil
+	}
+	return nil, nil
 }
 
 // storedScaleIssues checks the values of a sale as bill_product stores them: a price at two decimals, a quantity at three, and the

@@ -97,6 +97,7 @@ func expectImportProductStock(mock sqlmock.Sqlmock, productID int64, quantity st
 func TestCheckBillImportAcceptsAValidSale(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "disable")
+	expectStoreBranch(mock, 7)
 	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	expectImportDuplicate(mock, fingerprintOf(t, importSale()), nil)
 
@@ -116,6 +117,7 @@ func TestCheckBillImportAcceptsAValidSale(t *testing.T) {
 func TestCheckBillImportAcceptsAPaymentUpToTheTotal(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "disable")
+	expectStoreBranch(mock, 7)
 	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	expectImportDuplicate(mock, fingerprintOf(t, withPaidAmount(importSale(), "11.50")), nil)
 
@@ -234,9 +236,11 @@ func TestCheckBillImportReportsEachRefusal(t *testing.T) {
 			switch {
 			case tc.noReads:
 			case tc.setup != nil:
+				expectStoreBranch(mock, 7)
 				tc.setup(mock)
 				expectImportDuplicate(mock, fingerprintOf(t, tc.body), nil)
 			default:
+				expectStoreBranch(mock, 7)
 				expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 				expectImportDuplicate(mock, fingerprintOf(t, tc.body), nil)
 			}
@@ -244,6 +248,33 @@ func TestCheckBillImportReportsEachRefusal(t *testing.T) {
 			rows := checkImport(t, h, importBody(tc.body))
 			if rows[0].Valid || !hasImportCode(rows[0].Errors, tc.code) {
 				t.Fatalf("row = %+v; want an invalid row with the error %s", rows[0], tc.code)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// The sale path refuses a store that belongs to another branch, or to none. The check refuses such a row with the same words.
+func TestCheckBillImportRefusesAStoreOfAnotherBranch(t *testing.T) {
+	cases := map[string]struct {
+		storeBranch any
+	}{
+		"a store of another branch": {storeBranch: 8},
+		"a store with no branch":    {storeBranch: nil},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			h, mock := newSaleTestHandler(t)
+			expectImportStart(mock, "disable")
+			expectStoreBranch(mock, tc.storeBranch)
+			expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
+			expectImportDuplicate(mock, fingerprintOf(t, importSale()), nil)
+
+			rows := checkImport(t, h, importBody(importSale()))
+			if rows[0].Valid || !hasImportCode(rows[0].Errors, importStoreNotInBranch) {
+				t.Fatalf("row = %+v; want an invalid row with %s", rows[0], importStoreNotInBranch)
 			}
 			if err := mock.ExpectationsWereMet(); err != nil {
 				t.Fatal(err)
@@ -265,6 +296,7 @@ func TestCheckBillImportRefusesABranchTheDaemonDoesNotRun(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			h, mock := newSaleTestHandler(t)
 			expectImportStart(mock, "disable")
+			expectStoreBranch(mock, 7)
 			expectImportBranch(mock, "300000000000003", "egs-uuid-7", tc.daemonRuns)
 			expectImportDuplicate(mock, fingerprintOf(t, importSale()), nil)
 
@@ -283,6 +315,7 @@ func TestCheckBillImportRefusesABranchTheDaemonDoesNotRun(t *testing.T) {
 func TestCheckBillImportFlagsASaleThatIsAlreadyABill(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "disable")
+	expectStoreBranch(mock, 7)
 	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	id := int64(42)
 	expectImportDuplicate(mock, fingerprintOf(t, importSale()), &id)
@@ -301,8 +334,10 @@ func TestCheckBillImportFlagsASaleThatIsAlreadyABill(t *testing.T) {
 func TestCheckBillImportFlagsARowThatRepeatsAnEarlierRow(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "disable")
+	expectStoreBranch(mock, 7)
 	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	expectImportDuplicate(mock, fingerprintOf(t, importSale()), nil)
+	expectStoreBranch(mock, 7)
 	expectImportDuplicate(mock, fingerprintOf(t, importSale()), nil)
 
 	rows := checkImport(t, h, importBody(importSale(), importSale()))
@@ -334,6 +369,7 @@ func TestCheckBillImportChecksTheStockOfEachLine(t *testing.T) {
 			h, mock := newSaleTestHandler(t)
 			body := importStockSale(12, "10", tc.quantity)
 			expectImportStart(mock, tc.mode)
+			expectStoreBranch(mock, 7)
 			expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 			if tc.mode != "disable" {
 				expectImportProductStock(mock, 12, tc.stock)
@@ -360,9 +396,11 @@ func TestCheckBillImportCountsTheStockThatEarlierRowsTake(t *testing.T) {
 	second := importStockSale(12, "11", "2")
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "enforce")
+	expectStoreBranch(mock, 7)
 	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	expectImportProductStock(mock, 12, "3.000")
 	expectImportDuplicate(mock, fingerprintOf(t, first), nil)
+	expectStoreBranch(mock, 7)
 	expectImportProductStock(mock, 12, "3.000")
 	expectImportDuplicate(mock, fingerprintOf(t, second), nil)
 
@@ -411,6 +449,7 @@ func TestCheckBillImportTakesAFullBatch(t *testing.T) {
 func TestCheckBillImportAnswersAFailedReadWithoutRows(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "disable")
+	expectStoreBranch(mock, 7)
 	mock.ExpectQuery(`COALESCE\(c\.vat_registration_number, ''\) AS seller_vat`).WillReturnError(errors.New("lock wait timeout"))
 
 	w := runSaleRequest(t, h.CheckBillImport, "/bill/import/check", importBody(importSale()), nil)
@@ -490,6 +529,7 @@ func TestCheckBillImportWarnsOnASaleOlderThan24HoursAndKeepsItValid(t *testing.T
 	body := withEffectiveDate(importSale(), time.Now().Add(-24*time.Hour-time.Minute).UTC().Format(time.RFC3339))
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "disable")
+	expectStoreBranch(mock, 7)
 	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	expectImportDuplicate(mock, fingerprintOf(t, body), nil)
 
@@ -508,6 +548,7 @@ func TestCheckBillImportAcceptsASaleDatedToday(t *testing.T) {
 	body := withEffectiveDate(importSale(), dayAtNoonUTC(time.Now()))
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "disable")
+	expectStoreBranch(mock, 7)
 	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	expectImportDuplicate(mock, fingerprintOf(t, body), nil)
 

@@ -60,7 +60,7 @@ func hasImportCode(issues []importIssue, code string) bool {
 
 // expectImportStart is what a check reads before its rows: the stores the caller can sell from, and the stock mode.
 func expectImportStart(mock sqlmock.Sqlmock, stockMode string) {
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectQuery(`SELECT COALESCE\(value, 'disable'\)`).WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow(stockMode))
 }
 

@@ -62,16 +62,16 @@ func expectImportStart(mock sqlmock.Sqlmock, stockMode string) {
 	mock.ExpectQuery(`SELECT COALESCE\(value, 'disable'\)`).WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow(stockMode))
 }
 
-// expectImportSeller is the read of a branch's seller data. The branch is read once per check.
-func expectImportSeller(mock sqlmock.Sqlmock, vat, egsID string) {
+// expectImportBranch is the read of a branch: its seller VAT, its EGS id, and whether the daemon runs it. The branch is read once per check.
+func expectImportBranch(mock sqlmock.Sqlmock, vat, egsID string, daemonRuns bool) {
 	mock.ExpectQuery(`COALESCE\(c\.vat_registration_number, ''\) AS seller_vat`).
-		WillReturnRows(sqlmock.NewRows([]string{"seller_vat", "egs_id"}).AddRow(vat, egsID))
+		WillReturnRows(sqlmock.NewRows([]string{"seller_vat", "egs_id", "daemon_runs"}).AddRow(vat, egsID, daemonRuns))
 }
 
-// expectNoImportSeller is the read of a branch that does not exist.
-func expectNoImportSeller(mock sqlmock.Sqlmock) {
+// expectNoImportBranch is the read of a branch that does not exist.
+func expectNoImportBranch(mock sqlmock.Sqlmock) {
 	mock.ExpectQuery(`COALESCE\(c\.vat_registration_number, ''\) AS seller_vat`).
-		WillReturnRows(sqlmock.NewRows([]string{"seller_vat", "egs_id"}))
+		WillReturnRows(sqlmock.NewRows([]string{"seller_vat", "egs_id", "daemon_runs"}))
 }
 
 // expectImportDuplicate is the lookup of a bill on branch 7 with the row's fingerprint. A nil id means that no bill has it.
@@ -95,7 +95,7 @@ func expectImportProductStock(mock sqlmock.Sqlmock, productID int64, quantity st
 func TestCheckBillImportAcceptsAValidSale(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "disable")
-	expectImportSeller(mock, "300000000000003", "egs-uuid-7")
+	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	expectImportDuplicate(mock, fingerprintOf(t, importSale()), nil)
 
 	w := runSaleRequest(t, h.CheckBillImport, "/bill/import/check", importBody(importSale()), nil)
@@ -114,7 +114,7 @@ func TestCheckBillImportAcceptsAValidSale(t *testing.T) {
 func TestCheckBillImportAcceptsAPaymentUpToTheTotal(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "disable")
-	expectImportSeller(mock, "300000000000003", "egs-uuid-7")
+	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	expectImportDuplicate(mock, fingerprintOf(t, withPaidAmount(importSale(), "11.50")), nil)
 
 	rows := checkImport(t, h, importBody(withPaidAmount(importSale(), "11.50")))
@@ -195,17 +195,22 @@ func TestCheckBillImportReportsEachRefusal(t *testing.T) {
 		"a branch that does not exist": {
 			body:  importSale(),
 			code:  importBranchNotFound,
-			setup: expectNoImportSeller,
+			setup: expectNoImportBranch,
 		},
 		"a branch with no seller VAT": {
 			body:  importSale(),
 			code:  importSellerVATMissing,
-			setup: func(mock sqlmock.Sqlmock) { expectImportSeller(mock, "", "egs-uuid-7") },
+			setup: func(mock sqlmock.Sqlmock) { expectImportBranch(mock, "", "egs-uuid-7", true) },
 		},
 		"a branch with no EGS id": {
 			body:  importSale(),
 			code:  importEGSIDMissing,
-			setup: func(mock sqlmock.Sqlmock) { expectImportSeller(mock, "300000000000003", "") },
+			setup: func(mock sqlmock.Sqlmock) { expectImportBranch(mock, "300000000000003", "", true) },
+		},
+		"a branch the daemon does not run": {
+			body:  importSale(),
+			code:  importBranchNotRegistered,
+			setup: func(mock sqlmock.Sqlmock) { expectImportBranch(mock, "300000000000003", "egs-uuid-7", false) },
 		},
 	}
 	for name, tc := range cases {
@@ -218,7 +223,7 @@ func TestCheckBillImportReportsEachRefusal(t *testing.T) {
 				tc.setup(mock)
 				expectImportDuplicate(mock, fingerprintOf(t, tc.body), nil)
 			default:
-				expectImportSeller(mock, "300000000000003", "egs-uuid-7")
+				expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 				expectImportDuplicate(mock, fingerprintOf(t, tc.body), nil)
 			}
 
@@ -233,11 +238,38 @@ func TestCheckBillImportReportsEachRefusal(t *testing.T) {
 	}
 }
 
+// The daemon runs a branch that is active and has a production username and password. A row on a branch it does not run is refused with
+// branch_not_registered. A row on a branch it runs is not. The migrated-database test sets each state of the branch.
+func TestCheckBillImportRefusesABranchTheDaemonDoesNotRun(t *testing.T) {
+	cases := map[string]struct {
+		daemonRuns, refused bool
+	}{
+		"a branch with no production credentials": {daemonRuns: false, refused: true},
+		"an active branch with credentials":       {daemonRuns: true, refused: false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			h, mock := newSaleTestHandler(t)
+			expectImportStart(mock, "disable")
+			expectImportBranch(mock, "300000000000003", "egs-uuid-7", tc.daemonRuns)
+			expectImportDuplicate(mock, fingerprintOf(t, importSale()), nil)
+
+			rows := checkImport(t, h, importBody(importSale()))
+			if hasImportCode(rows[0].Errors, importBranchNotRegistered) != tc.refused || rows[0].Valid == tc.refused {
+				t.Fatalf("row = %+v; want branch_not_registered %v and valid %v", rows[0], tc.refused, !tc.refused)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 // A row that matches a bill already saved on its branch is valid, and carries the bill's id. The user decides what to do with it.
 func TestCheckBillImportFlagsASaleThatIsAlreadyABill(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "disable")
-	expectImportSeller(mock, "300000000000003", "egs-uuid-7")
+	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	id := int64(42)
 	expectImportDuplicate(mock, fingerprintOf(t, importSale()), &id)
 
@@ -255,7 +287,7 @@ func TestCheckBillImportFlagsASaleThatIsAlreadyABill(t *testing.T) {
 func TestCheckBillImportFlagsARowThatRepeatsAnEarlierRow(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "disable")
-	expectImportSeller(mock, "300000000000003", "egs-uuid-7")
+	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	expectImportDuplicate(mock, fingerprintOf(t, importSale()), nil)
 	expectImportDuplicate(mock, fingerprintOf(t, importSale()), nil)
 
@@ -288,7 +320,7 @@ func TestCheckBillImportChecksTheStockOfEachLine(t *testing.T) {
 			h, mock := newSaleTestHandler(t)
 			body := importStockSale(12, "10", tc.quantity)
 			expectImportStart(mock, tc.mode)
-			expectImportSeller(mock, "300000000000003", "egs-uuid-7")
+			expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 			if tc.mode != "disable" {
 				expectImportProductStock(mock, 12, tc.stock)
 			}
@@ -314,7 +346,7 @@ func TestCheckBillImportCountsTheStockThatEarlierRowsTake(t *testing.T) {
 	second := importStockSale(12, "11", "2")
 	h, mock := newSaleTestHandler(t)
 	expectImportStart(mock, "enforce")
-	expectImportSeller(mock, "300000000000003", "egs-uuid-7")
+	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
 	expectImportProductStock(mock, 12, "3.000")
 	expectImportDuplicate(mock, fingerprintOf(t, first), nil)
 	expectImportProductStock(mock, 12, "3.000")

@@ -27,7 +27,7 @@ func importFixture(t *testing.T) (*handler, *sql.DB) {
 	sqlDB := testdb.Open(t, importTables...)
 	company := importExec(t, sqlDB, "INSERT INTO company (name, vat_number, vat_registration_number) VALUES ('acme', '300000000000003', '300000000000003')")
 	importExec(t, sqlDB, "INSERT INTO branches (id, name, company_id) VALUES (7, 'branch 7', ?)", company)
-	importExec(t, sqlDB, "INSERT INTO branch_zatca_config (branch_id, csr_computer_number) VALUES (7, 'egs-7')")
+	importExec(t, sqlDB, "INSERT INTO branch_zatca_config (branch_id, csr_computer_number, zatca_production_username, zatca_production_password) VALUES (7, 'egs-7', 'prod-user-7', 'prod-pass-7')")
 	importExec(t, sqlDB, "INSERT INTO store (id, name, company_id, branch_id) VALUES (1, 'store 1', ?, 7)", company)
 	importExec(t, sqlDB, "INSERT INTO `user` (id, username, password, company_id) VALUES (7, 'cashier', 'unused', ?)", company)
 	h := New(sqlDB, db.New(sqlDB), &ZatcaPublisher{tenantKey: "acme", dbName: "acme_db"})
@@ -167,5 +167,40 @@ func TestCheckBillImportStockAgreesWithTheSale(t *testing.T) {
 			}
 			saveImportSale(t, h, strings.Replace(enoughSale, `"store_id":1,`, `"store_id":1,`+importSaleIdentity, 1))
 		})
+	}
+}
+
+// The daemon runs a branch that is active and has a production username and password. The check refuses a row on a branch that the
+// daemon does not run, and it accepts a row on one it runs. Each state is set on the migrated schema in turn, and then checked.
+func TestCheckBillImportRefusesABranchTheDaemonDoesNotRunOnTheMigratedSchema(t *testing.T) {
+	h, sqlDB := importFixture(t)
+	steps := []struct {
+		name    string
+		exec    []string
+		refused bool
+	}{
+		{name: "active, with credentials", refused: false},
+		{name: "no production username", exec: []string{"UPDATE branch_zatca_config SET zatca_production_username = '' WHERE branch_id = 7"}, refused: true},
+		{name: "no production password", exec: []string{
+			"UPDATE branch_zatca_config SET zatca_production_username = 'prod-user-7', zatca_production_password = '' WHERE branch_id = 7",
+		}, refused: true},
+		{name: "not active, with credentials", exec: []string{
+			"UPDATE branch_zatca_config SET zatca_production_password = 'prod-pass-7' WHERE branch_id = 7",
+			"UPDATE branches SET is_active = 0 WHERE id = 7",
+		}, refused: true},
+		{name: "active again", exec: []string{"UPDATE branches SET is_active = 1 WHERE id = 7"}, refused: false},
+		{name: "no ZATCA config row", exec: []string{"DELETE FROM branch_zatca_config WHERE branch_id = 7"}, refused: true},
+	}
+	for _, step := range steps {
+		for _, query := range step.exec {
+			importExec(t, sqlDB, query)
+		}
+		rows := checkImport(t, h, importBody(importSale()))
+		if hasImportCode(rows[0].Errors, importBranchNotRegistered) != step.refused {
+			t.Fatalf("%s: row = %+v; want branch_not_registered %v", step.name, rows[0], step.refused)
+		}
+		if !step.refused && !rows[0].Valid {
+			t.Fatalf("%s: row = %+v; want a valid row on a branch the daemon runs", step.name, rows[0])
+		}
 	}
 }

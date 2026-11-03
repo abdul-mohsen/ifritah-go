@@ -144,7 +144,7 @@ func (h *handler) queueSaleEvent(c *gin.Context, tx *sql.Tx, sale finalSale, bra
 	if sale.identity.InvoiceUUID == "" {
 		return nil
 	}
-	event, err := h.pub.BillEvent(sale.billID, branchID, sale.identity)
+	event, err := h.pub.DocumentEvent(identity.DocBill, sale.billID, branchID, sale.identity)
 	if err != nil {
 		return err
 	}

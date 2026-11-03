@@ -23,8 +23,8 @@ var _ outbox.Publisher = (*ZatcaPublisher)(nil)
 // onboarding itself runs after the answer.
 const onboardTimeout = 10 * time.Second
 
-// Message is the envelope the ZATCA daemon reads for one final sale. The backend sets every field. The daemon never generates
-// tenant, request, event, EGS, or invoice identity.
+// Message is the envelope the ZATCA daemon reads for one final document: a sale, a credit note, or a debit note. The backend sets every
+// field. The daemon never generates tenant, request, event, EGS, or invoice identity.
 type Message struct {
 	DocType            string `json:"doc_type"`
 	ID                 int64  `json:"id"`
@@ -116,24 +116,24 @@ func (p *ZatcaPublisher) Close() {
 	p.once.Do(func() { p.nc.Close() })
 }
 
-// BillEvent returns the outbox event that asks ZATCA to submit a final sale. The sale writes the event in its
-// own transaction, and the drainer publishes it after the commit. The event ID is created here, once, and
-// every retry publishes with the same ID.
-func (p *ZatcaPublisher) BillEvent(billID uint64, branchID uint32, ident billIdentity) (outbox.Event, error) {
-	if billID > math.MaxInt64 {
-		return outbox.Event{}, fmt.Errorf("bill id %d is above the envelope limit %d", billID, math.MaxInt64)
+// DocumentEvent returns the outbox event that asks ZATCA to submit one final document: a bill, a credit note, or a debit note. The
+// document writes the event in its own transaction, and the drainer publishes it after the commit. The event ID is created here, once,
+// and every retry publishes with the same ID.
+func (p *ZatcaPublisher) DocumentEvent(docType string, id uint64, branchID uint32, ident billIdentity) (outbox.Event, error) {
+	if id > math.MaxInt64 {
+		return outbox.Event{}, fmt.Errorf("%s id %d is above the envelope limit %d", docType, id, math.MaxInt64)
 	}
 	eventID, err := identity.NewUUID()
 	if err != nil {
 		return outbox.Event{}, err
 	}
-	documentKey, err := identity.DocumentKey(p.tenantKey, uint64(branchID), identity.DocBill, billID)
+	documentKey, err := identity.DocumentKey(p.tenantKey, uint64(branchID), docType, id)
 	if err != nil {
 		return outbox.Event{}, err
 	}
 	payload, err := json.Marshal(Message{
-		DocType:            identity.DocBill,
-		ID:                 int64(billID),
+		DocType:            docType,
+		ID:                 int64(id),
 		BranchID:           int64(branchID),
 		DBName:             p.dbName,
 		TenantKey:          p.tenantKey,
@@ -150,7 +150,7 @@ func (p *ZatcaPublisher) BillEvent(billID uint64, branchID uint32, ident billIde
 	return outbox.Event{
 		EventID:     eventID,
 		DocumentKey: documentKey,
-		Subject:     fmt.Sprintf("zatca.%s.%s.%d", identity.DocBill, p.dbName, branchID),
+		Subject:     fmt.Sprintf("zatca.%s.%s.%d", docType, p.dbName, branchID),
 		Payload:     payload,
 	}, nil
 }

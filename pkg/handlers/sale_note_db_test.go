@@ -91,17 +91,20 @@ func countSaleWrites(t *testing.T, sqlDB *sql.DB) saleWrites {
 	}
 }
 
+// noteIdentityCase is one kind of note, and how a request for it is sent.
+type noteIdentityCase struct {
+	requestID string
+	table     string
+	path      string
+	handle    func(h *handler) gin.HandlerFunc
+	body      func(billID string, lineID int) string
+}
+
 // A note holds a request identity on the migrated schema, and a sale that carries it is refused. The refusal writes nothing: no bill row,
 // no number from the branch's counter and no outbox event. The note keeps its identity. A sale with a new identity still goes through,
 // and repeating it returns its bill, as before.
 func TestNoteIdentityRefusesASaleOnTheMigratedSchema(t *testing.T) {
-	cases := map[string]struct {
-		requestID string
-		table     string
-		path      string
-		handle    func(h *handler) gin.HandlerFunc
-		body      func(billID string, lineID int) string
-	}{
+	cases := map[string]noteIdentityCase{
 		"credit note": {
 			requestID: creditRequestID,
 			table:     "credit_note",
@@ -125,30 +128,37 @@ func TestNoteIdentityRefusesASaleOnTheMigratedSchema(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			h, sqlDB := noteSaleFixture(t)
-			billID := postSaleOK(t, h, saleBody(1, "pos-1", saleRequestID))
-			lineID := noteSaleInt(t, sqlDB, "SELECT id FROM bill_product WHERE bill_id = ?", billID)
-			if w := runSaleRequest(t, tc.handle(h), tc.path, tc.body(billID, lineID), nil); w.Code != http.StatusCreated {
-				t.Fatalf("%s = %d %q; want 201", tc.path, w.Code, w.Body.String())
-			}
-
-			fresh := freshRequestID(t)
-			freshBill := postSaleOK(t, h, saleBody(1, "pos-1", fresh))
-			if again := postSaleOK(t, h, saleBody(1, "pos-1", fresh)); again != freshBill {
-				t.Fatalf("repeat of the sale = bill %s; want the original %s", again, freshBill)
-			}
-
-			before := countSaleWrites(t, sqlDB)
-			requireNoteConflict(t, runSaleRequest(t, h.AddBill, "/bill", saleBody(1, "pos-1", tc.requestID), nil))
-			if after := countSaleWrites(t, sqlDB); after != before {
-				t.Fatalf("writes after the refused sale = %+v; want %+v", after, before)
-			}
-			if n := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM bill WHERE pos_id = ? AND bill_request_id = ?", "pos-1", tc.requestID); n != 0 {
-				t.Fatalf("bills with the refused identity = %d; want 0", n)
-			}
-			if n := noteSaleInt(t, sqlDB, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE pos_id = ? AND bill_request_id = ?", tc.table), "pos-1", tc.requestID); n != 1 {
-				t.Fatalf("%s rows with the identity = %d; want 1", tc.table, n)
-			}
+			checkNoteIdentityRefusal(t, tc)
 		})
+	}
+}
+
+// checkNoteIdentityRefusal runs one kind of note on a migrated database: a sale that carries the note's identity is refused, and a sale
+// with a new identity is still created.
+func checkNoteIdentityRefusal(t *testing.T, tc noteIdentityCase) {
+	t.Helper()
+	h, sqlDB := noteSaleFixture(t)
+	billID := postSaleOK(t, h, saleBody(1, "pos-1", saleRequestID))
+	lineID := noteSaleInt(t, sqlDB, "SELECT id FROM bill_product WHERE bill_id = ?", billID)
+	if w := runSaleRequest(t, tc.handle(h), tc.path, tc.body(billID, lineID), nil); w.Code != http.StatusCreated {
+		t.Fatalf("%s = %d %q; want 201", tc.path, w.Code, w.Body.String())
+	}
+
+	fresh := freshRequestID(t)
+	freshBill := postSaleOK(t, h, saleBody(1, "pos-1", fresh))
+	if again := postSaleOK(t, h, saleBody(1, "pos-1", fresh)); again != freshBill {
+		t.Fatalf("repeat of the sale = bill %s; want the original %s", again, freshBill)
+	}
+
+	before := countSaleWrites(t, sqlDB)
+	requireNoteConflict(t, runSaleRequest(t, h.AddBill, "/bill", saleBody(1, "pos-1", tc.requestID), nil))
+	if after := countSaleWrites(t, sqlDB); after != before {
+		t.Fatalf("writes after the refused sale = %+v; want %+v", after, before)
+	}
+	if n := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM bill WHERE pos_id = ? AND bill_request_id = ?", "pos-1", tc.requestID); n != 0 {
+		t.Fatalf("bills with the refused identity = %d; want 0", n)
+	}
+	if n := noteSaleInt(t, sqlDB, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE pos_id = ? AND bill_request_id = ?", tc.table), "pos-1", tc.requestID); n != 1 {
+		t.Fatalf("%s rows with the identity = %d; want 1", tc.table, n)
 	}
 }

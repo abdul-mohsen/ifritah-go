@@ -28,50 +28,56 @@ func TestDocumentEventCarriesTheCanonicalEnvelope(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			p := &ZatcaPublisher{tenantKey: "acme", dbName: "acme_db"}
-			ident := billIdentity{
-				PosID:         "pos-1",
-				BillRequestID: "3f2b9c1e-7a4d-4e8b-9c21-5d0e6f7a8b9c",
-				InvoiceUUID:   "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-				Fingerprint:   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			}
-			event, err := p.DocumentEvent(tc.docType, 42, 7, ident)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if event.DocumentKey != tc.key || event.Subject != tc.subject {
-				t.Fatalf("event key %q and subject %q; want %q and %q", event.DocumentKey, event.Subject, tc.key, tc.subject)
-			}
-
-			var envelope map[string]any
-			if err := json.Unmarshal(event.Payload, &envelope); err != nil {
-				t.Fatal(err)
-			}
-			want := map[string]any{
-				"doc_type":            tc.docType,
-				"id":                  float64(42),
-				"branch_id":           float64(7),
-				"db_name":             "acme_db",
-				"tenant_key":          "acme",
-				"pos_id":              ident.PosID,
-				"bill_request_id":     ident.BillRequestID,
-				"event_id":            event.EventID,
-				"egs_sequence_id":     "7",
-				"invoice_uuid":        ident.InvoiceUUID,
-				"request_fingerprint": ident.Fingerprint,
-			}
-			if len(envelope) != len(want) {
-				t.Fatalf("envelope has %d fields %v; want %d", len(envelope), envelope, len(want))
-			}
-			for field, value := range want {
-				if envelope[field] != value {
-					t.Errorf("envelope %s = %v; want %v", field, envelope[field], value)
-				}
-			}
-			if len(event.EventID) != 36 {
-				t.Errorf("event id %q is not a UUID", event.EventID)
-			}
+			checkDocumentEnvelope(t, tc.docType, tc.key, tc.subject)
 		})
+	}
+}
+
+// checkDocumentEnvelope checks the key, the subject, and the fields of the envelope that one document sends.
+func checkDocumentEnvelope(t *testing.T, docType, key, subject string) {
+	t.Helper()
+	p := &ZatcaPublisher{tenantKey: "acme", dbName: "acme_db"}
+	ident := billIdentity{
+		PosID:         "pos-1",
+		BillRequestID: "3f2b9c1e-7a4d-4e8b-9c21-5d0e6f7a8b9c",
+		InvoiceUUID:   "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+		Fingerprint:   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	}
+	event, err := p.DocumentEvent(docType, 42, 7, ident)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.DocumentKey != key || event.Subject != subject {
+		t.Fatalf("event key %q and subject %q; want %q and %q", event.DocumentKey, event.Subject, key, subject)
+	}
+
+	var envelope map[string]any
+	if err := json.Unmarshal(event.Payload, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{
+		"doc_type":            docType,
+		"id":                  float64(42),
+		"branch_id":           float64(7),
+		"db_name":             "acme_db",
+		"tenant_key":          "acme",
+		"pos_id":              ident.PosID,
+		"bill_request_id":     ident.BillRequestID,
+		"event_id":            event.EventID,
+		"egs_sequence_id":     "7",
+		"invoice_uuid":        ident.InvoiceUUID,
+		"request_fingerprint": ident.Fingerprint,
+	}
+	if len(envelope) != len(want) {
+		t.Fatalf("envelope has %d fields %v; want %d", len(envelope), envelope, len(want))
+	}
+	for field, value := range want {
+		if envelope[field] != value {
+			t.Errorf("envelope %s = %v; want %v", field, envelope[field], value)
+		}
+	}
+	if len(event.EventID) != 36 {
+		t.Errorf("event id %q is not a UUID", event.EventID)
 	}
 }
 

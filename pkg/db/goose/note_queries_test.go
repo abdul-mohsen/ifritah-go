@@ -42,6 +42,30 @@ func TestNoteQueriesRunOnTheMigratedSchema(t *testing.T) {
 		t.Fatalf("refresh totals: %v", err)
 	}
 
+	checkLockedBill(t, queries, billID, posID, billRequestID)
+
+	first := insertCreditNote(t, queries, billID, "11111111-1111-4111-8111-111111111111", "0c4f7a1e-2b3d-4e5f-8a9b-1c2d3e4f5a6b", "returned", "11.50")
+	execInsertLine(t, queries, first, brakePad, "1", "10.00")
+	second := insertCreditNote(t, queries, billID, "22222222-2222-4222-8222-222222222222", "7c9e6679-7425-40de-944b-e07fc1f90ae7", "second", "3.00")
+
+	checkCreditNoteReads(t, queries, billID, first, posID)
+	checkBillListings(t, queries, billID, second)
+
+	// A debit note has the same identity rules, and its line is read back.
+	debit := insertDebitNote(t, queries, billID, "33333333-3333-4333-8333-333333333333")
+	if err := queries.InsertDebitNoteLine(ctx, gen.InsertDebitNoteLineParams{DebitNoteID: uint64(debit), Name: "Towing", Quantity: decimal.RequireFromString("1"), Price: decimal.RequireFromString("5.00"), Vat: decimal.RequireFromString("15.00")}); err != nil {
+		t.Fatalf("insert debit line: %v", err)
+	}
+	dgot, err := queries.GetDebitNoteByRequestIdentity(ctx, gen.GetDebitNoteByRequestIdentityParams{PosID: strPtr(posID), BillRequestID: sql.NullString{String: "33333333-3333-4333-8333-333333333333", Valid: true}})
+	if err != nil || int64(dgot.ID) != debit {
+		t.Fatalf("debit note by request identity = %+v, %v; want note %d", dgot, err, debit)
+	}
+}
+
+// checkLockedBill checks the bill that a note is verified against: its total, its branch and store, its lines, and its request identity.
+func checkLockedBill(t *testing.T, queries *gen.Queries, billID uint64, posID, billRequestID string) {
+	t.Helper()
+	ctx := context.Background()
 	lock, err := queries.LockBillForNote(ctx, billID)
 	if err != nil || !lock.Total.Equal(decimal.RequireFromString("40.25")) || lock.BranchID == nil || *lock.BranchID != 7 {
 		t.Fatalf("locked bill = %+v, %v; want total 40.25 on branch 7", lock, err)
@@ -56,11 +80,13 @@ func TestNoteQueriesRunOnTheMigratedSchema(t *testing.T) {
 	if found, err := queries.GetBillByRequestIdentity(ctx, gen.GetBillByRequestIdentityParams{PosID: strPtr(posID), BillRequestID: sql.NullString{String: billRequestID, Valid: true}}); err != nil || found.ID != billID {
 		t.Fatalf("the bill's request identity = %+v, %v; want bill %d", found, err, billID)
 	}
+}
 
-	first := insertCreditNote(t, queries, billID, "11111111-1111-4111-8111-111111111111", "0c4f7a1e-2b3d-4e5f-8a9b-1c2d3e4f5a6b", "returned", "11.50")
-	execInsertLine(t, queries, first, brakePad, "1", "10.00")
-	second := insertCreditNote(t, queries, billID, "22222222-2222-4222-8222-222222222222", "7c9e6679-7425-40de-944b-e07fc1f90ae7", "second", "3.00")
-
+// checkCreditNoteReads checks the first credit note of a bill: its request identity, the lines that it credits, and the amounts of the
+// notes on the bill.
+func checkCreditNoteReads(t *testing.T, queries *gen.Queries, billID uint64, first int64, posID string) {
+	t.Helper()
+	ctx := context.Background()
 	got, err := queries.GetCreditNoteByRequestIdentity(ctx, gen.GetCreditNoteByRequestIdentityParams{PosID: strPtr(posID), BillRequestID: sql.NullString{String: "11111111-1111-4111-8111-111111111111", Valid: true}})
 	if err != nil || got.ID != uint64(first) || got.BillID != billID {
 		t.Fatalf("credit note by request identity = %+v, %v; want note %d", got, err, first)
@@ -73,8 +99,12 @@ func TestNoteQueriesRunOnTheMigratedSchema(t *testing.T) {
 	if err != nil || len(amounts) != 2 {
 		t.Fatalf("credit amounts = %v, %v; want the two notes", amounts, err)
 	}
+}
 
-	// The bill is listed, shown and found for its PDF once, although it has two credit notes. The detail shows the latest note.
+// checkBillListings checks that a bill with two credit notes is listed, shown and found for its PDF once. The detail shows the latest note.
+func checkBillListings(t *testing.T, queries *gen.Queries, billID uint64, second int64) {
+	t.Helper()
+	ctx := context.Background()
 	credit, err := queries.GetCreditBillByID(ctx, billID)
 	if err != nil || credit.CreditNote == nil || *credit.CreditNote != "second" {
 		t.Fatalf("credit detail = %v, %v; want the latest note, second", credit.CreditNote, err)
@@ -100,16 +130,6 @@ func TestNoteQueriesRunOnTheMigratedSchema(t *testing.T) {
 	stats, err := queries.GetDashboardCreditNoteStats(ctx, gen.GetDashboardCreditNoteStatsParams{})
 	if err != nil || stats.CreditNoteCount != 2 {
 		t.Fatalf("credit note stats = %+v, %v; want two notes", stats, err)
-	}
-
-	// A debit note has the same identity rules, and its line is read back.
-	debit := insertDebitNote(t, queries, billID, "33333333-3333-4333-8333-333333333333")
-	if err := queries.InsertDebitNoteLine(ctx, gen.InsertDebitNoteLineParams{DebitNoteID: uint64(debit), Name: "Towing", Quantity: decimal.RequireFromString("1"), Price: decimal.RequireFromString("5.00"), Vat: decimal.RequireFromString("15.00")}); err != nil {
-		t.Fatalf("insert debit line: %v", err)
-	}
-	dgot, err := queries.GetDebitNoteByRequestIdentity(ctx, gen.GetDebitNoteByRequestIdentityParams{PosID: strPtr(posID), BillRequestID: sql.NullString{String: "33333333-3333-4333-8333-333333333333", Valid: true}})
-	if err != nil || int64(dgot.ID) != debit {
-		t.Fatalf("debit note by request identity = %+v, %v; want note %d", dgot, err, debit)
 	}
 }
 

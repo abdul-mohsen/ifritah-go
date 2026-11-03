@@ -6,10 +6,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/shopspring/decimal"
 
 	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/identity"
 	"ifritah/web-service-gin/pkg/testdb"
 )
 
@@ -202,5 +204,35 @@ func TestCheckBillImportRefusesABranchTheDaemonDoesNotRunOnTheMigratedSchema(t *
 		if !step.refused && !rows[0].Valid {
 			t.Fatalf("%s: row = %+v; want a valid row on a branch the daemon runs", step.name, rows[0])
 		}
+	}
+}
+
+// The sale path saves the effective date as the UTC wall clock, to the second, and the daemon reads that text back. The check reads the
+// same text. A sale with an offset is saved in UTC, and the saved text is the one the date rules read. A sale dated in the future is
+// saved, because the sale path does not refuse it, and the check flags it.
+func TestSavedEffectiveDateIsTheTextTheDaemonReads(t *testing.T) {
+	h, sqlDB := importFixture(t)
+	billID := saveImportSale(t, h, withEffectiveDate(saleBody(1, "pos-1", saleRequestID), "2026-11-03T10:00:00.6+03:00"))
+	saved := importText(t, sqlDB, "SELECT CAST(effective_date AS CHAR) FROM bill WHERE id = ?", billID)
+	if saved != "2026-11-03 07:00:01" {
+		t.Fatalf("saved effective date = %q; want the UTC wall clock to the second, 2026-11-03 07:00:01", saved)
+	}
+	issue, err := parseDaemonDate(saved)
+	if err != nil || issue.Format(dateLayout) != "2026-11-03" {
+		t.Fatalf("the daemon reads %q as %v, %v; want the day 2026-11-03", saved, issue, err)
+	}
+	if issues := dateIssues(saved, time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)); len(issues) != 0 {
+		t.Fatalf("date issues for %q = %+v; want none", saved, issues)
+	}
+
+	future := dayAtNoonUTC(time.Now().Add(36 * time.Hour))
+	futureID, err := identity.NewUUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saveImportSale(t, h, withEffectiveDate(saleBody(1, "pos-2", futureID), future))
+	rows := checkImport(t, h, importBody(withEffectiveDate(importSale(), future)))
+	if rows[0].Valid || !hasImportCode(rows[0].Errors, importDateInFuture) {
+		t.Fatalf("future sale row = %+v; want an invalid row with date_in_future", rows[0])
 	}
 }

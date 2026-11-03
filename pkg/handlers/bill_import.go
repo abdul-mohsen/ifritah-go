@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -30,6 +31,8 @@ const (
 	importBranchNotRegistered = "branch_not_registered"
 	importSellerVATMissing    = "seller_vat_missing"
 	importEGSIDMissing        = "egs_id_missing"
+	importDateInvalid         = "date_invalid"
+	importDateInFuture        = "date_in_future"
 	importStockShort          = "stock_insufficient"
 	importDuplicateSale       = "duplicate_sale"
 	importDuplicateInBatch    = "duplicate_in_batch"
@@ -73,16 +76,18 @@ type importChecker struct {
 	h        *handler
 	storeIDs []int32
 	stock    string
+	now      time.Time
 	branches map[uint32]importBranch
 	seen     map[string]int
 	taken    map[uint64]decimal.Decimal
 }
 
 // CheckBillImport checks the rows of a bulk import of sales, and answers each row in order. A row is checked as a final sale: with
-// the rules of the sale path, with the seller VAT, the EGS id, and the daemon's rule for running the branch, and against the stock
-// that the valid rows before it would take. A row whose content is already a bill on its branch is a warning, and so is a row that
-// repeats an earlier row of the same check. The check writes nothing: no bill, number, payment, stock movement or outbox event. It
-// ignores pos_id and bill_request_id, which the sale path uses for its replay and conflict rules and which are not part of the content.
+// the rules of the sale path, the two date rules of the ZATCA daemon, the seller VAT, the EGS id, and the daemon's rule for running the
+// branch, and against the stock that the valid rows before it would take. A row whose content is already a bill on its branch is a
+// warning, and so is a row that repeats an earlier row of the same check. The check writes nothing: no bill, number, payment, stock
+// movement or outbox event. It ignores pos_id and bill_request_id, which the sale path uses for its replay and conflict rules and which
+// are not part of the content.
 func (h *handler) CheckBillImport(c *gin.Context) {
 	var body importRows
 	if err := c.BindJSON(&body); err != nil {
@@ -98,6 +103,7 @@ func (h *handler) CheckBillImport(c *gin.Context) {
 		h:        h,
 		storeIDs: h.getStoreIds(c),
 		stock:    h.getStockEnforcementMode(c),
+		now:      time.Now(),
 		branches: map[uint32]importBranch{},
 		seen:     map[string]int{},
 		taken:    map[uint64]decimal.Decimal{},
@@ -129,6 +135,9 @@ func (k *importChecker) checkRow(c *gin.Context, index int, raw json.RawMessage)
 		return row, err
 	}
 	row.Errors = append(row.Errors, k.saleIssues(&request)...)
+	if request.EffectiveDate != nil {
+		row.Errors = append(row.Errors, dateIssues(savedEffectiveDate(*request.EffectiveDate), k.now)...)
+	}
 	if request.BranchID != 0 {
 		issues, err := k.branchIssues(c, request.BranchID)
 		if err != nil {

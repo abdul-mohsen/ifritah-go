@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/shopspring/decimal"
@@ -211,6 +212,10 @@ func TestCheckBillImportReportsEachRefusal(t *testing.T) {
 			body:  importSale(),
 			code:  importBranchNotRegistered,
 			setup: func(mock sqlmock.Sqlmock) { expectImportBranch(mock, "300000000000003", "egs-uuid-7", false) },
+		},
+		"a sale dated after today": {
+			body: withEffectiveDate(importSale(), dayAtNoonUTC(time.Now().Add(36*time.Hour))),
+			code: importDateInFuture,
 		},
 	}
 	for name, tc := range cases {
@@ -455,5 +460,22 @@ func TestSaleTotalMatchesTheStoredLines(t *testing.T) {
 	}
 	if got, want := saleTotal(lines), decimal.RequireFromString("53.53"); !got.Equal(want) {
 		t.Fatalf("saleTotal = %s; want %s", got, want)
+	}
+}
+
+// A sale dated today is valid. The check reads the branch and the duplicate, as for any valid sale, and no date issue is reported.
+func TestCheckBillImportAcceptsASaleDatedToday(t *testing.T) {
+	body := withEffectiveDate(importSale(), dayAtNoonUTC(time.Now()))
+	h, mock := newSaleTestHandler(t)
+	expectImportStart(mock, "disable")
+	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
+	expectImportDuplicate(mock, fingerprintOf(t, body), nil)
+
+	rows := checkImport(t, h, importBody(body))
+	if !rows[0].Valid || len(rows[0].Errors) != 0 {
+		t.Fatalf("row = %+v; want a valid row for a sale dated today", rows[0])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }

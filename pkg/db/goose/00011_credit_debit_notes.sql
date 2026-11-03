@@ -10,7 +10,7 @@ ALTER TABLE zatca_submission
   ADD COLUMN document_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'bill',
   ADD COLUMN source_id BIGINT UNSIGNED NULL;
 
-UPDATE zatca_submission SET source_id = bill_id;
+UPDATE zatca_submission SET source_id = bill_id WHERE source_id IS NULL;
 
 ALTER TABLE zatca_submission
   MODIFY COLUMN source_id BIGINT UNSIGNED NOT NULL,
@@ -39,7 +39,8 @@ ALTER TABLE credit_note
 
 UPDATE credit_note cn
   JOIN bill b ON b.id = cn.bill_id
-SET cn.amount = b.total, cn.lines_total = b.total;
+SET cn.amount = b.total, cn.lines_total = b.total
+WHERE cn.amount = 0.00;
 
 -- The index on bill_id is added before the unique key is dropped, because the foreign key needs it.
 ALTER TABLE debit_note

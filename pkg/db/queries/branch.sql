@@ -41,3 +41,10 @@ building = VALUES(building),
 district = VALUES(district),
 postal_code = VALUES(postal_code),
 zatca_status = VALUES(zatca_status);
+
+-- name: GetBranchSellerAndEGS :one
+SELECT COALESCE(c.vat_registration_number, '') AS seller_vat, COALESCE(bz.csr_computer_number, '') AS egs_id
+FROM branches b
+JOIN company c ON c.id = b.company_id
+LEFT JOIN branch_zatca_config bz ON bz.branch_id = b.id
+WHERE b.id = ?;

@@ -1,0 +1,294 @@
+package handlers
+
+import (
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/shopspring/decimal"
+
+	db "ifritah/web-service-gin/pkg/db/gen"
+	"ifritah/web-service-gin/pkg/identity"
+	"ifritah/web-service-gin/pkg/model"
+)
+
+// maxImportRows is the most rows that one check takes. A larger batch is refused before any row is read.
+const maxImportRows = 500
+
+// The codes of the issues that a check reports. A duplicate is a warning, and every other code is an error that blocks its row.
+// The codes of the sale path's refusals are the codes of saleRefusal.
+const (
+	importInvalidRequest   = "invalid_request"
+	importNotFinal         = "not_final"
+	importStoreNotAllowed  = "store_not_allowed"
+	importBranchNotFound   = "branch_not_found"
+	importSellerVATMissing = "seller_vat_missing"
+	importEGSIDMissing     = "egs_id_missing"
+	importStockShort       = "stock_insufficient"
+	importDuplicateSale    = "duplicate_sale"
+	importDuplicateInBatch = "duplicate_in_batch"
+)
+
+// defaultLineVATRate is the VAT rate that bill_product gives a line which the sale path writes: the column default, 15 percent.
+var defaultLineVATRate = decimal.RequireFromString("0.15")
+
+// importRows is the body of a check: the rows, each one the JSON of a final sale.
+type importRows struct {
+	Rows []json.RawMessage `json:"rows" binding:"required"`
+}
+
+// importIssue is one error or warning of a row.
+type importIssue struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// importRowResult is the answer for one row. Index is the position of the row in the request.
+type importRowResult struct {
+	Index       int           `json:"index"`
+	Valid       bool          `json:"valid"`
+	Errors      []importIssue `json:"errors"`
+	Warnings    []importIssue `json:"warnings"`
+	DuplicateOf *uint64       `json:"duplicate_of"`
+}
+
+// importSeller is the seller data of a branch, as the daemon reads it: the VAT of the branch's company and the EGS id in the
+// branch's ZATCA config. found is false when there is no such branch.
+type importSeller struct {
+	found bool
+	vat   string
+	egsID string
+}
+
+// importChecker is what the rows of one check share. The stores are the caller's, and the stock mode is the setting. Each branch is
+// read once. seen holds the first row of each content, and taken holds the stock that the valid rows so far would use.
+type importChecker struct {
+	h        *handler
+	storeIDs []int32
+	stock    string
+	sellers  map[uint32]importSeller
+	seen     map[string]int
+	taken    map[uint64]decimal.Decimal
+}
+
+// CheckBillImport checks the rows of a bulk import of sales, and answers each row in order. A row is checked as a final sale: with
+// the rules of the sale path, with the seller data and EGS id that the ZATCA daemon reads for its branch, and against the stock that
+// the valid rows before it would take. A row whose content is already a bill on its branch is a warning, and so is a row that
+// repeats an earlier row of the same check. The check writes nothing: no bill, number, payment, stock movement or outbox event. It
+// ignores pos_id and bill_request_id, which the sale path uses for its replay and conflict rules and which are not part of the content.
+func (h *handler) CheckBillImport(c *gin.Context) {
+	var body importRows
+	if err := c.BindJSON(&body); err != nil {
+		log.Printf("CheckBillImport: %v", err)
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	if len(body.Rows) > maxImportRows {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": fmt.Sprintf("an import check takes at most %d rows", maxImportRows)})
+		return
+	}
+	checker := importChecker{
+		h:        h,
+		storeIDs: h.getStoreIds(c),
+		stock:    h.getStockEnforcementMode(c),
+		sellers:  map[uint32]importSeller{},
+		seen:     map[string]int{},
+		taken:    map[uint64]decimal.Decimal{},
+	}
+	rows := make([]importRowResult, 0, len(body.Rows))
+	for i, raw := range body.Rows {
+		row, err := checker.checkRow(c, i, raw)
+		if err != nil {
+			log.Printf("CheckBillImport row %d: %v", i, err)
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		rows = append(rows, row)
+	}
+	c.JSON(http.StatusOK, gin.H{"rows": rows})
+}
+
+// checkRow checks one row. It returns an error only when a read fails, because no answer for a row is true without its reads.
+func (k *importChecker) checkRow(c *gin.Context, index int, raw json.RawMessage) (importRowResult, error) {
+	row := importRowResult{Index: index, Errors: []importIssue{}, Warnings: []importIssue{}}
+	request := newSaleRequest()
+	if err := json.Unmarshal(raw, &request); err != nil {
+		row.Errors = append(row.Errors, importIssue{Code: importInvalidRequest, Message: "the row is not a sale request: " + err.Error()})
+		return row, nil
+	}
+	// The fingerprint is taken before saleProducts clears the manual product ids, so it is the fingerprint that the sale stores.
+	fingerprint, err := saleFingerprint(&request)
+	if err != nil {
+		return row, err
+	}
+	row.Errors = append(row.Errors, k.saleIssues(&request)...)
+	if request.BranchID != 0 {
+		issues, err := k.branchIssues(c, request.BranchID)
+		if err != nil {
+			return row, err
+		}
+		row.Errors = append(row.Errors, issues...)
+	}
+	if request.PaidAmount.IsPositive() {
+		if err := paymentAboveTotalError(request.PaidAmount, saleTotal(saleProducts(&request))); err != nil {
+			row.Errors = append(row.Errors, saleIssue(err))
+		}
+	}
+	taken := map[uint64]decimal.Decimal{}
+	if request.State > 0 && k.stock != model.StockEnforcementDisable {
+		issues, err := k.stockIssues(c, request.Products, taken)
+		if err != nil {
+			return row, err
+		}
+		row.Errors = append(row.Errors, issues...)
+	}
+	if request.BranchID != 0 {
+		id, err := k.duplicate(c, request.BranchID, fingerprint)
+		if err != nil {
+			return row, err
+		}
+		if id != nil {
+			row.DuplicateOf = id
+			row.Warnings = append(row.Warnings, importIssue{Code: importDuplicateSale, Message: fmt.Sprintf("this sale matches bill %d on this branch", *id)})
+		}
+	}
+	if first, ok := k.seen[fingerprint]; ok {
+		row.Warnings = append(row.Warnings, importIssue{Code: importDuplicateInBatch, Message: fmt.Sprintf("this sale has the same content as row %d", first)})
+	} else {
+		k.seen[fingerprint] = index
+	}
+	row.Valid = len(row.Errors) == 0
+	if row.Valid {
+		for productID, quantity := range taken {
+			k.taken[productID] = k.taken[productID].Add(quantity)
+		}
+	}
+	return row, nil
+}
+
+// saleIssues checks a row with the rules of the sale path: the binding of the request, the final state, the paid amount, the lines,
+// and the caller's stores. It reads nothing.
+func (k *importChecker) saleIssues(request *model.AddBillRequest) []importIssue {
+	var issues []importIssue
+	if err := binding.Validator.ValidateStruct(request); err != nil {
+		issues = append(issues, importIssue{Code: importInvalidRequest, Message: err.Error()})
+	}
+	if request.State <= 0 {
+		issues = append(issues, importIssue{Code: importNotFinal, Message: fmt.Sprintf("the sale is not final (state %d)", request.State)})
+	}
+	for _, err := range []error{paidAmountError(request.PaidAmount), verifyFinalSale(request)} {
+		if err != nil {
+			issues = append(issues, saleIssue(err))
+		}
+	}
+	if !storeAllowed(k.storeIDs, request.StoreId) {
+		issues = append(issues, importIssue{Code: importStoreNotAllowed, Message: fmt.Sprintf("store %d is not one of the stores you can sell from", request.StoreId)})
+	}
+	return issues
+}
+
+// saleIssue is the issue of a refusal of the sale path, with the code of the refusal.
+func saleIssue(err error) importIssue {
+	var refusal *saleRefusal
+	if errors.As(err, &refusal) {
+		return importIssue{Code: refusal.code, Message: refusal.message}
+	}
+	return importIssue{Code: importInvalidRequest, Message: err.Error()}
+}
+
+// branchIssues checks the branch of a row with the seller data that the daemon reads. The branch must exist, with a seller VAT and an
+// EGS id. These are the checks of verifyBill that the backend can read.
+func (k *importChecker) branchIssues(c *gin.Context, branchID uint32) ([]importIssue, error) {
+	seller, err := k.seller(c, branchID)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case !seller.found:
+		return []importIssue{{Code: importBranchNotFound, Message: fmt.Sprintf("branch %d does not exist", branchID)}}, nil
+	case seller.vat == "":
+		return []importIssue{{Code: importSellerVATMissing, Message: "the branch has no seller VAT number"}}, nil
+	case seller.egsID == "":
+		return []importIssue{{Code: importEGSIDMissing, Message: "the branch has no EGS id: onboard the branch first"}}, nil
+	}
+	return nil, nil
+}
+
+// seller returns the seller data of a branch, and reads each branch once per check.
+func (k *importChecker) seller(c *gin.Context, branchID uint32) (importSeller, error) {
+	if seller, ok := k.sellers[branchID]; ok {
+		return seller, nil
+	}
+	var seller importSeller
+	row, err := k.h.queries.GetBranchSellerAndEGS(c.Request.Context(), branchID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+	case err != nil:
+		return importSeller{}, err
+	default:
+		seller = importSeller{found: true, vat: row.SellerVat, egsID: row.EgsID}
+	}
+	k.sellers[branchID] = seller
+	return seller, nil
+}
+
+// stockIssues checks the catalog lines of a final sale against the stock that is left after the valid rows before it. The sale path
+// reads a product's quantity and takes the line from it. A line that the stock cannot cover is refused in enforce mode by the sale
+// path's own check, and in warn mode by the database, which does not allow a negative quantity (ch_product_quantity). The check
+// refuses it in both modes. taken collects what this row would take.
+func (k *importChecker) stockIssues(c *gin.Context, lines []model.BillProduct, taken map[uint64]decimal.Decimal) ([]importIssue, error) {
+	var issues []importIssue
+	for _, line := range lines {
+		if line.ProductId == nil {
+			continue
+		}
+		productID := *line.ProductId
+		available, err := k.h.queries.SearchQuantityByID(c.Request.Context(), productID)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			continue // as the sale path does, a product that is not found takes nothing from stock
+		case err != nil:
+			return nil, err
+		}
+		left := available.Sub(k.taken[productID]).Sub(taken[productID])
+		if left.LessThan(line.Quantity) {
+			issues = append(issues, importIssue{Code: importStockShort, Message: fmt.Sprintf("product %d has %s left after the earlier rows, and the sale needs %s", productID, left.String(), line.Quantity.String())})
+		}
+		taken[productID] = taken[productID].Add(line.Quantity)
+	}
+	return issues, nil
+}
+
+// duplicate returns the id of the bill on a branch with the given request fingerprint, or nil when no bill has it.
+func (k *importChecker) duplicate(c *gin.Context, branchID uint32, fingerprint string) (*uint64, error) {
+	id, err := k.h.queries.GetBillByRequestFingerprint(c.Request.Context(), db.GetBillByRequestFingerprintParams{
+		BranchID:                  &branchID,
+		RequestFingerprint:        nullableString(fingerprint),
+		RequestFingerprintVersion: identity.FingerprintVersion,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, nil
+	case err != nil:
+		return nil, err
+	}
+	return &id, nil
+}
+
+// saleTotal is the total that bill_product gives the lines of a sale, which a payment is checked against. The sale path writes each
+// price and quantity at the scale of its column, and it writes neither a discount nor a VAT rate. A line therefore has no discount and
+// the column's default rate. The database test compares this total with the total that the database stores for a saved sale.
+func saleTotal(lines []model.BillProduct) decimal.Decimal {
+	total := decimal.Zero
+	for _, line := range lines {
+		beforeVAT := line.Price.Round(2).Mul(line.Quantity.Round(3)).Round(2)
+		vat := beforeVAT.Mul(defaultLineVATRate).Round(2)
+		total = total.Add(beforeVAT.Add(vat).Round(2))
+	}
+	return total
+}

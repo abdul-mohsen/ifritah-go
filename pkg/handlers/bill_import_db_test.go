@@ -221,8 +221,8 @@ func TestSavedEffectiveDateIsTheTextTheDaemonReads(t *testing.T) {
 	if err != nil || issue.Format(dateLayout) != "2026-11-03" {
 		t.Fatalf("the daemon reads %q as %v, %v; want the day 2026-11-03", saved, issue, err)
 	}
-	if issues := dateIssues(saved, time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)); len(issues) != 0 {
-		t.Fatalf("date issues for %q = %+v; want none", saved, issues)
+	if errs, warns := dateIssues(saved, time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)); len(errs) != 0 || len(warns) != 0 {
+		t.Fatalf("date issues for %q = %+v, %+v; want none", saved, errs, warns)
 	}
 
 	future := dayAtNoonUTC(time.Now().Add(36 * time.Hour))
@@ -234,5 +234,24 @@ func TestSavedEffectiveDateIsTheTextTheDaemonReads(t *testing.T) {
 	rows := checkImport(t, h, importBody(withEffectiveDate(importSale(), future)))
 	if rows[0].Valid || !hasImportCode(rows[0].Errors, importDateInFuture) {
 		t.Fatalf("future sale row = %+v; want an invalid row with date_in_future", rows[0])
+	}
+}
+
+// A sale saved more than 24 hours ago is saved by the sale path, and the check gives it the warning. The row stays valid, and the check
+// also finds the saved sale, because the content is the same.
+func TestOldSaleIsAWarningOnTheMigratedSchema(t *testing.T) {
+	h, _ := importFixture(t)
+	old := time.Now().Add(-48 * time.Hour).UTC().Format(time.RFC3339)
+	oldID, err := identity.NewUUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	billID := saveImportSale(t, h, withEffectiveDate(saleBody(1, "pos-old", oldID), old))
+	row := checkImport(t, h, importBody(withEffectiveDate(importSale(), old)))[0]
+	if !row.Valid || len(row.Errors) != 0 || !hasImportCode(row.Warnings, importDateOutsideWindow) {
+		t.Fatalf("old sale row = %+v; want a valid row with date_outside_reporting_window as a warning", row)
+	}
+	if row.DuplicateOf == nil || *row.DuplicateOf != uint64(billID) {
+		t.Fatalf("old sale row duplicate_of = %v; want bill %d", row.DuplicateOf, billID)
 	}
 }

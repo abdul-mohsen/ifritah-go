@@ -31,16 +31,24 @@ func savedEffectiveDate(t time.Time) string {
 	return t.UTC().Round(time.Second).Format("2006-01-02 15:04:05")
 }
 
-// dateIssues checks the saved effective date of a sale with the two date rules. date_invalid: the daemon cannot read the saved text, so
-// it refuses the bill. date_in_future: the issue date is later than today, both in UTC. That a future issue date is not valid is our
-// reading of the ZATCA guidelines, and ZATCA's own validator is not run here.
-func dateIssues(saved string, now time.Time) []importIssue {
+// reportingWindow is how long after its issue time a sale can still be reported on time. A sale older than this gets a warning. The window
+// is our reading of the ZATCA guidelines, and ZATCA's own validator is not run here.
+const reportingWindow = 24 * time.Hour
+
+// dateIssues checks the saved effective date of a sale with the three date rules, and returns its errors and its warnings. date_invalid
+// (error): the daemon cannot read the saved text, so it refuses the bill. date_in_future (error): the issue date is later than today, both
+// in UTC. That a future issue date is not valid is our reading of the ZATCA guidelines. date_outside_reporting_window (warning): the issue
+// time is more than reportingWindow before now. The sale stays valid.
+func dateIssues(saved string, now time.Time) (errs, warns []importIssue) {
 	issue, err := parseDaemonDate(saved)
 	if err != nil {
-		return []importIssue{{Code: importDateInvalid, Message: "the effective date cannot be read as a date and time"}}
+		return []importIssue{{Code: importDateInvalid, Message: "the effective date cannot be read as a date and time"}}, nil
 	}
 	if issue.UTC().Format(dateLayout) > now.UTC().Format(dateLayout) {
-		return []importIssue{{Code: importDateInFuture, Message: "the effective date is later than today"}}
+		return []importIssue{{Code: importDateInFuture, Message: "the effective date is later than today"}}, nil
 	}
-	return nil
+	if now.Sub(issue) > reportingWindow {
+		return nil, []importIssue{{Code: importDateOutsideWindow, Message: "this sale is more than 24 hours old, so it can no longer be reported on time"}}
+	}
+	return nil, nil
 }

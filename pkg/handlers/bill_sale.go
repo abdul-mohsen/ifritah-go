@@ -98,8 +98,9 @@ func (h *handler) saveSale(c *gin.Context, request *model.AddBillRequest, draftI
 	return h.writeSale(c, tx, request, ident, draftID, int32(userSession.id))
 }
 
-// writeSale is the transaction of a sale. A sale whose request id is already recorded writes nothing: the same content for the
-// same bill gets the original result, and anything else is refused.
+// writeSale is the transaction of a sale. A sale whose request id is already recorded on a bill writes nothing: the same content
+// for the same bill gets the original result, and anything else is refused. A sale whose request id a credit or debit note holds
+// is refused before anything is written.
 func (h *handler) writeSale(c *gin.Context, tx *sql.Tx, request *model.AddBillRequest, ident billIdentity, draftID *uint64, userID int32) (uint64, bool) {
 	qtx := h.queries.WithTx(tx)
 	if draftID == nil {
@@ -110,6 +111,9 @@ func (h *handler) writeSale(c *gin.Context, tx *sql.Tx, request *model.AddBillRe
 		if found {
 			return answerRecordedRequest(c, original, ident, nil)
 		}
+		if !refuseNoteIdentity(c, qtx, ident) {
+			return 0, false
+		}
 	}
 
 	billID, final, ok := openSaleBill(c, qtx, request, draftID, userID)
@@ -118,6 +122,9 @@ func (h *handler) writeSale(c *gin.Context, tx *sql.Tx, request *model.AddBillRe
 	}
 	if final {
 		return answerFinalDraft(c, qtx, ident, draftID)
+	}
+	if draftID != nil && !refuseNoteIdentity(c, qtx, ident) {
+		return 0, false
 	}
 	number, sequence, ok := numberSale(c, qtx, request)
 	if !ok {
@@ -325,6 +332,35 @@ func requestRecord(c *gin.Context, q *db.Queries, ident billIdentity) (db.GetBil
 		return row, false, false
 	}
 	return row, true, true
+}
+
+// refuseNoteIdentity refuses a final sale whose (pos_id, bill_request_id) a credit or debit note already holds. The daemon claims each
+// request id once for the whole database, so such a sale would never be invoiced. It writes the 409 response, with the body that the
+// note side uses, and returns false. A draft has no identity, so it is never refused here.
+func refuseNoteIdentity(c *gin.Context, qtx *db.Queries, ident billIdentity) bool {
+	if ident.PosID == "" {
+		return true
+	}
+	taken, err := noteRequestTaken(c, qtx, ident)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return false
+	}
+	if taken {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"code": requestConflictCode, "message": noteConflictMessage})
+		return false
+	}
+	return true
+}
+
+// noteRequestTaken reports whether a credit note or a debit note already holds the request identity of a sale.
+func noteRequestTaken(c *gin.Context, qtx *db.Queries, ident billIdentity) (bool, error) {
+	_, found, err := creditRecordOf(c, qtx, ident)
+	if err != nil || found {
+		return found, err
+	}
+	_, found, err = debitRecordOf(c, qtx, ident)
+	return found, err
 }
 
 // answerRecordedRequest answers a sale whose request id is already recorded on a bill. The same content for the same bill is a retry:

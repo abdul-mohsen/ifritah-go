@@ -27,7 +27,7 @@ func noteSaleFixture(t *testing.T) (*handler, *sql.DB) {
 	sqlDB := testdb.Open(t, noteSaleTables...)
 	company := noteSaleExec(t, sqlDB, `INSERT INTO company (name, vat_number) VALUES ('acme', '300000000000003')`)
 	noteSaleExec(t, sqlDB, `INSERT INTO branches (id, name, company_id) VALUES (7, 'branch 7', ?)`, company)
-	noteSaleExec(t, sqlDB, `INSERT INTO store (id, name, company_id) VALUES (1, 'store 1', ?)`, company)
+	noteSaleExec(t, sqlDB, `INSERT INTO store (id, name, company_id, branch_id) VALUES (1, 'store 1', ?, 7)`, company)
 	noteSaleExec(t, sqlDB, "INSERT INTO `user` (id, username, password, company_id) VALUES (7, 'cashier', 'unused', ?)", company)
 	h := New(sqlDB, db.New(sqlDB), &ZatcaPublisher{tenantKey: "acme", dbName: "acme_db"})
 	return &h, sqlDB

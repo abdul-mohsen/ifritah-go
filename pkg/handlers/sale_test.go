@@ -198,6 +198,7 @@ func TestAddBillProceedsWhenTheStoreIsInTheSaleBranch(t *testing.T) {
 	expectStoreBranch(mock, 7)
 	mock.ExpectBegin()
 	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
 	expectBillRow(mock, 42)
 	expectNumberAllocation(mock, 1)
 	expectBillWrite(mock)

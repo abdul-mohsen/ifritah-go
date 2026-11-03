@@ -34,6 +34,9 @@ const noteDuplicateMessage = "this note request was already recorded"
 // noteConflictMessage answers a note whose request id is recorded for another note or bill. The code is requestConflictCode.
 const noteConflictMessage = "this request id was already used for a different note or bill"
 
+// noteBillNotFound answers a note whose bill does not exist or is deleted.
+const noteBillNotFound = "bill not found"
+
 // noteRecord is the note that recorded a request id, as a retry reads it.
 type noteRecord struct {
 	id          uint64
@@ -269,7 +272,7 @@ func (h *handler) checkNoteStoreAccess(c *gin.Context, billID uint64) bool {
 	storeID, err := h.queries.GetBillStoreID(c.Request.Context(), billID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"message": "bill not found"})
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"message": noteBillNotFound})
 		return false
 	case err != nil:
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -285,7 +288,7 @@ func lockNoteBill(c *gin.Context, qtx *db.Queries, billID uint64, branchID uint3
 	bill, err := qtx.LockBillForNote(c.Request.Context(), billID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"message": "bill not found"})
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"message": noteBillNotFound})
 		return bill, false
 	case err != nil:
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -297,7 +300,7 @@ func lockNoteBill(c *gin.Context, qtx *db.Queries, billID uint64, branchID uint3
 	}
 	switch {
 	case bill.State < 0:
-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"message": "bill not found"})
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"message": noteBillNotFound})
 		return bill, false
 	case bill.State == 0:
 		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "a draft cannot be credited or debited; only a final bill can"})

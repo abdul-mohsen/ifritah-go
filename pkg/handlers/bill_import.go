@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -84,11 +85,11 @@ type importChecker struct {
 }
 
 // CheckBillImport checks the rows of a bulk import of sales, and answers each row in order. A row is checked as a final sale: with
-// the rules of the sale path, the date rules of the ZATCA daemon, the seller VAT, the EGS id, and the daemon's rule for running the
-// branch, and against the stock that the valid rows before it would take. A row whose content is already a bill on its branch is a
-// warning, and so are a row that repeats an earlier row of the same check and a sale older than the reporting window. The check writes
-// nothing: no bill, number, payment, stock movement or outbox event. It ignores pos_id and bill_request_id, which the sale path uses for
-// its replay and conflict rules and which are not part of the content.
+// the rules of the sale path, the values as the database stores them, the date rules of the ZATCA daemon, the seller VAT, the EGS id,
+// and the daemon's rule for running the branch, and against the stock that the valid rows before it would take. A row whose content is
+// already a bill on its branch is a warning, and so are a row that repeats an earlier row of the same check and a sale older than the
+// reporting window. The check writes nothing: no bill, number, payment, stock movement or outbox event. It ignores pos_id and
+// bill_request_id, which the sale path uses for its replay and conflict rules and which are not part of the content.
 func (h *handler) CheckBillImport(c *gin.Context) {
 	var body importRows
 	if err := c.BindJSON(&body); err != nil {
@@ -136,6 +137,7 @@ func (k *importChecker) checkRow(c *gin.Context, index int, raw json.RawMessage)
 		return row, err
 	}
 	row.Errors = append(row.Errors, k.saleIssues(&request)...)
+	row.Errors = append(row.Errors, storedScaleIssues(&request)...)
 	if request.EffectiveDate != nil {
 		errs, warns := dateIssues(savedEffectiveDate(*request.EffectiveDate), k.now)
 		row.Errors = append(row.Errors, errs...)
@@ -185,8 +187,8 @@ func (k *importChecker) checkRow(c *gin.Context, index int, raw json.RawMessage)
 	return row, nil
 }
 
-// saleIssues checks a row with the rules of the sale path: the binding of the request, the final state, the paid amount, the lines,
-// and the caller's stores. It reads nothing.
+// saleIssues checks a row with the rules of the sale path: the binding of the request, the final state, the paid amount, the lines as
+// the sale path refuses them, and the caller's stores. It reads nothing.
 func (k *importChecker) saleIssues(request *model.AddBillRequest) []importIssue {
 	var issues []importIssue
 	if err := binding.Validator.ValidateStruct(request); err != nil {
@@ -202,6 +204,27 @@ func (k *importChecker) saleIssues(request *model.AddBillRequest) []importIssue 
 	}
 	if !storeAllowed(k.storeIDs, request.StoreId) {
 		issues = append(issues, importIssue{Code: importStoreNotAllowed, Message: fmt.Sprintf("store %d is not one of the stores you can sell from", request.StoreId)})
+	}
+	return issues
+}
+
+// storedScaleIssues checks the values of a sale as bill_product stores them: a price at two decimals, a quantity at three, and the
+// maintenance cost as a line's price. bill_product refuses a line that would store as zero (chk_price, chk_quantity). The sale path does
+// not check this before it writes, so the database refuses such a sale with its own error. The check reports the row here, so that it is
+// invalid before anything is written. A negative price, or a quantity that is not positive, is refused by verifyFinalSale, so it is not
+// reported again.
+func storedScaleIssues(request *model.AddBillRequest) []importIssue {
+	var issues []importIssue
+	if request.MaintenanceCost.IsPositive() && !request.MaintenanceCost.Round(2).IsPositive() {
+		issues = append(issues, importIssue{Code: "line_price", Message: "maintenance_cost must be at least 0.01"})
+	}
+	for i, line := range slices.Concat(request.Products, request.ManualProducts) {
+		if line.Quantity.IsPositive() && !line.Quantity.Round(3).IsPositive() {
+			issues = append(issues, importIssue{Code: "line_quantity", Message: fmt.Sprintf("line %d: quantity must be positive", i+1)})
+		}
+		if !line.Price.IsNegative() && !line.Price.Round(2).IsPositive() {
+			issues = append(issues, importIssue{Code: "line_price", Message: fmt.Sprintf("line %d: price must be at least 0.01", i+1)})
+		}
 	}
 	return issues
 }

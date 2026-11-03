@@ -45,8 +45,13 @@ district = VALUES(district),
 postal_code = VALUES(postal_code),
 zatca_status = VALUES(zatca_status);
 
--- name: GetBranchSellerAndEGS :one
-SELECT COALESCE(c.vat_registration_number, '') AS seller_vat, COALESCE(bz.csr_computer_number, '') AS egs_id
+-- name: GetDaemonBranch :one
+-- The branch as the ZATCA daemon reads it in zatca_integration. daemon_runs is the rule that starts a branch's worker
+-- (processor.QueryActiveBranches: is_active = 1 and a production username). storeconfig.IsRegistered also needs a production
+-- password, because the daemon refuses every bill of a branch without one. Keep this predicate in step with those two.
+SELECT COALESCE(c.vat_registration_number, '') AS seller_vat,
+       COALESCE(bz.csr_computer_number, '') AS egs_id,
+       (b.is_active = 1 AND COALESCE(bz.zatca_production_username, '') != '' AND COALESCE(bz.zatca_production_password, '') != '') AS daemon_runs
 FROM branches b
 JOIN company c ON c.id = b.company_id
 LEFT JOIN branch_zatca_config bz ON bz.branch_id = b.id

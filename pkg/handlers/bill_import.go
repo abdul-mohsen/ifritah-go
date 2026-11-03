@@ -23,15 +23,16 @@ const maxImportRows = 500
 // The codes of the issues that a check reports. A duplicate is a warning, and every other code is an error that blocks its row.
 // The codes of the sale path's refusals are the codes of saleRefusal.
 const (
-	importInvalidRequest   = "invalid_request"
-	importNotFinal         = "not_final"
-	importStoreNotAllowed  = "store_not_allowed"
-	importBranchNotFound   = "branch_not_found"
-	importSellerVATMissing = "seller_vat_missing"
-	importEGSIDMissing     = "egs_id_missing"
-	importStockShort       = "stock_insufficient"
-	importDuplicateSale    = "duplicate_sale"
-	importDuplicateInBatch = "duplicate_in_batch"
+	importInvalidRequest      = "invalid_request"
+	importNotFinal            = "not_final"
+	importStoreNotAllowed     = "store_not_allowed"
+	importBranchNotFound      = "branch_not_found"
+	importBranchNotRegistered = "branch_not_registered"
+	importSellerVATMissing    = "seller_vat_missing"
+	importEGSIDMissing        = "egs_id_missing"
+	importStockShort          = "stock_insufficient"
+	importDuplicateSale       = "duplicate_sale"
+	importDuplicateInBatch    = "duplicate_in_batch"
 )
 
 // defaultLineVATRate is the VAT rate that bill_product gives a line which the sale path writes: the column default, 15 percent.
@@ -57,12 +58,13 @@ type importRowResult struct {
 	DuplicateOf *uint64       `json:"duplicate_of"`
 }
 
-// importSeller is the seller data of a branch, as the daemon reads it: the VAT of the branch's company and the EGS id in the
-// branch's ZATCA config. found is false when there is no such branch.
-type importSeller struct {
-	found bool
-	vat   string
-	egsID string
+// importBranch is what the daemon reads for a branch: the VAT of the branch's company, the EGS id in the branch's ZATCA config, and
+// whether the daemon runs the branch (GetDaemonBranch). found is false when there is no such branch.
+type importBranch struct {
+	found      bool
+	vat        string
+	egsID      string
+	daemonRuns bool
 }
 
 // importChecker is what the rows of one check share. The stores are the caller's, and the stock mode is the setting. Each branch is
@@ -71,14 +73,14 @@ type importChecker struct {
 	h        *handler
 	storeIDs []int32
 	stock    string
-	sellers  map[uint32]importSeller
+	branches map[uint32]importBranch
 	seen     map[string]int
 	taken    map[uint64]decimal.Decimal
 }
 
 // CheckBillImport checks the rows of a bulk import of sales, and answers each row in order. A row is checked as a final sale: with
-// the rules of the sale path, with the seller data and EGS id that the ZATCA daemon reads for its branch, and against the stock that
-// the valid rows before it would take. A row whose content is already a bill on its branch is a warning, and so is a row that
+// the rules of the sale path, with the seller VAT, the EGS id, and the daemon's rule for running the branch, and against the stock
+// that the valid rows before it would take. A row whose content is already a bill on its branch is a warning, and so is a row that
 // repeats an earlier row of the same check. The check writes nothing: no bill, number, payment, stock movement or outbox event. It
 // ignores pos_id and bill_request_id, which the sale path uses for its replay and conflict rules and which are not part of the content.
 func (h *handler) CheckBillImport(c *gin.Context) {
@@ -96,7 +98,7 @@ func (h *handler) CheckBillImport(c *gin.Context) {
 		h:        h,
 		storeIDs: h.getStoreIds(c),
 		stock:    h.getStockEnforcementMode(c),
-		sellers:  map[uint32]importSeller{},
+		branches: map[uint32]importBranch{},
 		seen:     map[string]int{},
 		taken:    map[uint64]decimal.Decimal{},
 	}
@@ -201,40 +203,46 @@ func saleIssue(err error) importIssue {
 	return importIssue{Code: importInvalidRequest, Message: err.Error()}
 }
 
-// branchIssues checks the branch of a row with the seller data that the daemon reads. The branch must exist, with a seller VAT and an
-// EGS id. These are the checks of verifyBill that the backend can read.
+// branchIssues checks the branch of a row with what the daemon reads for it. The branch must exist, with a seller VAT and an EGS id,
+// and the daemon must run it. The first two are the checks of verifyBill that the backend can read. The last is the daemon's rule
+// for running a branch, which the daemon applies at its start and at each onboarding.
 func (k *importChecker) branchIssues(c *gin.Context, branchID uint32) ([]importIssue, error) {
-	seller, err := k.seller(c, branchID)
+	branch, err := k.branch(c, branchID)
 	if err != nil {
 		return nil, err
 	}
-	switch {
-	case !seller.found:
+	if !branch.found {
 		return []importIssue{{Code: importBranchNotFound, Message: fmt.Sprintf("branch %d does not exist", branchID)}}, nil
-	case seller.vat == "":
-		return []importIssue{{Code: importSellerVATMissing, Message: "the branch has no seller VAT number"}}, nil
-	case seller.egsID == "":
-		return []importIssue{{Code: importEGSIDMissing, Message: "the branch has no EGS id: onboard the branch first"}}, nil
 	}
-	return nil, nil
+	var issues []importIssue
+	if branch.vat == "" {
+		issues = append(issues, importIssue{Code: importSellerVATMissing, Message: "the branch has no seller VAT number"})
+	}
+	if branch.egsID == "" {
+		issues = append(issues, importIssue{Code: importEGSIDMissing, Message: "the branch has no EGS id: onboard the branch first"})
+	}
+	if !branch.daemonRuns {
+		issues = append(issues, importIssue{Code: importBranchNotRegistered, Message: fmt.Sprintf("branch %d is not active or has no production ZATCA credentials, so the daemon will not report its sales", branchID)})
+	}
+	return issues, nil
 }
 
-// seller returns the seller data of a branch, and reads each branch once per check.
-func (k *importChecker) seller(c *gin.Context, branchID uint32) (importSeller, error) {
-	if seller, ok := k.sellers[branchID]; ok {
-		return seller, nil
+// branch returns what the daemon reads for a branch, and reads each branch once per check.
+func (k *importChecker) branch(c *gin.Context, branchID uint32) (importBranch, error) {
+	if branch, ok := k.branches[branchID]; ok {
+		return branch, nil
 	}
-	var seller importSeller
-	row, err := k.h.queries.GetBranchSellerAndEGS(c.Request.Context(), branchID)
+	var branch importBranch
+	row, err := k.h.queries.GetDaemonBranch(c.Request.Context(), branchID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 	case err != nil:
-		return importSeller{}, err
+		return importBranch{}, err
 	default:
-		seller = importSeller{found: true, vat: row.SellerVat, egsID: row.EgsID}
+		branch = importBranch{found: true, vat: row.SellerVat, egsID: row.EgsID, daemonRuns: row.DaemonRuns.Bool}
 	}
-	k.sellers[branchID] = seller
-	return seller, nil
+	k.branches[branchID] = branch
+	return branch, nil
 }
 
 // stockIssues checks the catalog lines of a final sale against the stock that is left after the valid rows before it. The sale path

@@ -47,6 +47,21 @@ func (h *handler) checkBillStoreAccess(c *gin.Context, storeID int32) bool {
 	return true
 }
 
+// checkStoreBelongsToBranch returns true when the store is in the given branch. A store with no branch, or one of another branch, gets
+// a 400 response and false. The sale is signed with its envelope's branch, so the store must match it.
+func (h *handler) checkStoreBelongsToBranch(c *gin.Context, storeID int32, branchID uint32) bool {
+	storeBranch, err := h.queries.GetStoreBranchID(c.Request.Context(), storeID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return false
+	}
+	if storeBranch == nil || *storeBranch != branchID {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": "store does not belong to the branch"})
+		return false
+	}
+	return true
+}
+
 // effectiveDateOr returns ed when supplied, otherwise time.Now().
 func effectiveDateOr(ed *time.Time) time.Time {
 	if ed != nil {

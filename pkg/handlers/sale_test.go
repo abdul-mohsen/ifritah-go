@@ -86,9 +86,21 @@ func fingerprintOf(t *testing.T, body string) string {
 	return fingerprint
 }
 
-// expectSaleStoreAccess is the store check that runs before a sale is written.
+// expectSaleStoreAccess is the store check that runs before a sale is written: the store is the caller's, and it is in branch 7, the
+// branch that saleBody sells for.
 func expectSaleStoreAccess(mock sqlmock.Sqlmock) {
+	expectStoreAccess(mock)
+	expectStoreBranch(mock, 7)
+}
+
+// expectStoreAccess is the caller's access to store 1.
+func expectStoreAccess(mock sqlmock.Sqlmock) {
 	mock.ExpectQuery("select store.id from store").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+}
+
+// expectStoreBranch is the lookup of the branch of store 1. A nil branch is a store with no branch.
+func expectStoreBranch(mock sqlmock.Sqlmock, branch any) {
+	mock.ExpectQuery(`SELECT branch_id FROM store WHERE id = \?`).WillReturnRows(sqlmock.NewRows([]string{"branch_id"}).AddRow(branch))
 }
 
 // expectRequestRecord is the read of the bill that recorded a sale's request id. A nil record means none.
@@ -172,6 +184,74 @@ func TestAddBillSavesADraftWithoutANumberOrAnEvent(t *testing.T) {
 	w := runSaleRequest(t, h.AddBill, "/bill", saleDraftBody, nil)
 	if w.Code != http.StatusCreated || strings.TrimSpace(w.Body.String()) != "43" {
 		t.Fatalf("AddBill draft = %d %q; want 201 with bill id 43", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A store of the sale's branch passes the check, and the sale is written as usual.
+func TestAddBillProceedsWhenTheStoreIsInTheSaleBranch(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectStoreAccess(mock)
+	expectStoreBranch(mock, 7)
+	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
+	expectBillRow(mock, 42)
+	expectNumberAllocation(mock, 1)
+	expectBillWrite(mock)
+	expectSaleLines(mock)
+	expectSaleEvent(mock)
+	mock.ExpectCommit()
+
+	w := runSaleRequest(t, h.AddBill, "/bill", saleFinalBody, nil)
+	if w.Code != http.StatusCreated || strings.TrimSpace(w.Body.String()) != "42" {
+		t.Fatalf("AddBill with a store of branch 7 = %d %q; want 201 with bill id 42", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A store of another branch is refused before the transaction begins, so nothing is written and no number is taken.
+func TestAddBillRefusesAStoreOfAnotherBranchWithNothingWritten(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectStoreAccess(mock)
+	expectStoreBranch(mock, 8)
+
+	w := runSaleRequest(t, h.AddBill, "/bill", saleFinalBody, nil)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "store does not belong to the branch") {
+		t.Fatalf("AddBill with a store of branch 8 = %d %q; want 400 about the branch", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A store with no branch is refused before the transaction begins, the same as a store of another branch.
+func TestAddBillRefusesAStoreWithNoBranch(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectStoreAccess(mock)
+	expectStoreBranch(mock, nil)
+
+	w := runSaleRequest(t, h.AddBill, "/bill", saleFinalBody, nil)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "store does not belong to the branch") {
+		t.Fatalf("AddBill with a store that has no branch = %d %q; want 400 about the branch", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A draft submit takes the same check, so a store of another branch is refused there too, before anything is written.
+func TestSubmitDraftBillRefusesAStoreOfAnotherBranchWithNothingWritten(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectStoreAccess(mock)
+	expectStoreBranch(mock, 8)
+
+	w := runSaleRequest(t, h.SubmitDraftBill, "/bill/42", saleFinalBody, gin.Params{{Key: "id", Value: "42"}})
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "store does not belong to the branch") {
+		t.Fatalf("SubmitDraftBill with a store of branch 8 = %d %q; want 400 about the branch", w.Code, w.Body.String())
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

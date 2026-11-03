@@ -85,6 +85,9 @@ func (h *handler) saveSale(c *gin.Context, request *model.AddBillRequest, draftI
 	if !h.checkBillStoreAccess(c, request.StoreId) {
 		return 0, false
 	}
+	if !h.checkStoreBelongsToBranch(c, request.StoreId, request.BranchID) {
+		return 0, false
+	}
 
 	tx, err := h.DB.Begin()
 	if err != nil {

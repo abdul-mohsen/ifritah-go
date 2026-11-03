@@ -391,7 +391,8 @@ SELECT
     COALESCE(AVG(retry_count), 0)                                     AS avg_retries,
     COALESCE(AVG(CASE WHEN cleared_at IS NOT NULL AND submitted_at IS NOT NULL
         THEN TIMESTAMPDIFF(SECOND, submitted_at, cleared_at) END), 0) AS avg_clearance_seconds
-FROM zatca_submission;
+FROM zatca_submission
+WHERE document_type = 'bill';
 
 -- name: GetDashboardPaymentTracking :one
 SELECT

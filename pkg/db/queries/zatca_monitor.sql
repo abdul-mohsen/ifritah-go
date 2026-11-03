@@ -1,3 +1,7 @@
+-- The monitor and the ZATCA dashboard count the bills' invoices. A credit or debit note has its own record in zatca_submission
+-- (document_type credit or debit), and the monitor does not show notes yet: B10 owns that projection. Every query here therefore
+-- keeps to document_type 'bill'.
+
 -- name: GetZatcaMonitorStats :one
 SELECT
   COUNT(*)                                     AS total,
@@ -5,7 +9,8 @@ SELECT
   COUNT(CASE WHEN status = 4 THEN 1 END)       AS warnings,
   COUNT(CASE WHEN status = 3 THEN 1 END)       AS rejected,
   COUNT(CASE WHEN status IN (0, 1) THEN 1 END) AS pending
-FROM zatca_submission;
+FROM zatca_submission
+WHERE document_type = 'bill';
 
 -- name: ListZatcaMonitorBranches :many
 SELECT
@@ -17,22 +22,26 @@ SELECT
      FROM zatca_submission zs
      JOIN bill bl ON bl.id = zs.bill_id
      WHERE bl.branch_id = b.id
+       AND zs.document_type = 'bill'
        AND DATE(zs.submitted_at) = CURDATE())                       AS today_count,
   (SELECT COUNT(*)
      FROM zatca_submission zs
      JOIN bill bl ON bl.id = zs.bill_id
      WHERE bl.branch_id = b.id
+       AND zs.document_type = 'bill'
        AND zs.submitted_at >= NOW() - INTERVAL 7 DAY)               AS week_total,
   (SELECT COUNT(*)
      FROM zatca_submission zs
      JOIN bill bl ON bl.id = zs.bill_id
      WHERE bl.branch_id = b.id
+       AND zs.document_type = 'bill'
        AND zs.submitted_at >= NOW() - INTERVAL 7 DAY
        AND zs.status = 2)                                           AS week_accepted,
   (SELECT MAX(zs.submitted_at)
      FROM zatca_submission zs
      JOIN bill bl ON bl.id = zs.bill_id
-     WHERE bl.branch_id = b.id)                                     AS last_submission_at
+     WHERE bl.branch_id = b.id
+       AND zs.document_type = 'bill')                               AS last_submission_at
 FROM branches b
 JOIN branch_zatca_config bzc ON bzc.branch_id = b.id
 ORDER BY b.id ASC;
@@ -54,7 +63,8 @@ SELECT
 FROM zatca_submission zs
 JOIN bill bl     ON bl.id = zs.bill_id
 LEFT JOIN branches b ON b.id = bl.branch_id
-WHERE (sqlc.arg('pending_flag') = '' OR zs.status IN (0,1))
+WHERE zs.document_type = 'bill'
+  AND (sqlc.arg('pending_flag') = '' OR zs.status IN (0,1))
   AND (sqlc.arg('status_code') = -1 OR zs.status = sqlc.arg('status_code'))
   AND (sqlc.arg('branch_id') = 0 OR bl.branch_id = sqlc.arg('branch_id'))
 ORDER BY zs.submitted_at DESC

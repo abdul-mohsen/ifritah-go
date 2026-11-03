@@ -152,30 +152,53 @@ func (k *importChecker) checkRow(c *gin.Context, index int, raw json.RawMessage)
 		row.Errors = append(row.Errors, errs...)
 		row.Warnings = append(row.Warnings, warns...)
 	}
+	taken := map[uint64]decimal.Decimal{}
+	if err := k.readIssues(c, &row, &request, taken); err != nil {
+		return row, err
+	}
+	if err := k.duplicateIssues(c, &row, &request, fingerprint); err != nil {
+		return row, err
+	}
+	row.Valid = len(row.Errors) == 0
+	if row.Valid {
+		for productID, quantity := range taken {
+			k.taken[productID] = k.taken[productID].Add(quantity)
+		}
+	}
+	return row, nil
+}
+
+// readIssues checks a row against what the database holds: its branch, its paid amount, and the stock of its catalog lines. taken collects
+// the stock that the row would take.
+func (k *importChecker) readIssues(c *gin.Context, row *importRowResult, request *model.AddBillRequest, taken map[uint64]decimal.Decimal) error {
 	if request.BranchID != 0 {
 		issues, err := k.branchIssues(c, request.BranchID)
 		if err != nil {
-			return row, err
+			return err
 		}
 		row.Errors = append(row.Errors, issues...)
 	}
 	if request.PaidAmount.IsPositive() {
-		if err := paymentAboveTotalError(request.PaidAmount, saleTotal(saleProducts(&request))); err != nil {
+		if err := paymentAboveTotalError(request.PaidAmount, saleTotal(saleProducts(request))); err != nil {
 			row.Errors = append(row.Errors, saleIssue(err))
 		}
 	}
-	taken := map[uint64]decimal.Decimal{}
 	if request.State > 0 && k.stock != model.StockEnforcementDisable {
 		issues, err := k.stockIssues(c, request.Products, taken)
 		if err != nil {
-			return row, err
+			return err
 		}
 		row.Errors = append(row.Errors, issues...)
 	}
+	return nil
+}
+
+// duplicateIssues warns that a row's content is already a bill on its branch, and that the row repeats an earlier row of the check.
+func (k *importChecker) duplicateIssues(c *gin.Context, row *importRowResult, request *model.AddBillRequest, fingerprint string) error {
 	if request.BranchID != 0 {
 		id, err := k.duplicate(c, request.BranchID, fingerprint)
 		if err != nil {
-			return row, err
+			return err
 		}
 		if id != nil {
 			row.DuplicateOf = id
@@ -185,15 +208,9 @@ func (k *importChecker) checkRow(c *gin.Context, index int, raw json.RawMessage)
 	if first, ok := k.seen[fingerprint]; ok {
 		row.Warnings = append(row.Warnings, importIssue{Code: importDuplicateInBatch, Message: fmt.Sprintf("this sale has the same content as row %d", first)})
 	} else {
-		k.seen[fingerprint] = index
+		k.seen[fingerprint] = row.Index
 	}
-	row.Valid = len(row.Errors) == 0
-	if row.Valid {
-		for productID, quantity := range taken {
-			k.taken[productID] = k.taken[productID].Add(quantity)
-		}
-	}
-	return row, nil
+	return nil
 }
 
 // saleIssues checks a row with the rules of the sale path: the binding of the request, the final state, the paid amount, the lines as

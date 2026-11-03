@@ -455,16 +455,22 @@ func TestCheckBillImportChecksTheStockOfEachLine(t *testing.T) {
 			expectImportDuplicate(mock, fingerprintOf(t, body), nil)
 
 			rows := checkImport(t, h, importBody(body))
-			if tc.want == "" && !rows[0].Valid {
-				t.Fatalf("row = %+v; want a valid row", rows[0])
-			}
-			if tc.want != "" && (rows[0].Valid || !hasImportCode(rows[0].Errors, tc.want)) {
-				t.Fatalf("row = %+v; want an invalid row with the error %s", rows[0], tc.want)
-			}
+			requireStockRow(t, rows[0], tc.want)
 			if err := mock.ExpectationsWereMet(); err != nil {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// requireStockRow fails unless the row is valid when no error is wanted, and invalid with the wanted error when one is.
+func requireStockRow(t *testing.T, row importRowResult, want string) {
+	t.Helper()
+	if want == "" && !row.Valid {
+		t.Fatalf("row = %+v; want a valid row", row)
+	}
+	if want != "" && (row.Valid || !hasImportCode(row.Errors, want)) {
+		t.Fatalf("row = %+v; want an invalid row with the error %s", row, want)
 	}
 }
 

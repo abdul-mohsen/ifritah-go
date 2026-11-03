@@ -56,14 +56,14 @@ func TestSavedEffectiveDateIsTheUTCWallClockToTheSecond(t *testing.T) {
 	}
 }
 
-// A sale dated today is not in the future, at any time of the day.
+// A sale dated today is not in the future, at any time of the day, and it is not old.
 func TestSaleDatedTodayIsNotInTheFuture(t *testing.T) {
 	for _, now := range []time.Time{
 		time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC),
 		time.Date(2026, 11, 3, 23, 59, 59, 0, time.UTC),
 	} {
-		if issues := dateIssues(savedEffectiveDate(now), now); len(issues) != 0 {
-			t.Errorf("a sale saved at %s = %+v; want no date issue", now, issues)
+		if errs, warns := dateIssues(savedEffectiveDate(now), now); len(errs) != 0 || len(warns) != 0 {
+			t.Errorf("a sale saved at %s = %+v, %+v; want no date issue", now, errs, warns)
 		}
 	}
 }
@@ -79,7 +79,8 @@ func TestDateInFutureIsAnIssueDateLaterThanTodayInUTC(t *testing.T) {
 		"2027-01-01 00:00:00": true,
 	}
 	for saved, want := range cases {
-		if got := hasImportCode(dateIssues(saved, now), importDateInFuture); got != want {
+		errs, _ := dateIssues(saved, now)
+		if got := hasImportCode(errs, importDateInFuture); got != want {
 			t.Errorf("dateIssues(%q) has date_in_future = %v; want %v", saved, got, want)
 		}
 	}
@@ -90,14 +91,47 @@ func TestDateInFutureIsAnIssueDateLaterThanTodayInUTC(t *testing.T) {
 func TestDateInvalidIsASavedTextTheDaemonCannotRead(t *testing.T) {
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	for _, saved := range []string{"03/11/2026", "2026-11-03T10:00:00", "2026-13-01 00:00:00", ""} {
-		if !hasImportCode(dateIssues(saved, now), importDateInvalid) {
-			t.Errorf("dateIssues(%q) = %+v; want date_invalid", saved, dateIssues(saved, now))
+		if errs, _ := dateIssues(saved, now); !hasImportCode(errs, importDateInvalid) {
+			t.Errorf("dateIssues(%q) = %+v; want date_invalid", saved, errs)
 		}
 	}
 	for _, saved := range []string{"2026-11-03 10:00:00", "2026-11-03"} {
-		if hasImportCode(dateIssues(saved, now), importDateInvalid) {
+		if errs, _ := dateIssues(saved, now); hasImportCode(errs, importDateInvalid) {
 			t.Errorf("dateIssues(%q) has date_invalid; want the daemon's layouts to read it", saved)
 		}
+	}
+}
+
+// A sale exactly 24 hours old is not outside the reporting window: no warning, and no error. The clock is fixed, so the boundary is exact.
+func TestSaleExactly24HoursOldHasNoWarning(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	saved := savedEffectiveDate(now.Add(-24 * time.Hour))
+	errs, warns := dateIssues(saved, now)
+	if len(errs) != 0 || len(warns) != 0 {
+		t.Fatalf("dateIssues(%q) = %+v, %+v; want no finding for a sale exactly 24 hours old", saved, errs, warns)
+	}
+}
+
+// A sale 24 hours and one minute old is outside the reporting window: a warning. It is still valid, because it has no error.
+func TestSale24HoursAndOneMinuteOldHasTheWarningAndStaysValid(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	saved := savedEffectiveDate(now.Add(-24*time.Hour - time.Minute))
+	errs, warns := dateIssues(saved, now)
+	if len(errs) != 0 {
+		t.Fatalf("dateIssues(%q) errors = %+v; want none, so the sale stays valid", saved, errs)
+	}
+	if len(warns) != 1 || !hasImportCode(warns, importDateOutsideWindow) {
+		t.Fatalf("dateIssues(%q) warnings = %+v; want date_outside_reporting_window alone", saved, warns)
+	}
+}
+
+// A sale dated in the future is still an error, and it gets no warning.
+func TestFutureDatedSaleIsAnErrorAndNotAWarning(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	saved := savedEffectiveDate(now.Add(36 * time.Hour))
+	errs, warns := dateIssues(saved, now)
+	if !hasImportCode(errs, importDateInFuture) || len(warns) != 0 {
+		t.Fatalf("dateIssues(%q) = %+v, %+v; want date_in_future as an error and no warning", saved, errs, warns)
 	}
 }
 

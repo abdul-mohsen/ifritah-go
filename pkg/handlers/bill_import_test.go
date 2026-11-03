@@ -463,6 +463,25 @@ func TestSaleTotalMatchesTheStoredLines(t *testing.T) {
 	}
 }
 
+// A sale older than 24 hours is valid, with a warning. The check runs on the real clock, so this test keeps a margin of a minute. The exact
+// boundary is tested on dateIssues with a fixed clock, in bill_dates_test.go.
+func TestCheckBillImportWarnsOnASaleOlderThan24HoursAndKeepsItValid(t *testing.T) {
+	body := withEffectiveDate(importSale(), time.Now().Add(-24*time.Hour-time.Minute).UTC().Format(time.RFC3339))
+	h, mock := newSaleTestHandler(t)
+	expectImportStart(mock, "disable")
+	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
+	expectImportDuplicate(mock, fingerprintOf(t, body), nil)
+
+	rows := checkImport(t, h, importBody(body))
+	row := rows[0]
+	if !row.Valid || len(row.Errors) != 0 || !hasImportCode(row.Warnings, importDateOutsideWindow) {
+		t.Fatalf("row = %+v; want a valid row with date_outside_reporting_window as its only finding", row)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // A sale dated today is valid. The check reads the branch and the duplicate, as for any valid sale, and no date issue is reported.
 func TestCheckBillImportAcceptsASaleDatedToday(t *testing.T) {
 	body := withEffectiveDate(importSale(), dayAtNoonUTC(time.Now()))

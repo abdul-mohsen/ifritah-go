@@ -33,6 +33,7 @@ const (
 	importEGSIDMissing        = "egs_id_missing"
 	importDateInvalid         = "date_invalid"
 	importDateInFuture        = "date_in_future"
+	importDateOutsideWindow   = "date_outside_reporting_window"
 	importStockShort          = "stock_insufficient"
 	importDuplicateSale       = "duplicate_sale"
 	importDuplicateInBatch    = "duplicate_in_batch"
@@ -83,11 +84,11 @@ type importChecker struct {
 }
 
 // CheckBillImport checks the rows of a bulk import of sales, and answers each row in order. A row is checked as a final sale: with
-// the rules of the sale path, the two date rules of the ZATCA daemon, the seller VAT, the EGS id, and the daemon's rule for running the
+// the rules of the sale path, the date rules of the ZATCA daemon, the seller VAT, the EGS id, and the daemon's rule for running the
 // branch, and against the stock that the valid rows before it would take. A row whose content is already a bill on its branch is a
-// warning, and so is a row that repeats an earlier row of the same check. The check writes nothing: no bill, number, payment, stock
-// movement or outbox event. It ignores pos_id and bill_request_id, which the sale path uses for its replay and conflict rules and which
-// are not part of the content.
+// warning, and so are a row that repeats an earlier row of the same check and a sale older than the reporting window. The check writes
+// nothing: no bill, number, payment, stock movement or outbox event. It ignores pos_id and bill_request_id, which the sale path uses for
+// its replay and conflict rules and which are not part of the content.
 func (h *handler) CheckBillImport(c *gin.Context) {
 	var body importRows
 	if err := c.BindJSON(&body); err != nil {
@@ -136,7 +137,9 @@ func (k *importChecker) checkRow(c *gin.Context, index int, raw json.RawMessage)
 	}
 	row.Errors = append(row.Errors, k.saleIssues(&request)...)
 	if request.EffectiveDate != nil {
-		row.Errors = append(row.Errors, dateIssues(savedEffectiveDate(*request.EffectiveDate), k.now)...)
+		errs, warns := dateIssues(savedEffectiveDate(*request.EffectiveDate), k.now)
+		row.Errors = append(row.Errors, errs...)
+		row.Warnings = append(row.Warnings, warns...)
 	}
 	if request.BranchID != 0 {
 		issues, err := k.branchIssues(c, request.BranchID)

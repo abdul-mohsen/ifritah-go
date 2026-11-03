@@ -577,16 +577,3 @@ func TestAddBillRefusesAFinalSaleThatCannotBeVerified(t *testing.T) {
 		})
 	}
 }
-
-// Credit notes are disabled until their ZATCA submission uses the outbox (B6). The request is refused before anything is read or written.
-func TestCreditBillIsDisabledUntilItUsesTheOutbox(t *testing.T) {
-	h, mock := newSaleTestHandler(t)
-
-	w := runSaleRequest(t, h.CreditBill, "/bill/credit", `{"bill_id":42,"note":"return"}`, nil)
-	if w.Code != http.StatusNotImplemented {
-		t.Fatalf("CreditBill = %d; want 501", w.Code)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
-	}
-}

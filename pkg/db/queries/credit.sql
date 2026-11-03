@@ -31,8 +31,29 @@ COALESCE(
 FROM bill b
 JOIN store on store.id = b.store_id
 JOIN company on company.id = store.company_id
-JOIN credit_note  cn on cn.bill_id = b.id
+JOIN credit_note cn ON cn.id = (SELECT MAX(c.id) FROM credit_note c WHERE c.bill_id = b.id)
 WHERE b.id = ? LIMIT 1;
 
+-- name: GetCreditNoteByRequestIdentity :one
+SELECT id, bill_id, request_fingerprint, request_fingerprint_version FROM credit_note WHERE pos_id = ? AND bill_request_id = ?;
+
+-- name: ListBillLinesForNote :many
+SELECT id, product_id, name, price, quantity, discount, vat FROM bill_product WHERE bill_id = ?;
+
+-- name: ListCreditedLinesForBill :many
+SELECT cl.bill_product_id, cl.quantity
+FROM credit_note_line cl
+JOIN credit_note cn ON cn.id = cl.credit_note_id
+WHERE cn.bill_id = ?
+FOR UPDATE;
+
+-- name: ListCreditAmountsForBill :many
+SELECT amount FROM credit_note WHERE bill_id = ? FOR UPDATE;
+
 -- name: InsertCreditNote :execresult
-INSERT INTO credit_note (bill_id, state, note) VALUES (?, ?, ?)
+INSERT INTO credit_note (bill_id, state, note, amount, lines_total, invoice_uuid, pos_id, bill_request_id, request_fingerprint, request_fingerprint_version)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: InsertCreditNoteLine :exec
+INSERT INTO credit_note_line (credit_note_id, bill_product_id, name, quantity, price, discount, vat)
+VALUES (?, ?, ?, ?, ?, ?, ?);

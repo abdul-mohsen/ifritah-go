@@ -15,8 +15,8 @@ func TestDocumentKey(t *testing.T) {
 		want      string
 	}{
 		{"bill", "acme", 7, DocBill, 42, "acme:7:bill:42"},
-		{"credit note", "acme", 7, DocCreditNote, 9, "acme:7:credit_note:9"},
-		{"debit note", "acme", 7, DocDebitNote, 9, "acme:7:debit_note:9"},
+		{"credit note", "acme", 7, DocCredit, 9, "acme:7:credit:9"},
+		{"debit note", "acme", 7, DocDebit, 9, "acme:7:debit:9"},
 		{"64 characters", strings.Repeat("k", 64), 1, DocBill, 1, strings.Repeat("k", 64) + ":1:bill:1"},
 		{"64 Arabic characters", strings.Repeat("ك", 64), 1, DocBill, 1, strings.Repeat("ك", 64) + ":1:bill:1"},
 	}

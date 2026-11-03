@@ -89,16 +89,3 @@ FROM purchase_bill_product pbp
 JOIN purchase_bill pb ON pbp.bill_id = pb.id
 WHERE pbp.bill_id = ? AND pbp.product_id IS NOT NULL;
 
-
--- name: GetCreditNoteByID :one
-SELECT cn.id, cn.bill_id, cn.state, b.store_id, b.sequence_number
-FROM credit_note cn
-JOIN bill b ON cn.bill_id = b.id
-WHERE cn.id = ?;
-
-
--- name: GetBillProductsForCreditNote :many
-SELECT bp.id, bp.product_id, bp.quantity
-FROM bill_product bp
-WHERE bp.bill_id = ? AND bp.product_id IS NOT NULL AND bp.quantity > 0;
-

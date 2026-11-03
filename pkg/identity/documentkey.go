@@ -9,11 +9,12 @@ import (
 	"unicode/utf8"
 )
 
-// Document types, as they appear in a document key.
+// Document types, as they appear in a document key, in the envelope's doc_type, and in NATS subjects. A
+// credit or debit note has the same key format as a bill, with its own id as the source id.
 const (
-	DocBill       = "bill"
-	DocCreditNote = "credit_note"
-	DocDebitNote  = "debit_note"
+	DocBill   = "bill"
+	DocCredit = "credit"
+	DocDebit  = "debit"
 )
 
 // maxTenantKeyLen matches zatca_master.tenant.tenant_key, a VARCHAR(64) counted in characters.
@@ -43,7 +44,7 @@ func DocumentKey(tenantKey string, branchID uint64, docType string, sourceID uin
 		return "", fmt.Errorf("identity: branch id must be set")
 	case sourceID == 0:
 		return "", fmt.Errorf("identity: source id must be set")
-	case docType != DocBill && docType != DocCreditNote && docType != DocDebitNote:
+	case docType != DocBill && docType != DocCredit && docType != DocDebit:
 		return "", fmt.Errorf("identity: unknown document type %q", docType)
 	}
 	return strings.Join([]string{

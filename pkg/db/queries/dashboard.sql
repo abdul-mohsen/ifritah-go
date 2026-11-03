@@ -67,7 +67,7 @@ WHERE cn.id IS NULL
 -- name: GetDashboardCreditNoteStats :one
 SELECT
     COUNT(*)                       AS credit_note_count,
-    COALESCE(SUM(b.total), 0)      AS credit_note_total
+    COALESCE(SUM(cn.amount), 0)    AS credit_note_total
 FROM credit_note cn
 INNER JOIN bill b ON b.id = cn.bill_id
 WHERE cn.state = 1
@@ -111,7 +111,7 @@ SELECT b.id, b.sequence_number, COALESCE(b.total, 0) AS total, b.state,
        (cn.id IS NOT NULL)                           AS is_credit_note,
        b.user_phone_number
 FROM bill b
-LEFT JOIN credit_note cn ON cn.bill_id = b.id
+LEFT JOIN credit_note cn ON cn.id = (SELECT MAX(c.id) FROM credit_note c WHERE c.bill_id = b.id)
 ORDER BY b.effective_date DESC, b.id DESC
 LIMIT 10;
 

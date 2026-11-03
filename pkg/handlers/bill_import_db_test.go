@@ -12,6 +12,7 @@ import (
 
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/identity"
+	"ifritah/web-service-gin/pkg/model"
 	"ifritah/web-service-gin/pkg/testdb"
 )
 
@@ -253,5 +254,28 @@ func TestOldSaleIsAWarningOnTheMigratedSchema(t *testing.T) {
 	}
 	if row.DuplicateOf == nil || *row.DuplicateOf != uint64(billID) {
 		t.Fatalf("old sale row duplicate_of = %v; want bill %d", row.DuplicateOf, billID)
+	}
+}
+
+// The stored-scale rules of the check are the values that bill_product refuses (chk_price, chk_quantity). Each value is inserted on a
+// saved bill, and the database refuses exactly the values that the check reports.
+func TestStoredScaleIssuesMatchTheDatabaseChecks(t *testing.T) {
+	h, sqlDB := importFixture(t)
+	billID := saveImportSale(t, h, saleBody(1, "pos-1", saleRequestID))
+	cases := []struct{ price, quantity string }{
+		{"0", "1"},
+		{"0.004", "1"},
+		{"0.01", "1"},
+		{"10", "0.0004"},
+		{"10", "0.001"},
+	}
+	for _, tc := range cases {
+		line := model.BillProduct{Price: decimal.RequireFromString(tc.price), Quantity: decimal.RequireFromString(tc.quantity)}
+		reported := len(storedScaleIssues(&model.AddBillRequest{Products: []model.BillProduct{line}})) > 0
+		_, err := sqlDB.Exec("INSERT INTO bill_product (bill_id, name, price, quantity) VALUES (?, 'Brake pad', ?, ?)", billID, tc.price, tc.quantity)
+		refused := err != nil
+		if refused != reported || (refused && !strings.Contains(err.Error(), "Check constraint")) {
+			t.Fatalf("price %s, quantity %s: the database refused = %v (%v); the check reports it = %v", tc.price, tc.quantity, refused, err, reported)
+		}
 	}
 }

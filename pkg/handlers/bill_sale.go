@@ -180,8 +180,7 @@ func refuse(code, message string) error {
 
 // verifyFinalSale checks a final sale before anything is numbered or written, so a bill that cannot be reported is refused while the
 // cashier can still fix it. These are the checks the sale can make from its own request. The branch's seller data is checked by the
-// daemon before it books an invoice number. A quantity and a price are checked at the scale that bill_product stores them, three and
-// two decimals, because the database refuses a line that would be stored as zero.
+// daemon before it books an invoice number.
 func verifyFinalSale(request *model.AddBillRequest) error {
 	if request.State <= 0 {
 		return nil
@@ -189,17 +188,12 @@ func verifyFinalSale(request *model.AddBillRequest) error {
 	if len(request.Products)+len(request.ManualProducts) == 0 && !request.MaintenanceCost.IsPositive() {
 		return refuse("no_lines", "a final sale needs at least one line")
 	}
-	if request.MaintenanceCost.IsPositive() && !request.MaintenanceCost.Round(2).IsPositive() {
-		return refuse("line_price", "maintenance_cost must be at least 0.01")
-	}
 	for i, line := range slices.Concat(request.Products, request.ManualProducts) {
 		switch {
-		case !line.Quantity.Round(3).IsPositive():
+		case !line.Quantity.IsPositive():
 			return refuse("line_quantity", fmt.Sprintf("line %d: quantity must be positive", i+1))
 		case line.Price.IsNegative():
 			return refuse("line_price", fmt.Sprintf("line %d: price must not be negative", i+1))
-		case !line.Price.Round(2).IsPositive():
-			return refuse("line_price", fmt.Sprintf("line %d: price must be at least 0.01", i+1))
 		}
 	}
 	return nil

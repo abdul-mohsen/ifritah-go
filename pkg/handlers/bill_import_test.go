@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -187,6 +188,14 @@ func TestCheckBillImportReportsEachRefusal(t *testing.T) {
 		},
 		"a zero price": {
 			body: withLines(line("0", "1")),
+			code: "line_price",
+		},
+		"a sub-cent price": {
+			body: withLines(line("0.004", "1")),
+			code: "line_price",
+		},
+		"a sub-cent maintenance cost": {
+			body: strings.Replace(withLines(line("10", "1")), `"maintenance_cost":"0"`, `"maintenance_cost":"0.004"`, 1),
 			code: "line_price",
 		},
 		"a store the caller cannot sell from": {
@@ -427,25 +436,37 @@ func TestCheckBillImportRefusesABodyWithoutRows(t *testing.T) {
 	}
 }
 
-// The sale path refuses a line that would be stored as zero, with the same rule as the check. Nothing is read or written.
-func TestAddBillRefusesALineThatWouldBeStoredAsZero(t *testing.T) {
-	const head = `{"store_id":1,"state":1,"discount":"0","payment_method":1,"branch_id":7,"pos_id":"pos-1","bill_request_id":"` + saleRequestID + `",`
-	const line = `"products":[{"product_id":null,"name":"Brake pad","price":"%s","quantity":"%s","discount":"0"}],"manual_products":[]}`
-	cases := map[string]struct{ body, want string }{
-		"zero price":           {head + `"maintenance_cost":"0",` + fmt.Sprintf(line, "0", "1"), "at least 0.01"},
-		"sub-cent price":       {head + `"maintenance_cost":"0",` + fmt.Sprintf(line, "0.004", "1"), "at least 0.01"},
-		"sub-milli quantity":   {head + `"maintenance_cost":"0",` + fmt.Sprintf(line, "10", "0.0004"), "quantity must be positive"},
-		"sub-cent maintenance": {head + `"maintenance_cost":"0.004",` + fmt.Sprintf(line, "10", "1"), "maintenance_cost must be at least 0.01"},
+// storedScaleIssues reports a value that bill_product would store as zero. A negative price and a quantity that is not positive are
+// refused by verifyFinalSale, so they are not reported here.
+func TestStoredScaleIssuesReportTheValuesThatStoreAsZero(t *testing.T) {
+	line := func(price, quantity string) model.BillProduct {
+		return model.BillProduct{Price: decimal.RequireFromString(price), Quantity: decimal.RequireFromString(quantity)}
+	}
+	priceAt := func(n int) importIssue {
+		return importIssue{Code: "line_price", Message: fmt.Sprintf("line %d: price must be at least 0.01", n)}
+	}
+	quantityAt := func(n int) importIssue {
+		return importIssue{Code: "line_quantity", Message: fmt.Sprintf("line %d: quantity must be positive", n)}
+	}
+	maintenance := importIssue{Code: "line_price", Message: "maintenance_cost must be at least 0.01"}
+	cases := map[string]struct {
+		request *model.AddBillRequest
+		want    []importIssue
+	}{
+		"a zero price":                                {&model.AddBillRequest{Products: []model.BillProduct{line("0", "1")}}, []importIssue{priceAt(1)}},
+		"a sub-cent price on the second line":         {&model.AddBillRequest{Products: []model.BillProduct{line("10", "1"), line("0.004", "1")}}, []importIssue{priceAt(2)}},
+		"a price of one cent":                         {&model.AddBillRequest{Products: []model.BillProduct{line("0.01", "1")}}, nil},
+		"a quantity that stores as zero":              {&model.AddBillRequest{Products: []model.BillProduct{line("10", "0.0004")}}, []importIssue{quantityAt(1)}},
+		"a quantity of one thousandth":                {&model.AddBillRequest{Products: []model.BillProduct{line("10", "0.001")}}, nil},
+		"a sub-cent maintenance cost":                 {&model.AddBillRequest{MaintenanceCost: decimal.RequireFromString("0.004")}, []importIssue{maintenance}},
+		"a maintenance cost of one cent":              {&model.AddBillRequest{MaintenanceCost: decimal.RequireFromString("0.01")}, nil},
+		"a negative price is left to verifyFinalSale": {&model.AddBillRequest{Products: []model.BillProduct{line("-1", "1")}}, nil},
+		"a zero quantity is left to verifyFinalSale":  {&model.AddBillRequest{Products: []model.BillProduct{line("10", "0")}}, nil},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			h, mock := newSaleTestHandler(t)
-			w := runSaleRequest(t, h.AddBill, "/bill", tc.body, nil)
-			if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), tc.want) {
-				t.Fatalf("AddBill = %d %q; want 400 about %q", w.Code, w.Body.String(), tc.want)
-			}
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Fatal(err)
+			if got := storedScaleIssues(tc.request); !slices.Equal(got, tc.want) {
+				t.Fatalf("storedScaleIssues = %+v; want %+v", got, tc.want)
 			}
 		})
 	}

@@ -55,13 +55,15 @@ type importIssue struct {
 	Message string `json:"message"`
 }
 
-// importRowResult is the answer for one row. Index is the position of the row in the request.
+// importRowResult is the answer for one row. Index is the position of the row in the request. RequestFingerprint is the fingerprint of the
+// sale, which the sale path stores for duplicate detection. It is null for a row that is not a sale request.
 type importRowResult struct {
-	Index       int           `json:"index"`
-	Valid       bool          `json:"valid"`
-	Errors      []importIssue `json:"errors"`
-	Warnings    []importIssue `json:"warnings"`
-	DuplicateOf *uint64       `json:"duplicate_of"`
+	Index              int           `json:"index"`
+	Valid              bool          `json:"valid"`
+	Errors             []importIssue `json:"errors"`
+	Warnings           []importIssue `json:"warnings"`
+	DuplicateOf        *uint64       `json:"duplicate_of"`
+	RequestFingerprint *string       `json:"request_fingerprint"`
 }
 
 // importBranch is what the daemon reads for a branch: the VAT of the branch's company, the EGS id in the branch's ZATCA config, and
@@ -137,6 +139,7 @@ func (k *importChecker) checkRow(c *gin.Context, index int, raw json.RawMessage)
 	if err != nil {
 		return row, err
 	}
+	row.RequestFingerprint = &fingerprint
 	row.Errors = append(row.Errors, k.saleIssues(&request)...)
 	issues, err := k.storeBranchIssues(c, &request)
 	if err != nil {

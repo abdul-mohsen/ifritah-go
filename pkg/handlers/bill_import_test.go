@@ -352,6 +352,84 @@ func TestCheckBillImportFlagsARowThatRepeatsAnEarlierRow(t *testing.T) {
 	}
 }
 
+// A row answers the fingerprint of its sale, which is the one the sale path stores for duplicate detection. The client gets the same value
+// that the check uses to look up bills on the branch.
+func TestCheckBillImportAnswersTheFingerprintOfARow(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectImportStart(mock, "disable")
+	expectStoreBranch(mock, 7)
+	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
+	fingerprint := fingerprintOf(t, importSale())
+	expectImportDuplicate(mock, fingerprint, nil)
+
+	w := runSaleRequest(t, h.CheckBillImport, "/bill/import/check", importBody(importSale()), nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"request_fingerprint":"`+fingerprint+`"`) {
+		t.Fatalf("CheckBillImport = %d %q; want 200 with the row's request_fingerprint %s", w.Code, w.Body.String(), fingerprint)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Two rows with the same content have the same fingerprint, and each row is looked up.
+func TestCheckBillImportGivesIdenticalRowsOneFingerprint(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectImportStart(mock, "disable")
+	expectStoreBranch(mock, 7)
+	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
+	fingerprint := fingerprintOf(t, importSale())
+	expectImportDuplicate(mock, fingerprint, nil)
+	expectStoreBranch(mock, 7)
+	expectImportDuplicate(mock, fingerprint, nil)
+
+	w := runSaleRequest(t, h.CheckBillImport, "/bill/import/check", importBody(importSale(), importSale()), nil)
+	if w.Code != http.StatusOK || strings.Count(w.Body.String(), `"request_fingerprint":"`+fingerprint+`"`) != 2 {
+		t.Fatalf("CheckBillImport = %d %q; want both rows with the fingerprint %s", w.Code, w.Body.String(), fingerprint)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Changing one field of a row changes its fingerprint. Here only the price of the second row differs.
+func TestCheckBillImportChangesTheFingerprintWhenOneFieldChanges(t *testing.T) {
+	first := importStockSale(12, "10", "2")
+	second := importStockSale(12, "10.50", "2")
+	firstFingerprint := fingerprintOf(t, first)
+	secondFingerprint := fingerprintOf(t, second)
+	h, mock := newSaleTestHandler(t)
+	expectImportStart(mock, "disable")
+	expectStoreBranch(mock, 7)
+	expectImportBranch(mock, "300000000000003", "egs-uuid-7", true)
+	expectImportDuplicate(mock, firstFingerprint, nil)
+	expectStoreBranch(mock, 7)
+	expectImportDuplicate(mock, secondFingerprint, nil)
+
+	w := runSaleRequest(t, h.CheckBillImport, "/bill/import/check", importBody(first, second), nil)
+	body := w.Body.String()
+	if w.Code != http.StatusOK || firstFingerprint == secondFingerprint ||
+		!strings.Contains(body, `"request_fingerprint":"`+firstFingerprint+`"`) || !strings.Contains(body, `"request_fingerprint":"`+secondFingerprint+`"`) {
+		t.Fatalf("CheckBillImport = %d %q; want each row with its own fingerprint", w.Code, body)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A row that is not a sale request has no fingerprint, so its answer carries null.
+func TestCheckBillImportAnswersNoFingerprintForARowThatIsNotASale(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectImportStart(mock, "disable")
+
+	w := runSaleRequest(t, h.CheckBillImport, "/bill/import/check", importBody(`"not a sale"`), nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"request_fingerprint":null`) {
+		t.Fatalf("CheckBillImport = %d %q; want 200 with request_fingerprint null", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // The stock rule of the sale path applies in enforce mode and in warn mode, because the database refuses the deduction in both. In
 // disable mode the stock is not read.
 func TestCheckBillImportChecksTheStockOfEachLine(t *testing.T) {

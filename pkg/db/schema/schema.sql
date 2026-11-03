@@ -1680,6 +1680,7 @@ CREATE TABLE `product` (
   `name` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `id_UNIQUE` (`article_id`,`store_id`) /*!80000 INVISIBLE */,
+  KEY `idx_product_store_name` (`store_id`,`name`),
   KEY `idx_product_store_qty` (`store_id`,`quantity`),
   KEY `idx_product_store_price` (`store_id`,`price`),
   CONSTRAINT `ch_product_price` CHECK ((`price` > 0)),

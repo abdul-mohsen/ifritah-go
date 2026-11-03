@@ -33,6 +33,18 @@ func TestDrainerFromEnvReadsTheOverrides(t *testing.T) {
 	}
 }
 
+func TestDrainerFromEnvAcceptsTheLargestSettings(t *testing.T) {
+	t.Setenv("OUTBOX_BATCH_SIZE", "1000")
+	t.Setenv("OUTBOX_MAX_ATTEMPTS", "1000")
+	d, _, err := DrainerFromEnv(nil, nil, "worker-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.BatchSize != 1000 || d.MaxAttempts != 1000 {
+		t.Fatalf("largest settings: batch %d, attempts %d; want 1000 and 1000", d.BatchSize, d.MaxAttempts)
+	}
+}
+
 func TestDrainerFromEnvRefusesBadSettings(t *testing.T) {
 	cases := map[string]struct {
 		key, value, owner string

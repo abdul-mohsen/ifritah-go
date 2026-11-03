@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"time"
@@ -49,6 +50,14 @@ func DrainerFromEnv(db *sql.DB, pub Publisher, owner string) (*Drainer, time.Dur
 	case lease <= 0:
 		return nil, 0, errors.New("outbox: OUTBOX_LEASE must be positive")
 	case attempts <= 0 || attempts > maxAttempts:
+		return nil, 0, fmt.Errorf("outbox: OUTBOX_MAX_ATTEMPTS must be 1 to %d", maxAttempts)
+	}
+	// The switch above keeps both settings within 1000. These checks test the range of each conversion's target type, so the
+	// conversions stay exact even if that limit changes.
+	if batch > math.MaxInt32 {
+		return nil, 0, fmt.Errorf("outbox: OUTBOX_BATCH_SIZE must be 1 to %d", maxBatchSize)
+	}
+	if attempts > math.MaxUint32 {
 		return nil, 0, fmt.Errorf("outbox: OUTBOX_MAX_ATTEMPTS must be 1 to %d", maxAttempts)
 	}
 	return &Drainer{

@@ -46,7 +46,7 @@ func debitFingerprintOf(t *testing.T, body string) string {
 // given state, branch and total, and the records of its request id.
 func expectDebitUpToLines(mock sqlmock.Sqlmock, state, branch int64, total string) {
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, state, branch, total)
 	expectNoteRecord(mock, "debit_note", nil)
@@ -77,7 +77,7 @@ func TestDebitBillReplaysTheOriginalNoteForTheSameContent(t *testing.T) {
 	body := debitBody("extra service", "5.75", debitTowing)
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 1, 7, "40.25")
 	expectNoteRecord(mock, "debit_note", &recordedNote{id: 10, billID: 42, fingerprint: debitFingerprintOf(t, body)})
@@ -96,7 +96,7 @@ func TestDebitBillReplaysTheOriginalNoteForTheSameContent(t *testing.T) {
 func TestDebitBillRefusesADifferentNoteUnderARecordedRequest(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 1, 7, "40.25")
 	expectNoteRecord(mock, "debit_note", &recordedNote{id: 10, billID: 42, fingerprint: strings.Repeat("0", 64)})
@@ -143,7 +143,7 @@ func TestDebitBillRefusesAZeroAmountBeforeAnythingIsRead(t *testing.T) {
 func TestDebitBillRefusesADraftBill(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 0, 7, "40.25")
 	mock.ExpectRollback()
@@ -161,7 +161,7 @@ func TestDebitBillRefusesADraftBill(t *testing.T) {
 func TestDebitBillRefusesABillOfAnotherBranch(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 1, 8, "40.25")
 	mock.ExpectRollback()
@@ -179,7 +179,7 @@ func TestDebitBillRefusesABillOfAnotherBranch(t *testing.T) {
 func TestDebitBillRefusesARequestIdThatABillUses(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 1, 7, "40.25")
 	expectNoteRecord(mock, "debit_note", nil)
@@ -200,7 +200,7 @@ func TestDebitBillRefusesARequestIdThatABillUses(t *testing.T) {
 func TestDebitBillRefusesTheRequestIdOfACreditNote(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 1, 7, "40.25")
 	expectNoteRecord(mock, "debit_note", nil)

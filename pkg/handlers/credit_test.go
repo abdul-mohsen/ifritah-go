@@ -126,7 +126,7 @@ func expectNoteEvent(mock sqlmock.Sqlmock, key, subject string) {
 // given state, branch and total, and the records of its request id.
 func expectCreditUpToLines(mock sqlmock.Sqlmock, state, branch int64, total string) {
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, state, branch, total)
 	expectNoteRecord(mock, "credit_note", nil)
@@ -159,7 +159,7 @@ func TestCreditBillReplaysTheOriginalNoteForTheSameContent(t *testing.T) {
 	body := creditBody("returned", "11.50", creditBrakePad)
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 1, 7, "40.25")
 	expectNoteRecord(mock, "credit_note", &recordedNote{id: 9, billID: 42, fingerprint: creditFingerprintOf(t, body)})
@@ -178,7 +178,7 @@ func TestCreditBillReplaysTheOriginalNoteForTheSameContent(t *testing.T) {
 func TestCreditBillRefusesADifferentNoteUnderARecordedRequest(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 1, 7, "40.25")
 	expectNoteRecord(mock, "credit_note", &recordedNote{id: 9, billID: 42, fingerprint: strings.Repeat("0", 64)})
@@ -198,7 +198,7 @@ func TestCreditBillRefusesTheRequestIdOfANoteOnAnotherBill(t *testing.T) {
 	body := creditBody("returned", "11.50", creditBrakePad)
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 1, 7, "40.25")
 	expectNoteRecord(mock, "credit_note", &recordedNote{id: 9, billID: 43, fingerprint: creditFingerprintOf(t, body)})
@@ -217,7 +217,7 @@ func TestCreditBillRefusesTheRequestIdOfANoteOnAnotherBill(t *testing.T) {
 func TestCreditBillRefusesARequestIdThatABillUses(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 1, 7, "40.25")
 	expectNoteRecord(mock, "credit_note", nil)
@@ -238,7 +238,7 @@ func TestCreditBillRefusesARequestIdThatABillUses(t *testing.T) {
 func TestCreditBillRefusesTheRequestIdOfADebitNote(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 1, 7, "40.25")
 	expectNoteRecord(mock, "credit_note", nil)
@@ -289,7 +289,7 @@ func TestCreditBillRefusesANoteWithoutAReason(t *testing.T) {
 func TestCreditBillRefusesADraftBill(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 0, 7, "40.25")
 	mock.ExpectRollback()
@@ -307,7 +307,7 @@ func TestCreditBillRefusesADraftBill(t *testing.T) {
 func TestCreditBillRefusesABillOfAnotherBranch(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, 1, 8, "40.25")
 	mock.ExpectRollback()
@@ -325,7 +325,7 @@ func TestCreditBillRefusesABillOfAnotherBranch(t *testing.T) {
 func TestCreditBillReportsADeletedBillAsNotFound(t *testing.T) {
 	h, mock := newSaleTestHandler(t)
 	expectNoteBillStore(mock)
-	expectSaleStoreAccess(mock)
+	expectStoreAccess(mock)
 	mock.ExpectBegin()
 	expectLockedBill(mock, -1, 7, "40.25")
 	mock.ExpectRollback()

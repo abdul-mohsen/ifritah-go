@@ -131,6 +131,7 @@ func expectCreditUpToLines(mock sqlmock.Sqlmock, state, branch int64, total stri
 	expectLockedBill(mock, state, branch, total)
 	expectNoteRecord(mock, "credit_note", nil)
 	expectBillRecord(mock, false)
+	expectNoteRecord(mock, "debit_note", nil)
 }
 
 func TestCreditBillWritesTheNoteItsLinesAndItsEventInOneTransaction(t *testing.T) {
@@ -226,6 +227,28 @@ func TestCreditBillRefusesARequestIdThatABillUses(t *testing.T) {
 	w := runSaleRequest(t, h.CreditBill, "/bill/credit", creditBody("returned", "11.50", creditBrakePad), nil)
 	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), requestConflictCode) {
 		t.Fatalf("CreditBill with a bill's request id = %d %q; want 409 %s", w.Code, w.Body.String(), requestConflictCode)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A credit note cannot reuse the request id of a debit note. The daemon claims request ids for the whole database, so the note would
+// never be invoiced. Nothing is written.
+func TestCreditBillRefusesTheRequestIdOfADebitNote(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectNoteBillStore(mock)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectLockedBill(mock, 1, 7, "40.25")
+	expectNoteRecord(mock, "credit_note", nil)
+	expectBillRecord(mock, false)
+	expectNoteRecord(mock, "debit_note", &recordedNote{id: 10, billID: 42, fingerprint: strings.Repeat("0", 64)})
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.CreditBill, "/bill/credit", creditBody("returned", "11.50", creditBrakePad), nil)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), requestConflictCode) {
+		t.Fatalf("CreditBill with a debit note's request id = %d %q; want 409 %s", w.Code, w.Body.String(), requestConflictCode)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

@@ -51,6 +51,7 @@ func expectDebitUpToLines(mock sqlmock.Sqlmock, state, branch int64, total strin
 	expectLockedBill(mock, state, branch, total)
 	expectNoteRecord(mock, "debit_note", nil)
 	expectBillRecord(mock, false)
+	expectNoteRecord(mock, "credit_note", nil)
 }
 
 // A debit note is verified against its bill, and then its note, its lines and its ZATCA event are written in one transaction.
@@ -168,6 +169,48 @@ func TestDebitBillRefusesABillOfAnotherBranch(t *testing.T) {
 	w := runSaleRequest(t, h.DebitBill, "/bill/debit", debitBody("extra service", "5.75", debitTowing), nil)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "another branch") {
 		t.Fatalf("DebitBill on another branch's bill = %d %q; want 400 about the branch", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A debit note cannot reuse the request id of a bill. Nothing is written.
+func TestDebitBillRefusesARequestIdThatABillUses(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectNoteBillStore(mock)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectLockedBill(mock, 1, 7, "40.25")
+	expectNoteRecord(mock, "debit_note", nil)
+	expectBillRecord(mock, true)
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.DebitBill, "/bill/debit", debitBody("extra service", "5.75", debitTowing), nil)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), requestConflictCode) {
+		t.Fatalf("DebitBill with a bill's request id = %d %q; want 409 %s", w.Code, w.Body.String(), requestConflictCode)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A debit note cannot reuse the request id of a credit note, because the daemon claims request ids for the whole database. Nothing is
+// written.
+func TestDebitBillRefusesTheRequestIdOfACreditNote(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectNoteBillStore(mock)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectLockedBill(mock, 1, 7, "40.25")
+	expectNoteRecord(mock, "debit_note", nil)
+	expectBillRecord(mock, false)
+	expectNoteRecord(mock, "credit_note", &recordedNote{id: 9, billID: 42, fingerprint: strings.Repeat("0", 64)})
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.DebitBill, "/bill/debit", debitBody("extra service", "5.75", debitTowing), nil)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), requestConflictCode) {
+		t.Fatalf("DebitBill with a credit note's request id = %d %q; want 409 %s", w.Code, w.Body.String(), requestConflictCode)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

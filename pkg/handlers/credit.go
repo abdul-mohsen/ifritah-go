@@ -78,7 +78,7 @@ func (h *handler) writeCreditNote(c *gin.Context, tx *sql.Tx, request *model.Cre
 	if found {
 		return answerRecordedNote(c, rec, request.BillID, ident)
 	}
-	taken, err := billRequestTaken(c, qtx, ident)
+	taken, err := otherNoteRequestTaken(c, qtx, ident, identity.DocCredit)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return 0, false

@@ -95,6 +95,7 @@ func main() {
 		authorized.GET("car_part/:id", h.GetAllCachedVin)
 
 		// ── Bills (delete is manager+) ─────────────────────────────────
+		authorized.GET("bill/:id/credit-source", h.GetBillCreditSource)
 		authorized.GET("bill/:id", h.GetBillDetail)
 		authorized.POST("bill/all", h.GetBills)
 		authorized.POST("bill", h.AddBill)

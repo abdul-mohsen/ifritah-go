@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/invoice"
@@ -198,6 +200,175 @@ func verifyCreditAgainstBill(c *gin.Context, qtx *db.Queries, request *model.Cre
 		return nil, decimal.Zero, false
 	}
 	return lines, total, true
+}
+
+type creditSourceResponse struct {
+	BillID   uint64                 `json:"bill_id"`
+	BranchID uint32                 `json:"branch_id"`
+	Amount   string                 `json:"amount"`
+	Lines    []creditSourceLineData `json:"lines"`
+}
+
+type creditSourceLineData struct {
+	BillProductID int32  `json:"bill_product_id"`
+	Quantity      string `json:"quantity"`
+	Price         string `json:"price"`
+	VAT           string `json:"vat"`
+}
+
+// GetBillCreditSource returns a non-reserving preview; CreditBill revalidates availability in its transaction.
+func (h *handler) GetBillCreditSource(c *gin.Context) {
+	billID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || billID == 0 {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	if !h.checkNoteStoreAccess(c, billID) {
+		return
+	}
+
+	tx, err := h.DB.Begin()
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	defer tx.Rollback()
+
+	qtx := h.queries.WithTx(tx)
+	bill, err := qtx.LockBillForNote(c.Request.Context(), billID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"message": noteBillNotFound})
+		return
+	case err != nil:
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	if !h.checkBillStoreAccess(c, bill.StoreID) {
+		return
+	}
+	switch {
+	case bill.State < 0:
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"message": noteBillNotFound})
+		return
+	case bill.State == 0:
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "a draft cannot be credited or debited; only a final bill can"})
+		return
+	case bill.BranchID == nil || *bill.BranchID == 0:
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill has no branch"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	rows, err := qtx.ListBillLinesForNote(ctx, billID)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	credits, err := qtx.ListCreditedLinesForBill(ctx, billID)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	amounts, err := qtx.ListCreditAmountsForBill(ctx, billID)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	if len(rows) == 0 {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill has no creditable lines"})
+		return
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
+
+	billLines := make(map[uint64]db.ListBillLinesForNoteRow, len(rows))
+	for _, row := range rows {
+		id := uint64(row.ID)
+		if row.ID <= 0 || row.Vat == nil || !row.Quantity.IsPositive() {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill has missing or invalid credit-line data"})
+			return
+		}
+		if _, exists := billLines[id]; exists {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill has duplicate credit-line data"})
+			return
+		}
+		billLines[id] = row
+	}
+
+	credited := make(map[uint64]decimal.Decimal, len(credits))
+	for _, credit := range credits {
+		id := uint64(credit.BillProductID)
+		line, exists := billLines[id]
+		if credit.BillProductID <= 0 || !credit.Quantity.IsPositive() || !exists {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill's credit history cannot be reconciled"})
+			return
+		}
+		credited[id] = credited[id].Add(credit.Quantity)
+		if credited[id].GreaterThan(line.Quantity) {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill's credit history exceeds a source-line quantity"})
+			return
+		}
+	}
+	for _, amount := range amounts {
+		if !amount.IsPositive() {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill's credit history has an invalid amount"})
+			return
+		}
+	}
+
+	remaining := creditRemaining(bill.Total, amounts)
+	if !remaining.IsPositive() {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill has no remaining credit"})
+		return
+	}
+	requested := make([]model.CreditNoteLine, 0, len(rows))
+	for _, row := range rows {
+		id := uint64(row.ID)
+		quantity := row.Quantity.Sub(credited[id])
+		if quantity.IsNegative() {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill's credit history exceeds a source-line quantity"})
+			return
+		}
+		if quantity.IsZero() {
+			continue
+		}
+		if err := verifyLineAmounts(quantity, row.Price, *row.Vat); err != nil {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill has invalid remaining credit-line data"})
+			return
+		}
+		requested = append(requested, model.CreditNoteLine{
+			BillProductID: id,
+			Quantity:      quantity,
+			Price:         row.Price,
+			VAT:           *row.Vat,
+		})
+	}
+
+	lines, err := creditLines(requested, billLines, credited)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill's remaining credit lines cannot be proven"})
+		return
+	}
+	if _, err := checkNoteTotal(remaining, lines); err != nil {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "the bill's remaining amount does not match its remaining lines"})
+		return
+	}
+
+	responseLines := make([]creditSourceLineData, 0, len(lines))
+	for _, line := range lines {
+		responseLines = append(responseLines, creditSourceLineData{
+			BillProductID: line.billProductID,
+			Quantity:      line.quantity.StringFixed(3),
+			Price:         line.price.StringFixed(2),
+			VAT:           line.vat.StringFixed(2),
+		})
+	}
+	c.JSON(http.StatusOK, creditSourceResponse{
+		BillID:   bill.ID,
+		BranchID: *bill.BranchID,
+		Amount:   remaining.StringFixed(2),
+		Lines:    responseLines,
+	})
 }
 
 func (h *handler) GetCreditBillPDF(c *gin.Context) {

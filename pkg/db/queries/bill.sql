@@ -160,7 +160,7 @@ WHERE id = ?;
 SELECT id, request_fingerprint, request_fingerprint_version FROM bill WHERE pos_id = ? AND bill_request_id = ?;
 
 -- name: AddProductToBill :exec
-insert into bill_product (name, product_id, price, quantity, bill_id, part_name) values (?, ?, ?, ?, ?, ?);
+insert into bill_product (name, product_id, price, quantity, bill_id, part_name, discount) values (?, ?, ?, ?, ?, ?, ?);
 
 -- name: DeleteProductToBill :exec
 DELETE FROM bill_product where bill_id = ?;

@@ -203,6 +203,7 @@ func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.BillProd
 			Quantity:  product.Quantity,
 			PartName:  &product.PartName,
 			BillID:    billId,
+			Discount:  product.Discount,
 		}
 		err := qtx.AddProductToBill(c.Request.Context(), args)
 		if err != nil {

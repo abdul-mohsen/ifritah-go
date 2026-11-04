@@ -17,7 +17,7 @@ SELECT bill.id AS id,
        total_before_vat,
        1 AS is_credit
 FROM bill
-JOIN credit_note cn ON cn.bill_id = bill.id
+JOIN credit_note cn ON cn.id = (SELECT MAX(c.id) FROM credit_note c WHERE c.bill_id = bill.id)
 LEFT JOIN client  ON client.id = bill.client_id
 WHERE bill.state >= 0
   AND (sqlc.narg('state_filter') IS NULL OR bill.state = sqlc.narg('state_filter'))
@@ -128,7 +128,7 @@ cn.id as credit_id
 FROM bill b
 JOIN store on store.id = b.store_id
 JOIN company on company.id = store.company_id
-LEFT JOIN credit_note cn on cn.bill_id = b.id
+LEFT JOIN credit_note cn ON cn.id = (SELECT MAX(c.id) FROM credit_note c WHERE c.bill_id = b.id)
 WHERE b.id = ? LIMIT 1 ;
 
 -- name: UpdateBillByID :exec

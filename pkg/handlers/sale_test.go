@@ -156,6 +156,7 @@ func TestAddBillWritesTheSaleAndItsZatcaEventInOneTransaction(t *testing.T) {
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
 	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
 	expectBillRow(mock, 42)
 	expectNumberAllocation(mock, 1)
 	expectBillWrite(mock)
@@ -197,6 +198,7 @@ func TestAddBillProceedsWhenTheStoreIsInTheSaleBranch(t *testing.T) {
 	expectStoreBranch(mock, 7)
 	mock.ExpectBegin()
 	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
 	expectBillRow(mock, 42)
 	expectNumberAllocation(mock, 1)
 	expectBillWrite(mock)
@@ -290,6 +292,7 @@ func TestAddBillRollsBackWhenTheNumberCannotBeAllocated(t *testing.T) {
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
 	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
 	expectBillRow(mock, 42)
 	mock.ExpectExec("INSERT INTO branch_sequence").WillReturnError(errors.New("lock wait timeout"))
 	mock.ExpectRollback()
@@ -344,6 +347,7 @@ func TestAddBillReplaysTheWinnerOfARace(t *testing.T) {
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
 	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
 	expectBillRow(mock, 43)
 	expectNumberAllocation(mock, 1)
 	mock.ExpectExec("UPDATE bill SET").WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry"})
@@ -365,6 +369,7 @@ func TestAddBillReportsADuplicateWhenTheWinnerCannotBeRead(t *testing.T) {
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
 	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
 	expectBillRow(mock, 43)
 	expectNumberAllocation(mock, 1)
 	mock.ExpectExec("UPDATE bill SET").WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry"})
@@ -385,6 +390,7 @@ func TestSubmitDraftBillFinalizesTheBillWithItsZatcaEvent(t *testing.T) {
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
 	expectDraftState(mock, 0)
+	expectNoNoteRequest(mock)
 	expectNumberAllocation(mock, 1)
 	expectBillWrite(mock)
 	mock.ExpectExec("DELETE FROM bill_product").WillReturnResult(sqlmock.NewResult(0, 1))
@@ -474,6 +480,7 @@ func TestAddBillRecordsThePaymentInTheSaleTransaction(t *testing.T) {
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
 	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
 	expectBillRow(mock, 42)
 	expectNumberAllocation(mock, 1)
 	expectBillWrite(mock)
@@ -497,6 +504,7 @@ func TestAddBillRefusesAPaymentAboveTheTotal(t *testing.T) {
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
 	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
 	expectBillRow(mock, 42)
 	expectNumberAllocation(mock, 1)
 	expectBillWrite(mock)
@@ -537,6 +545,7 @@ func TestSubmitDraftBillReplacesTheEarlierPayment(t *testing.T) {
 	expectSaleStoreAccess(mock)
 	mock.ExpectBegin()
 	expectDraftState(mock, 0)
+	expectNoNoteRequest(mock)
 	expectNumberAllocation(mock, 1)
 	expectBillWrite(mock)
 	mock.ExpectExec("DELETE FROM bill_product").WillReturnResult(sqlmock.NewResult(0, 1))
@@ -575,18 +584,5 @@ func TestAddBillRefusesAFinalSaleThatCannotBeVerified(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
-	}
-}
-
-// Credit notes are disabled until their ZATCA submission uses the outbox (B6). The request is refused before anything is read or written.
-func TestCreditBillIsDisabledUntilItUsesTheOutbox(t *testing.T) {
-	h, mock := newSaleTestHandler(t)
-
-	w := runSaleRequest(t, h.CreditBill, "/bill/credit", `{"bill_id":42,"note":"return"}`, nil)
-	if w.Code != http.StatusNotImplemented {
-		t.Fatalf("CreditBill = %d; want 501", w.Code)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
 	}
 }

@@ -17,7 +17,7 @@ package handlers
 //   reverseSaleMovements()     → restores stock on bill delete
 //   recordPurchaseMovements()  → adds stock on PB create
 //   reversePurchaseMovements() → deducts stock on PB delete
-//   recordCreditNoteMovements()→ restores stock on credit note create
+//   restoreCreditStock()       → puts the stock of a credit note back (note.go)
 // ============================================================================
 
 import (
@@ -320,13 +320,6 @@ func (h *handler) reversePurchaseMovements(tx *db.Queries, c *gin.Context, pbID 
 
 	return nil
 }
-
-// ============================================================================
-// recordCreditNoteMovements — Called from CreditBill
-// ============================================================================
-// When a credit note is created (returning entire bill):
-//   1. For each catalog item on the original bill → restore stock
-//   2. Insert stock_movement (credit_note, positive qty)
 
 // ============================================================================
 // API ENDPOINTS

@@ -12,10 +12,30 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nats-io/nats.go"
+
+	"ifritah/web-service-gin/pkg/identity"
 )
 
-// The envelope a bill sends is the contract the daemon reads. It has these fields, and no tenant_id.
-func TestBillEventCarriesTheCanonicalEnvelope(t *testing.T) {
+// The envelope a document sends is the contract the daemon reads. It has these fields, and no tenant_id. A bill, a credit note and a debit
+// note send the same fields, and differ in doc_type, in the id, and in the key and subject built from them.
+func TestDocumentEventCarriesTheCanonicalEnvelope(t *testing.T) {
+	cases := map[string]struct {
+		docType, key, subject string
+	}{
+		"bill":   {identity.DocBill, "acme:7:bill:42", "zatca.bill.acme_db.7"},
+		"credit": {identity.DocCredit, "acme:7:credit:42", "zatca.credit.acme_db.7"},
+		"debit":  {identity.DocDebit, "acme:7:debit:42", "zatca.debit.acme_db.7"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			checkDocumentEnvelope(t, tc.docType, tc.key, tc.subject)
+		})
+	}
+}
+
+// checkDocumentEnvelope checks the key, the subject, and the fields of the envelope that one document sends.
+func checkDocumentEnvelope(t *testing.T, docType, key, subject string) {
+	t.Helper()
 	p := &ZatcaPublisher{tenantKey: "acme", dbName: "acme_db"}
 	ident := billIdentity{
 		PosID:         "pos-1",
@@ -23,12 +43,12 @@ func TestBillEventCarriesTheCanonicalEnvelope(t *testing.T) {
 		InvoiceUUID:   "7c9e6679-7425-40de-944b-e07fc1f90ae7",
 		Fingerprint:   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	}
-	event, err := p.BillEvent(42, 7, ident)
+	event, err := p.DocumentEvent(docType, 42, 7, ident)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if event.DocumentKey != "acme:7:bill:42" || event.Subject != "zatca.bill.acme_db.7" {
-		t.Fatalf("event key %q and subject %q; want acme:7:bill:42 and zatca.bill.acme_db.7", event.DocumentKey, event.Subject)
+	if event.DocumentKey != key || event.Subject != subject {
+		t.Fatalf("event key %q and subject %q; want %q and %q", event.DocumentKey, event.Subject, key, subject)
 	}
 
 	var envelope map[string]any
@@ -36,7 +56,7 @@ func TestBillEventCarriesTheCanonicalEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]any{
-		"doc_type":            "bill",
+		"doc_type":            docType,
 		"id":                  float64(42),
 		"branch_id":           float64(7),
 		"db_name":             "acme_db",
@@ -61,14 +81,14 @@ func TestBillEventCarriesTheCanonicalEnvelope(t *testing.T) {
 	}
 }
 
-// The envelope's id is a signed 64-bit integer, so a bill id above that limit cannot be sent.
-func TestBillEventRefusesAnIDTheEnvelopeCannotCarry(t *testing.T) {
+// The envelope's id is a signed 64-bit integer, so a document id above that limit cannot be sent.
+func TestDocumentEventRefusesAnIDTheEnvelopeCannotCarry(t *testing.T) {
 	p := &ZatcaPublisher{tenantKey: "acme", dbName: "acme_db"}
-	if _, err := p.BillEvent(math.MaxInt64+1, 7, billIdentity{}); err == nil {
-		t.Fatal("BillEvent accepted a bill id above the signed 64-bit envelope limit")
+	if _, err := p.DocumentEvent(identity.DocCredit, math.MaxInt64+1, 7, billIdentity{}); err == nil {
+		t.Fatal("DocumentEvent accepted an id above the signed 64-bit envelope limit")
 	}
-	if _, err := p.BillEvent(math.MaxInt64, 7, billIdentity{}); err != nil {
-		t.Fatalf("BillEvent refused the largest envelope id: %v", err)
+	if _, err := p.DocumentEvent(identity.DocCredit, math.MaxInt64, 7, billIdentity{}); err != nil {
+		t.Fatalf("DocumentEvent refused the largest envelope id: %v", err)
 	}
 }
 
@@ -127,6 +147,44 @@ func TestBillEnvelopeMatchesTheContractFixture(t *testing.T) {
 		RequestFingerprint: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	})
 	if want := readJSONFixture(t, "bill_envelope.json"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("envelope = %v; want the contract fixture %v", got, want)
+	}
+}
+
+func TestCreditEnvelopeMatchesTheContractFixture(t *testing.T) {
+	got := marshalFields(t, Message{
+		DocType:            identity.DocCredit,
+		ID:                 9,
+		BranchID:           7,
+		DBName:             "tenant_acme",
+		TenantKey:          "acme-0001",
+		PosID:              "pos-1",
+		BillRequestID:      "5e1a7c2d-9b3f-4c8e-a6d1-2f0b9c4e7a13",
+		EventID:            "1f6e2d3c-4b5a-4978-8c6d-5e4f3a2b1c0d",
+		EGSSequenceID:      "7",
+		InvoiceUUID:        "8a2b4c6d-1e3f-4a5b-9c7d-0e2f4a6b8c1d",
+		RequestFingerprint: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+	})
+	if want := readJSONFixture(t, "credit_envelope.json"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("envelope = %v; want the contract fixture %v", got, want)
+	}
+}
+
+func TestDebitEnvelopeMatchesTheContractFixture(t *testing.T) {
+	got := marshalFields(t, Message{
+		DocType:            identity.DocDebit,
+		ID:                 10,
+		BranchID:           7,
+		DBName:             "tenant_acme",
+		TenantKey:          "acme-0001",
+		PosID:              "pos-1",
+		BillRequestID:      "c3d4e5f6-0a1b-4c2d-8e3f-4a5b6c7d8e9f",
+		EventID:            "2a3b4c5d-6e7f-4081-9a2b-3c4d5e6f7a8b",
+		EGSSequenceID:      "7",
+		InvoiceUUID:        "d4e5f6a7-b8c9-4d0e-8f1a-2b3c4d5e6f70",
+		RequestFingerprint: "0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9",
+	})
+	if want := readJSONFixture(t, "debit_envelope.json"); !reflect.DeepEqual(got, want) {
 		t.Fatalf("envelope = %v; want the contract fixture %v", got, want)
 	}
 }

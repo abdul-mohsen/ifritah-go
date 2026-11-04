@@ -571,7 +571,7 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
 
-	// Only a draft can be deleted. A final sale is an issued document, and a cancellation is a credit note (B6). The row lock
+	// A final sale is an issued document. Only a draft can be deleted, and a cancellation is a credit note. The row lock
 	// taken here holds the sale until this transaction ends, and the check runs before any stock is put back.
 	state, err := qtx.GetBillStateForUpdate(c.Request.Context(), billID)
 	if errors.Is(err, sql.ErrNoRows) {

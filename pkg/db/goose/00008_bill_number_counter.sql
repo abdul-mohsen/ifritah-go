@@ -11,4 +11,7 @@ GROUP BY branch_id
 ON DUPLICATE KEY UPDATE `last_value` = GREATEST(`last_value`, VALUES(`last_value`));
 
 -- +goose Down
-DELETE FROM branch_sequence WHERE scope = 'bill';
+-- This is a data backfill, not a reversible schema change. The migration cannot distinguish
+-- rows it inserted from counters that predated it or were written by later sales. Leaving the
+-- counters intact prevents a rollback from reusing an existing bill number.
+SELECT 1;

@@ -69,3 +69,38 @@ func hasDownStatements(text string) bool {
 	}
 	return false
 }
+
+func TestBillCounterDownIsNonDestructive(t *testing.T) {
+	body, err := fs.ReadFile(FS, "00008_bill_number_counter.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, down, found := strings.Cut(string(body), "-- +goose Down")
+	if !found {
+		t.Fatal("00008_bill_number_counter.sql has no Down section")
+	}
+	down = strings.ToLower(down)
+	for _, destructive := range []string{
+		"delete from branch_sequence",
+		"truncate branch_sequence",
+		"drop table branch_sequence",
+	} {
+		if strings.Contains(down, destructive) {
+			t.Fatalf("00008 Down contains destructive operation %q", destructive)
+		}
+	}
+}
+
+func TestEGSReservationMigrationNamesDaemonOwner(t *testing.T) {
+	body, err := fs.ReadFile(FS, "00005_egs_chain_reservation.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if strings.Contains(text, "pkg/egschain") {
+		t.Fatal("00005 still names the removed pkg/egschain package as the reservation owner")
+	}
+	if !strings.Contains(text, "queue.SQLChain") {
+		t.Fatal("00005 must identify queue.SQLChain as the reservation owner")
+	}
+}

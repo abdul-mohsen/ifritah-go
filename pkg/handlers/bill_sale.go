@@ -7,8 +7,10 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-sql-driver/mysql"
 	"github.com/shopspring/decimal"
 
 	db "ifritah/web-service-gin/pkg/db/gen"
@@ -18,8 +20,9 @@ import (
 
 // A sale whose request id was already used for other content, or for another bill, is answered with this code.
 const (
-	requestConflictCode    = "request_conflict"
-	requestConflictMessage = "this sale request id was already used for a different sale or bill"
+	requestConflictCode           = "request_conflict"
+	requestConflictMessage        = "this sale request id was already used for a different sale or bill"
+	saleRequestIdentityConstraint = "uq_bill_pos_request"
 )
 
 // AddBill saves a new sale or draft and answers with the bill id.
@@ -124,7 +127,7 @@ func (h *handler) writeSale(c *gin.Context, tx *sql.Tx, request *model.AddBillRe
 		return 0, false
 	}
 	if err := updateSaleBill(c, qtx, request, billID, sequence, ident, userID); err != nil {
-		if !IsDuplicate(err) {
+		if !isSaleRequestIdentityDuplicate(err) {
 			log.Printf("sale update: %v", err)
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return 0, false
@@ -139,6 +142,13 @@ func (h *handler) writeSale(c *gin.Context, tx *sql.Tx, request *model.AddBillRe
 		return 0, false
 	}
 	return billID, true
+}
+
+func isSaleRequestIdentityDuplicate(err error) bool {
+	var mysqlErr *mysql.MySQLError
+	return errors.As(err, &mysqlErr) &&
+		mysqlErr.Number == 1062 &&
+		strings.Contains(mysqlErr.Message, "for key '"+saleRequestIdentityConstraint+"'")
 }
 
 // finishSale writes what follows the bill row. A draft's old lines are removed first. Then the sale's lines, totals, stock

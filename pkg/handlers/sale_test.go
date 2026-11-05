@@ -123,6 +123,32 @@ func expectBillWrite(mock sqlmock.Sqlmock) {
 	mock.ExpectExec("UPDATE bill SET").WillReturnResult(sqlmock.NewResult(0, 1))
 }
 
+func duplicateKeyError(key string) error {
+	return &mysql.MySQLError{
+		Number:  1062,
+		Message: fmt.Sprintf("Duplicate entry 'value' for key '%s'", key),
+	}
+}
+
+func TestIsSaleRequestIdentityDuplicateRequiresTheRequestKey(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+		want bool
+	}{
+		{name: "request identity", key: "uq_bill_pos_request", want: true},
+		{name: "unrelated unique key", key: "uq_bill_invoice_uuid", want: false},
+		{name: "similarly named key", key: "uq_bill_pos_request_shadow", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isSaleRequestIdentityDuplicate(duplicateKeyError(tt.key)); got != tt.want {
+				t.Fatalf("isSaleRequestIdentityDuplicate(%q) = %t, want %t", tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
 // expectDraftState is the locked read of a draft's state.
 func expectDraftState(mock sqlmock.Sqlmock, state int) {
 	mock.ExpectQuery(`SELECT state FROM bill WHERE id = \? FOR UPDATE`).
@@ -346,7 +372,7 @@ func TestAddBillReplaysTheWinnerOfARace(t *testing.T) {
 	expectRequestRecord(mock, nil)
 	expectBillRow(mock, 43)
 	expectNumberAllocation(mock, 1)
-	mock.ExpectExec("UPDATE bill SET").WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry"})
+	mock.ExpectExec("UPDATE bill SET").WillReturnError(duplicateKeyError("uq_bill_pos_request"))
 	mock.ExpectRollback()
 	expectRequestRecord(mock, &recordedRequest{id: 42, fingerprint: fingerprintOf(t, saleFinalBody)})
 
@@ -367,13 +393,33 @@ func TestAddBillReportsADuplicateWhenTheWinnerCannotBeRead(t *testing.T) {
 	expectRequestRecord(mock, nil)
 	expectBillRow(mock, 43)
 	expectNumberAllocation(mock, 1)
-	mock.ExpectExec("UPDATE bill SET").WillReturnError(&mysql.MySQLError{Number: 1062, Message: "Duplicate entry"})
+	mock.ExpectExec("UPDATE bill SET").WillReturnError(duplicateKeyError("uq_bill_pos_request"))
 	mock.ExpectRollback()
 	expectRequestRecord(mock, nil)
 
 	w := runSaleRequest(t, h.AddBill, "/bill", saleFinalBody, nil)
 	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), duplicateSaleMessage) {
 		t.Fatalf("AddBill duplicate = %d %q; want 409 with the duplicate message", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A duplicate on another unique key is a database failure, not a request-identity race.
+func TestAddBillTreatsAnUnrelatedDuplicateAsDatabaseError(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
+	expectBillRow(mock, 43)
+	expectNumberAllocation(mock, 1)
+	mock.ExpectExec("UPDATE bill SET").WillReturnError(duplicateKeyError("uq_bill_invoice_uuid"))
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.AddBill, "/bill", saleFinalBody, nil)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("AddBill unrelated duplicate = %d %q; want 500", w.Code, w.Body.String())
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

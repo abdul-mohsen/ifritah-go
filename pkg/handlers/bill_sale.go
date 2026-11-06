@@ -44,6 +44,9 @@ func (h *handler) SubmitDraftBill(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
+	if !h.checkBillIDAccess(c, billID) {
+		return
+	}
 
 	request := newSaleRequest()
 	if err := c.BindJSON(&request); err != nil {

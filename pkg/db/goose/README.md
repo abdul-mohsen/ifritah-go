@@ -5,6 +5,13 @@
 `sqlc.yaml` reads this folder for the main tenant schema, so every goose migration reaches the generated code. `pkg/db/schema/car_part.sql` stays a separate sqlc input: it is another database, and sqlc reads it first (see the comment in `sqlc.yaml`).
 `pkg/db/gen` is git-ignored: `go.yml` regenerates it before every build.
 
+`00011_seed_default_settings.sql` restores the tenant defaults previously
+provided by the legacy migrations: the six WhatsApp integration keys and
+`default_markup_percentage=20`. It inserts only missing keys, so an existing
+tenant's configured values are preserved. Rolling this data migration down
+intentionally leaves settings rows in place to avoid deleting tenant
+configuration; reapplying it is safe.
+
 ## Commands
 
 Run from the repository root. The database must already exist.

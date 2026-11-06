@@ -69,3 +69,17 @@ func hasDownStatements(text string) bool {
 	}
 	return false
 }
+
+func TestEGSReservationMigrationNamesDaemonOwner(t *testing.T) {
+	body, err := fs.ReadFile(FS, "00005_egs_chain_reservation.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if strings.Contains(text, "pkg/egschain") {
+		t.Fatal("00005 still names the removed pkg/egschain package as the reservation owner")
+	}
+	if !strings.Contains(text, "queue.SQLChain") {
+		t.Fatal("00005 must identify queue.SQLChain as the reservation owner")
+	}
+}

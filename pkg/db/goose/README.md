@@ -5,6 +5,11 @@
 `sqlc.yaml` reads this folder for the main tenant schema, so every goose migration reaches the generated code. `pkg/db/schema/car_part.sql` stays a separate sqlc input: it is another database, and sqlc reads it first (see the comment in `sqlc.yaml`).
 `pkg/db/gen` is git-ignored: `go.yml` regenerates it before every build.
 
+The EGS reservation columns in `00005_egs_chain_reservation.sql` are daemon-owned
+storage for `queue.SQLChain`; the backend migration does not implement runtime
+booking, lease takeover, release, or commit. The MySQL contract test runs when
+`GOOSE_PARITY_DSN` is set.
+
 ## Commands
 
 Run from the repository root. The database must already exist.

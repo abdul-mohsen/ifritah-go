@@ -1,15 +1,13 @@
 // Package goosemigrations embeds the goose migrations for the tenant database.
 //
 // Only the numbered files in this directory are applied by goose. sqlc reads this directory for
-// the tenant schema, and pkg/db/schema/car_part.sql stays a separate sqlc input. The legacy
-// folders pkg/db/migrations and pkg/db/runtime_migrations only drive the replay check until the
-// deployment tooling moves to goose.
+// the tenant schema, and pkg/db/schema/car_part.sql stays a separate sqlc input.
 package goosemigrations
 
 import "embed"
 
-// BaselineVersion is the goose version of 00001_baseline.sql. Existing tenant databases are
-// adopted at this version, and goose never rolls the baseline back.
+// BaselineVersion is the goose version of 00001_baseline.sql. Goose never rolls
+// the baseline back.
 const BaselineVersion int64 = 1
 
 // FS holds the goose migration files.

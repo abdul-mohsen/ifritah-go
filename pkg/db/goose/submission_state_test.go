@@ -13,7 +13,7 @@ import (
 // TestSubmissionStateContract checks 00003 on a database that already has submissions. Each
 // existing submission gets the outcome that its numeric status implies. The new state columns
 // and tables enforce the outcome states, the attempt numbers and the claim keys. It needs a
-// MySQL server, like TestBaselineMatchesLegacySchema.
+// MySQL server, like the other migration contract tests.
 func TestSubmissionStateContract(t *testing.T) {
 	dsn := os.Getenv("GOOSE_PARITY_DSN")
 	if dsn == "" {

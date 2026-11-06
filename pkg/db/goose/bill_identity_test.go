@@ -9,7 +9,7 @@ import (
 
 // TestBillIdentityContract checks what 00002 adds to bill. A (pos_id, bill_request_id) pair is
 // unique, bills without identity can be any number, and a fingerprint must be 64 lowercase hex
-// characters. It needs a MySQL server, like TestBaselineMatchesLegacySchema.
+// characters. It needs a MySQL server, like the other migration contract tests.
 func TestBillIdentityContract(t *testing.T) {
 	dsn := os.Getenv("GOOSE_PARITY_DSN")
 	if dsn == "" {

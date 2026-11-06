@@ -1,9 +1,8 @@
 # Tenant database migrations (goose)
 
 `00001_baseline.sql` is the tenant schema. A fresh tenant database is built from it by
-`migrate up`. A pre-goose tenant database must use the explicit, digest-checked `migrate adopt`
-command first; an already goose-managed database uses `migrate up`. The command never guesses
-that an arbitrary existing schema is the baseline.
+`migrate up`. The migration workflow is fresh-system-only; pre-Goose tenant databases are not
+supported by this command.
 
 `sqlc.yaml` reads this folder for the main tenant schema, so every goose migration reaches the generated code. `pkg/db/schema/car_part.sql` stays a separate sqlc input: it is another database, and sqlc reads it first (see the comment in `sqlc.yaml`).
 `pkg/db/gen` is git-ignored: `go.yml` regenerates it before every build.
@@ -14,7 +13,6 @@ Run from the repository root. The database must already exist.
 
 ```sh
 HOST=127.0.0.1:3306 DBUSER=root PASSWORD=root DBNAME=my_tenant go run ./cmd/migrate up
-HOST=127.0.0.1:3306 DBUSER=root ****** DBNAME=my_tenant go run ./cmd/migrate adopt
 go run ./cmd/migrate status     # list every migration and whether it is applied
 go run ./cmd/migrate down       # roll back one migration; refuses to go below the baseline
 go run ./cmd/migrate roundtrip  # roll back everything above the baseline, then re-apply
@@ -22,8 +20,7 @@ go run ./cmd/migrate version
 ```
 
 The compose stack runs `/app/migrate up` once, in its `migrate` service, before the API starts.
-CI runs `go run ./cmd/migrate up`. Deployment moves to the same command in DP1. `adopt` is
-for an existing pre-goose database only; after it succeeds, run `up`.
+CI runs `go run ./cmd/migrate up`. Deployment moves to the same command in DP1.
 
 ## Rules for new migrations
 
@@ -44,8 +41,6 @@ for an existing pre-goose database only; after it succeeds, run `up`.
 - `go test ./pkg/db/goose/...`: file names and versions, a Down section for every migration
   after the baseline.
 - the bill-counter backfill and its non-destructive Down on a MySQL parity database;
-- explicit adoption of an exact baseline, with refusal for empty, drifted, or already-managed
-  databases;
 - the `queue.SQLChain`-owned EGS reservation SQL contract (booking serialization, lease takeover,
   owner guards, commit, release, and stale re-delivery);
 - `cmd/migrate up`, `status`, `roundtrip`, `up`, `version` on a fresh database.

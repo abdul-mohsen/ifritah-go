@@ -1,6 +1,6 @@
 # Verifies the goose migrations, and that sqlc generates from them, on every pull request and on pushes to dev and main.
-# The baseline must apply cleanly and match the legacy schema on each supported MySQL version,
-# and every migration after the baseline must roll back and re-apply.
+# The baseline must apply cleanly on each supported MySQL version, and every
+# migration after the baseline must roll back and re-apply.
 name: Migrations
 
 on:
@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 8.0.28 is the oldest server the legacy schema supports. 8.0 and 8.4 are the current lines.
+        # 8.0.28 is the oldest server supported by the baseline. 8.0 and 8.4 are the current lines.
         mysql: ["8.0.28", "8.0.44", "8.4"]
 
     services:
@@ -64,7 +64,7 @@ jobs:
             mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u root \
             -e "CREATE DATABASE IF NOT EXISTS goose_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 
-      - name: Baseline, parity, and migration round trip
+      - name: Baseline and migration round trip
         env:
           GOOSE_PARITY_DSN: "root:root@tcp(127.0.0.1:3306)/?multiStatements=true&parseTime=true"
           TEST_MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/?parseTime=true"

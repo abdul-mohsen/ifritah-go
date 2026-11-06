@@ -12,6 +12,7 @@ package handlers
 // ============================================================================
 
 import (
+	"database/sql"
 	"ifritah/web-service-gin/pkg/model"
 	"net/http"
 	"os"
@@ -39,6 +40,10 @@ func (h *handler) CreditBill(c *gin.Context) {
 }
 
 func (h *handler) GetCreditBillPDF(c *gin.Context) {
+	scope, ok := h.requireBillScope(c)
+	if !ok {
+		return
+	}
 
 	// Validate id is a positive integer before composing a path with it.
 	// Path-traversal hardening (Sonar gosecurity:S2083): the param feeds
@@ -54,7 +59,15 @@ func (h *handler) GetCreditBillPDF(c *gin.Context) {
 
 	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
 	if true {
-		bill, products := h.getBillDetail(c)
+		bill, products, err := h.getBillDetailByID(c.Request.Context(), creditID, scope)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				c.Status(http.StatusNotFound)
+			} else {
+				c.Status(http.StatusInternalServerError)
+			}
+			return
+		}
 		for _, p := range products {
 			if p.Name != model.MaintenanceCost {
 				p.Name = "تكلفة الصيانة"

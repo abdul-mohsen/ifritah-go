@@ -93,10 +93,20 @@ func billCursorKeys(r db.GetAllBillRow) []any {
 func (h *handler) GetBills(c *gin.Context) {
 
 	userSession := GetSessionInfo(c)
+	scope, ok := h.requireBillScope(c)
+	if !ok {
+		return
+	}
 
 	var storeIds []int
-	for _, value := range h.getStores(userSession) {
-		storeIds = append(storeIds, value.Id)
+	if scope.enforced {
+		for _, id := range scope.storeIDs {
+			storeIds = append(storeIds, int(id))
+		}
+	} else {
+		for _, value := range h.getStores(userSession) {
+			storeIds = append(storeIds, value.Id)
+		}
 	}
 
 	request := model.BillRequestFilter{}
@@ -160,6 +170,8 @@ func (h *handler) GetBills(c *gin.Context) {
 	}
 
 	args := db.GetAllBillParams{
+		StoreIds:         int32StoreIDs(request.StoreIds),
+		MerchantID:       scope.merchantID,
 		StateFilter:      stateFilter,
 		QueryNameLike:    queryNameLike,
 		QueryPhoneDigits: queryPhoneDigits,
@@ -216,14 +228,22 @@ func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.BillProd
 
 func parseBillID(rawID string) (uint64, error) {
 	billID, err := strconv.ParseUint(rawID, 10, 64)
-	if err != nil {
+	if err != nil || billID == 0 {
 		return 0, fmt.Errorf("invalid bill id")
 	}
 	return billID, nil
 }
 
-func (h *handler) getBillDetailByID(ctx context.Context, id uint64) (model.Bill, []model.BillProductResponse, error) {
-	bill, err := h.queries.GetBillPDFByID(ctx, id)
+func int32StoreIDs(ids []int) []int32 {
+	out := make([]int32, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, int32(id))
+	}
+	return out
+}
+
+func (h *handler) getBillDetailByID(ctx context.Context, id uint64, scope billVisibilityScope) (model.Bill, []model.BillProductResponse, error) {
+	bill, err := h.queries.GetBillPDFByID(ctx, scope.billPDFParams(id))
 	if err != nil {
 		return model.Bill{}, nil, err
 	}
@@ -346,6 +366,11 @@ func (h *handler) getBillDetailByID(ctx context.Context, id uint64) (model.Bill,
 }
 
 func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProductResponse) {
+	scope, ok := h.requireBillScope(c)
+	if !ok {
+		return model.Bill{}, nil
+	}
+
 	billID, err := parseBillID(c.Param("id"))
 	if err != nil {
 		log.Printf("getBillDetail: %v", err)
@@ -353,10 +378,14 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 		return model.Bill{}, nil
 	}
 
-	bill, products, err := h.getBillDetailByID(c.Request.Context(), billID)
+	bill, products, err := h.getBillDetailByID(c.Request.Context(), billID, scope)
 	if err != nil {
 		log.Printf("getBillDetail: %v", err)
-		c.AbortWithError(http.StatusBadRequest, err)
+		if errors.Is(err, sql.ErrNoRows) {
+			c.AbortWithStatus(http.StatusNotFound)
+		} else {
+			c.AbortWithError(http.StatusInternalServerError, err)
+		}
 		return model.Bill{}, nil
 	}
 
@@ -366,11 +395,18 @@ func (h *handler) getBillDetail(c *gin.Context) (model.Bill, []model.BillProduct
 func (h *handler) GetBillDetail(c *gin.Context) {
 
 	bill, _ := h.getBillDetail(c)
+	if c.IsAborted() {
+		return
+	}
 
 	c.JSON(http.StatusOK, bill)
 }
 
 func (h *handler) GetBillPDF(c *gin.Context) {
+	scope, ok := h.requireBillScope(c)
+	if !ok {
+		return
+	}
 
 	// Validate id is a positive integer before composing a path with it.
 	// Path-traversal hardening (Sonar gosecurity:S2083): the param feeds
@@ -386,9 +422,13 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 	filename := filepath.Join("/var", "www", "html", "downloads", id+".pdf")
 	if true {
-		pdfBytes, _, err := h.buildBillPDFBytes(c.Request.Context(), billID)
+		pdfBytes, _, err := h.buildBillPDFBytes(c.Request.Context(), billID, scope)
 		if err != nil {
 			log.Printf("GetBillPDF: %v", err)
+			if errors.Is(err, sql.ErrNoRows) {
+				c.Status(http.StatusNotFound)
+				return
+			}
 			c.Status(http.StatusInternalServerError)
 			return
 		}
@@ -405,8 +445,8 @@ func (h *handler) GetBillPDF(c *gin.Context) {
 
 }
 
-func (h *handler) buildBillPDFBytes(ctx context.Context, billID uint64) ([]byte, model.Bill, error) {
-	bill, products, err := h.getBillDetailByID(ctx, billID)
+func (h *handler) buildBillPDFBytes(ctx context.Context, billID uint64, scope billVisibilityScope) ([]byte, model.Bill, error) {
+	bill, products, err := h.getBillDetailByID(ctx, billID, scope)
 	if err != nil {
 		return nil, model.Bill{}, err
 	}
@@ -443,18 +483,25 @@ func buildBillInvoice(bill model.Bill, products []model.BillProductResponse) inv
 
 func (h *handler) GetBillCreditDetail(c *gin.Context) {
 
-	Id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+	scope, ok := h.requireBillScope(c)
+	if !ok {
 		return
 	}
 
-	id := uint64(Id)
-
-	bill, err := h.queries.GetCreditBillByID(c.Request.Context(), id)
-
+	id, err := parseBillID(c.Param("id"))
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+
+	bill, err := h.queries.GetCreditBillByID(c.Request.Context(), scope.creditBillParams(id))
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.AbortWithStatus(http.StatusNotFound)
+		} else {
+			c.AbortWithError(http.StatusInternalServerError, err)
+		}
 		return
 	}
 
@@ -554,12 +601,14 @@ func (h *handler) getProducts(billId uint64) []model.ProductDetails {
 func (h *handler) DeleteBillDetail(c *gin.Context) {
 
 	idStr := c.Param("id")
-	BillID, err := strconv.ParseInt(idStr, 10, 64)
+	billID, err := parseBillID(idStr)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
-	billID := uint64(BillID)
+	if !h.checkBillIDAccess(c, billID) {
+		return
+	}
 
 	userSession := GetSessionInfo(c)
 

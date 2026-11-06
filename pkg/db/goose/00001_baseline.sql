@@ -1,10 +1,9 @@
 -- +goose Up
--- Baseline of the tenant database schema. It is squashed from the legacy
+-- Baseline of the tenant database schema. It is squashed from the historical
 -- pkg/db/schema/schema.sql, pkg/db/migrations/*.sql and
 -- pkg/db/runtime_migrations/*.sql, applied in that order on MySQL 8.0.28.
 -- Generated with: mysqldump --no-data --skip-add-drop-table --skip-comments
 --   --no-tablespaces --set-gtid-purged=OFF --skip-triggers
--- Existing tenant databases are adopted at version 1 and never re-run this file.
 -- The baseline has no Down section, so goose never drops the schema.
 -- The view cash_voucher_summary uses DEFINER=CURRENT_USER, not root, so an account with ALL on the database can replay this file.
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -1805,4 +1804,3 @@ CREATE TABLE `zatca_submission` (
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
-

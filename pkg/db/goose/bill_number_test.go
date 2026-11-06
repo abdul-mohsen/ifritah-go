@@ -2,6 +2,7 @@ package goosemigrations
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestBillNumberCounter(t *testing.T) {
 	}
 	companyID := execInsert(t, db, "INSERT INTO company (name, vat_number) VALUES ('acme', '300000000000003')")
 	for id := 1; id <= 2; id++ {
-		execInsert(t, db, "INSERT INTO branches (id, name, company_id) VALUES (?, ?, ?)", id, "branch", companyID)
+		execInsert(t, db, "INSERT INTO branches (id, name, company_id) VALUES (?, ?, ?)", id, fmt.Sprintf("branch %d", id), companyID)
 	}
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("goose up to 00008: %v", err)

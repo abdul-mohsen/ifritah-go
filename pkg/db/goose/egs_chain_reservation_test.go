@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -30,7 +31,8 @@ func TestEGSReservationContract(t *testing.T) {
 		t.Skip("GOOSE_PARITY_DSN is not set")
 	}
 	ctx := context.Background()
-	db, provider := openFreshGooseDB(t, dsn, "goose_egs_chain")
+	dbName := "goose_egs_chain_" + strconv.Itoa(os.Getpid())
+	db, provider := openFreshGooseDB(t, dsn, dbName)
 	if _, err := provider.UpTo(ctx, 5); err != nil {
 		t.Fatalf("goose up to 00005: %v", err)
 	}
@@ -48,7 +50,7 @@ func TestEGSReservationContract(t *testing.T) {
 
 	lockAndCheckNowait(t, db)
 
-	now := time.Now().UTC().Truncate(time.Second)
+	now := time.Date(2026, time.November, 6, 12, 0, 0, 0, time.UTC)
 	liveLease := now.Add(time.Hour)
 	if err := bookEGSReservation(ctx, db, 7, "document-1", "token-1", now, liveLease); err != nil {
 		t.Fatalf("book document-1: %v", err)
@@ -70,7 +72,10 @@ func TestEGSReservationContract(t *testing.T) {
 		t.Fatalf("different live owner = %v; want busy", err)
 	}
 
-	mustExec(t, db, "UPDATE branch_zatca_config SET reservation_lease_expires_at = '2000-01-01 00:00:00' WHERE branch_id = 7")
+	expiredAt := now.Add(-time.Hour)
+	if _, err := db.Exec("UPDATE branch_zatca_config SET reservation_lease_expires_at = ? WHERE branch_id = 7", expiredAt); err != nil {
+		t.Fatalf("expire reservation: %v", err)
+	}
 	if err := bookEGSReservation(ctx, db, 7, "document-2", "token-2", now, liveLease); err != nil {
 		t.Fatalf("expired reservation takeover: %v", err)
 	}
@@ -166,10 +171,10 @@ func bookEGSReservation(ctx context.Context, db *sql.DB, branchID uint32, docume
 		return err
 	}
 	if row.key.Valid {
-		if row.key.String != documentKey {
+		if row.key.String != documentKey && row.lease.Valid && row.lease.Time.After(now) {
 			return errEGSReservationBusy
 		}
-		if row.lease.Valid && row.lease.Time.After(now) {
+		if row.key.String == documentKey && row.lease.Valid && row.lease.Time.After(now) {
 			return tx.Commit()
 		}
 	}

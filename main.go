@@ -96,6 +96,7 @@ func main() {
 
 		// ── Bills (delete is manager+) ─────────────────────────────────
 		authorized.GET("bill/:id", h.GetBillDetail)
+		authorized.GET("bill/pdf/:id", h.GetBillPDF)
 		authorized.POST("bill/all", h.GetBills)
 		authorized.POST("bill", h.AddBill)
 		authorized.POST("bill/:id/whatsapp", h.SendBillWhatsApp)
@@ -103,6 +104,7 @@ func main() {
 		authorized.DELETE("bill/:id", mgr, h.DeleteBillDetail)
 
 		authorized.GET("credit_bill/:id", h.GetBillCreditDetail)
+		authorized.GET("bill/credit/pdf/:id", h.GetCreditBillPDF)
 		authorized.POST("bill/credit", h.CreditBill)
 
 		// ── Purchase Bills (delete & receipt-tracking are manager+) ────
@@ -222,8 +224,6 @@ func main() {
 
 	nonAuthGroup := router.Group(os.Getenv("BASEURL"))
 	{
-		nonAuthGroup.GET("bill/pdf/:id", h.GetBillPDF)
-		nonAuthGroup.GET("bill/credit/pdf/:id", h.GetCreditBillPDF)
 		nonAuthGroup.POST("register", h.Register)
 		nonAuthGroup.POST("login", h.Login)
 		nonAuthGroup.POST("refresh", h.Refresh)

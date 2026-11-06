@@ -43,6 +43,15 @@ func (h *handler) getStores(user userSession) []Store {
 func (h *handler) getStoreIds(c *gin.Context) []int32 {
 
 	userSession := GetSessionInfo(c)
+	if role := authenticatedRole(c); role != "" {
+		ids, err := h.loadStoreIDs(c.Request.Context(), userSession.id, role)
+		if err != nil {
+			log.Printf("getStoreIds scoped query: %v", err)
+			return nil
+		}
+		return ids
+	}
+
 	rows, err := h.DB.Query(`select store.id from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, userSession.id)
 
 	if err != nil {
@@ -127,13 +136,55 @@ func (h *handler) GetStores(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 	applyStoresQueryStringOverlay(c, &req)
 
-	stores := h.getStores(GetSessionInfo(c))
+	stores := h.getStoresForRequest(c)
 	if stores == nil {
 		stores = []Store{}
 	}
 	stores = filterStoresByQuery(stores, req.Query)
 
 	c.JSON(http.StatusOK, pagination.Envelope[Store]{Items: stores})
+}
+
+func (h *handler) getStoresForRequest(c *gin.Context) []Store {
+	role := authenticatedRole(c)
+	if role == "" {
+		return h.getStores(GetSessionInfo(c))
+	}
+
+	userID := userIDFromContext(c)
+	rows, err := h.DB.QueryContext(c.Request.Context(), `
+		SELECT s.id, s.addressId, s.name
+		FROM store s
+		JOIN user u ON u.id = ?
+		LEFT JOIN branches b ON b.id = s.branch_id
+		WHERE s.company_id = u.company_id
+		  AND (
+		        ? IN ('admin', 'owner')
+		     OR (? = 'manager' AND b.manager_id = u.id)
+		     OR ? = 'employee'
+		  )
+		ORDER BY s.id
+	`, userID, role, role, role)
+	if err != nil {
+		log.Printf("getStores scoped query: %v", err)
+		return nil
+	}
+	defer rows.Close()
+
+	var stores []Store
+	for rows.Next() {
+		var store Store
+		if err := rows.Scan(&store.Id, &store.AddressId, &store.Name); err != nil {
+			log.Printf("getStores scoped scan: %v", err)
+			return nil
+		}
+		stores = append(stores, store)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("getStores scoped rows: %v", err)
+		return nil
+	}
+	return stores
 }
 
 // ── GET /api/v2/store/:id ───────────────────────────────────────────────────

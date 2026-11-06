@@ -63,6 +63,11 @@ SELECT id, store_id, quantity, is_deleted
 FROM product
 WHERE id = ? AND is_deleted = 0;
 
+-- name: GetProductForSaleUpdate :one
+SELECT id, store_id, is_deleted
+FROM product
+WHERE id = ?
+FOR UPDATE;
 
 -- name: UpdateProductQuantity :exec
 UPDATE product
@@ -101,4 +106,3 @@ WHERE cn.id = ?;
 SELECT bp.id, bp.product_id, bp.quantity
 FROM bill_product bp
 WHERE bp.bill_id = ? AND bp.product_id IS NOT NULL AND bp.quantity > 0;
-

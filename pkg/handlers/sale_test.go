@@ -35,6 +35,22 @@ func saleBody(state int, posID, requestID string) string {
 	return "{" + strings.Join(append(fields, saleLines), ",") + "}"
 }
 
+func saleBodyWithProducts(state int, posID, requestID string, productIDs ...uint64) string {
+	fields := []string{`"store_id":1`, fmt.Sprintf(`"state":%d`, state), `"discount":"0"`, `"maintenance_cost":"0"`, `"payment_method":1`, `"branch_id":7`}
+	if posID != "" {
+		fields = append(fields, `"pos_id":"`+posID+`"`)
+	}
+	if requestID != "" {
+		fields = append(fields, `"bill_request_id":"`+requestID+`"`)
+	}
+	lines := make([]string, 0, len(productIDs))
+	for _, productID := range productIDs {
+		lines = append(lines, fmt.Sprintf(`{"product_id":%d,"name":"Brake pad","price":"10","quantity":"1","discount":"0"}`, productID))
+	}
+	fields = append(fields, fmt.Sprintf(`"products":[%s],"manual_products":[]`, strings.Join(lines, ",")))
+	return "{" + strings.Join(fields, ",") + "}"
+}
+
 // saleFinalBody is a final sale with its point-of-sale identity. saleDraftBody is the same sale saved as a draft: no identity,
 // no number, and no event.
 var (
@@ -142,6 +158,12 @@ func expectSaleLines(mock sqlmock.Sqlmock) {
 	mock.ExpectExec(`UPDATE bill\s+SET\s+total_before_vat`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`SELECT COALESCE\(value, 'disable'\)`).
 		WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow("disable"))
+}
+
+func expectSaleProduct(mock sqlmock.Sqlmock, productID uint64, storeID int32, deleted bool) {
+	mock.ExpectQuery(`SELECT id, store_id, is_deleted\s+FROM product\s+WHERE id = \?\s+FOR UPDATE`).
+		WithArgs(productID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "store_id", "is_deleted"}).AddRow(productID, storeID, deleted))
 }
 
 // expectSaleEvent is the outbox row of the sale's ZATCA event, written in the sale's transaction.
@@ -334,6 +356,93 @@ func TestAddBillRefusesADifferentSaleUnderARecordedRequest(t *testing.T) {
 	w := runSaleRequest(t, h.AddBill, "/bill", saleFinalBody, nil)
 	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), requestConflictCode) {
 		t.Fatalf("AddBill with changed content = %d %q; want 409 %s", w.Code, w.Body.String(), requestConflictCode)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAddBillRefusesADeletedProductBeforeWritingAnyLine(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
+	expectBillRow(mock, 42)
+	expectNumberAllocation(mock, 1)
+	expectBillWrite(mock)
+	expectSaleProduct(mock, 9, 1, true)
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.AddBill, "/bill", saleBodyWithProducts(1, "pos-1", saleRequestID, 9), nil)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "deleted") {
+		t.Fatalf("AddBill with deleted product = %d %q; want 400 about deleted product", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAddBillRefusesAMissingProductBeforeWritingAnyLine(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
+	expectBillRow(mock, 42)
+	expectNumberAllocation(mock, 1)
+	expectBillWrite(mock)
+	mock.ExpectQuery(`SELECT id, store_id, is_deleted\s+FROM product\s+WHERE id = \?\s+FOR UPDATE`).
+		WithArgs(uint64(9)).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "store_id", "is_deleted"}))
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.AddBill, "/bill", saleBodyWithProducts(1, "pos-1", saleRequestID, 9), nil)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "not found") {
+		t.Fatalf("AddBill with missing product = %d %q; want 400 about missing product", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAddBillRefusesACrossStoreProductBeforeWritingAnyLine(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
+	expectBillRow(mock, 42)
+	expectNumberAllocation(mock, 1)
+	expectBillWrite(mock)
+	expectSaleProduct(mock, 9, 2, false)
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.AddBill, "/bill", saleBodyWithProducts(1, "pos-1", saleRequestID, 9), nil)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "does not belong to store") {
+		t.Fatalf("AddBill with cross-store product = %d %q; want 400 about product store", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAddBillRollsBackMixedCatalogLinesWhenOneProductIsCrossStore(t *testing.T) {
+	h, mock := newSaleTestHandler(t)
+	expectSaleStoreAccess(mock)
+	mock.ExpectBegin()
+	expectRequestRecord(mock, nil)
+	expectNoNoteRequest(mock)
+	expectBillRow(mock, 42)
+	expectNumberAllocation(mock, 1)
+	expectBillWrite(mock)
+	expectSaleProduct(mock, 9, 1, false)
+	expectSaleProduct(mock, 10, 2, false)
+	mock.ExpectRollback()
+
+	w := runSaleRequest(t, h.AddBill, "/bill", saleBodyWithProducts(1, "pos-1", saleRequestID, 9, 10), nil)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "does not belong to store") {
+		t.Fatalf("AddBill with mixed catalog lines = %d %q; want 400 about product store", w.Code, w.Body.String())
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

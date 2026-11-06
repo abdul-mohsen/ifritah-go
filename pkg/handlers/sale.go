@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -121,6 +122,30 @@ func saleProducts(request *model.AddBillRequest) []model.BillProduct {
 		products = append(products, product)
 	}
 	return products
+}
+
+// validateSaleProducts locks every catalog product for the sale and verifies that it is active and belongs to the selected store.
+// Manual lines are deliberately excluded because they do not reference catalog stock.
+func validateSaleProducts(qtx *db.Queries, c *gin.Context, storeID int32, products []model.BillProduct) error {
+	for _, line := range products {
+		if line.ProductId == nil {
+			continue
+		}
+
+		productID := *line.ProductId
+		product, err := qtx.GetProductForSaleUpdate(c.Request.Context(), productID)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return fmt.Errorf("product %d not found", productID)
+		case err != nil:
+			return fmt.Errorf("validate product %d: %w", productID, err)
+		case product.IsDeleted:
+			return fmt.Errorf("product %d is deleted", productID)
+		case product.StoreID != storeID:
+			return fmt.Errorf("product %d does not belong to store %d", productID, storeID)
+		}
+	}
+	return nil
 }
 
 // recordSaleStock deducts the catalog products of a final sale from stock, in the enforcement mode of the

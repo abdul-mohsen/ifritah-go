@@ -148,9 +148,16 @@ func (h *handler) writeSale(c *gin.Context, tx *sql.Tx, request *model.AddBillRe
 	return billID, true
 }
 
-// finishSale writes what follows the bill row. A draft's old lines are removed first. Then the sale's lines, totals, stock
-// movements and ZATCA event are written, and the transaction commits.
+// finishSale writes what follows the bill row. Catalog products are validated and locked before a draft's old lines are removed.
+// Then the sale's lines, totals, stock movements and ZATCA event are written, and the transaction commits.
 func (h *handler) finishSale(c *gin.Context, tx *sql.Tx, qtx *db.Queries, request *model.AddBillRequest, sale finalSale, draftID *uint64, userID int32) bool {
+	if err := validateSaleProducts(qtx, c, request.StoreId, request.Products); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"detail": err.Error(),
+			"type":   "product_error",
+		})
+		return false
+	}
 	if draftID != nil {
 		if err := qtx.DeleteProductToBill(c.Request.Context(), sale.billID); err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)

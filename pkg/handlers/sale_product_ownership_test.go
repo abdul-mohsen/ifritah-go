@@ -125,6 +125,15 @@ func saleProductQuantity(t *testing.T, sqlDB *sql.DB, productID uint64) decimal.
 	return quantity
 }
 
+func assertNoSaleRows(t *testing.T, sqlDB *sql.DB, tables ...string) {
+	t.Helper()
+	for _, table := range tables {
+		if got := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM "+table); got != 0 {
+			t.Fatalf("%s rows after rejected sale = %d; want 0", table, got)
+		}
+	}
+}
+
 func TestSaleAllowsSameStoreCatalogAndManualLinesAndUsesSaleStoreForMovement(t *testing.T) {
 	h, sqlDB := saleProductOwnershipFixture(t)
 	addSaleProduct(t, sqlDB, 1001, 1, "5.000", false)
@@ -164,15 +173,7 @@ func TestSaleRejectsCrossBranchProductWithoutWrites(t *testing.T) {
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "does not belong to store") {
 		t.Fatalf("cross-branch product sale = %d %q; want 400 about product store", w.Code, w.Body.String())
 	}
-	if got := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM bill"); got != 0 {
-		t.Fatalf("bill rows after cross-branch rejection = %d; want 0", got)
-	}
-	if got := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM bill_product"); got != 0 {
-		t.Fatalf("bill product rows after cross-branch rejection = %d; want 0", got)
-	}
-	if got := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM stock_movements"); got != 0 {
-		t.Fatalf("stock movements after cross-branch rejection = %d; want 0", got)
-	}
+	assertNoSaleRows(t, sqlDB, "bill", "bill_product", "stock_movements")
 	if got := saleProductQuantity(t, sqlDB, 1002); !got.Equal(decimal.NewFromInt(5)) {
 		t.Fatalf("cross-branch product quantity = %s; want 5", got)
 	}
@@ -185,9 +186,7 @@ func TestSaleRejectsMissingProductWithoutWrites(t *testing.T) {
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "not found") {
 		t.Fatalf("missing product sale = %d %q; want 400 about missing product", w.Code, w.Body.String())
 	}
-	if got := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM bill"); got != 0 {
-		t.Fatalf("bill rows after missing product rejection = %d; want 0", got)
-	}
+	assertNoSaleRows(t, sqlDB, "bill")
 }
 
 func TestSaleRejectsDeletedProductWithoutWrites(t *testing.T) {
@@ -198,9 +197,7 @@ func TestSaleRejectsDeletedProductWithoutWrites(t *testing.T) {
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "deleted") {
 		t.Fatalf("deleted product sale = %d %q; want 400 about deleted product", w.Code, w.Body.String())
 	}
-	if got := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM bill"); got != 0 {
-		t.Fatalf("bill rows after deleted product rejection = %d; want 0", got)
-	}
+	assertNoSaleRows(t, sqlDB, "bill")
 }
 
 func TestSaleRollsBackMixedSameStoreAndCrossStoreLines(t *testing.T) {
@@ -213,21 +210,7 @@ func TestSaleRollsBackMixedSameStoreAndCrossStoreLines(t *testing.T) {
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "does not belong to store") {
 		t.Fatalf("mixed product sale = %d %q; want 400 about product store", w.Code, w.Body.String())
 	}
-	if got := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM bill"); got != 0 {
-		t.Fatalf("bill rows after mixed rejection = %d; want 0", got)
-	}
-	if got := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM bill_product"); got != 0 {
-		t.Fatalf("bill product rows after mixed rejection = %d; want 0", got)
-	}
-	if got := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM stock_movements"); got != 0 {
-		t.Fatalf("stock movements after mixed rejection = %d; want 0", got)
-	}
-	if got := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM branch_sequence"); got != 0 {
-		t.Fatalf("branch sequence rows after mixed rejection = %d; want 0", got)
-	}
-	if got := noteSaleInt(t, sqlDB, "SELECT COUNT(*) FROM outbox"); got != 0 {
-		t.Fatalf("outbox rows after mixed rejection = %d; want 0", got)
-	}
+	assertNoSaleRows(t, sqlDB, "bill", "bill_product", "stock_movements", "branch_sequence", "outbox")
 	if got := saleProductQuantity(t, sqlDB, 1005); !got.Equal(decimal.NewFromInt(5)) {
 		t.Fatalf("same-store product quantity after mixed rejection = %s; want 5", got)
 	}

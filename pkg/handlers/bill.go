@@ -39,8 +39,7 @@ import (
 // checkBillStoreAccess returns true when the caller has access to the given
 // store; otherwise it writes a 400 response and returns false.
 func (h *handler) checkBillStoreAccess(c *gin.Context, storeID int32) bool {
-	storeIds := h.getStoreIds(c)
-	if !slices.Contains(storeIds, storeID) {
+	if !storeAllowed(h.getStoreIds(c), storeID) {
 		c.Status(http.StatusBadRequest)
 		return false
 	}
@@ -60,6 +59,11 @@ func (h *handler) checkStoreBelongsToBranch(c *gin.Context, storeID int32, branc
 		return false
 	}
 	return true
+}
+
+// storeAllowed reports whether a store is one of the stores that a caller can sell from.
+func storeAllowed(storeIDs []int32, storeID int32) bool {
+	return slices.Contains(storeIDs, storeID)
 }
 
 // effectiveDateOr returns ed when supplied, otherwise time.Now().

@@ -197,5 +197,8 @@ FROM bill_product bp
 LEFT JOIN articles a ON a.id = bp.product_id
 WHERE bp.bill_id = ?;
 
+-- name: GetBillByRequestFingerprint :one
+SELECT id FROM bill WHERE branch_id = ? AND request_fingerprint = ? AND request_fingerprint_version = ? ORDER BY id LIMIT 1;
+
 -- name: SoftDeleteBill :execresult
 UPDATE bill SET state = -1 WHERE id = ?

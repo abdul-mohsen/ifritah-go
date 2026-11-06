@@ -173,6 +173,21 @@ func (h *handler) finishSale(c *gin.Context, tx *sql.Tx, qtx *db.Queries, reques
 	return true
 }
 
+// saleRefusal is a sale that the sale path refuses. Its code names the rule, for the import check to report, and its message is the
+// answer of the sale path.
+type saleRefusal struct {
+	code    string
+	message string
+}
+
+func (r *saleRefusal) Error() string {
+	return r.message
+}
+
+func refuse(code, message string) error {
+	return &saleRefusal{code: code, message: message}
+}
+
 // verifyFinalSale checks a final sale before anything is numbered or written, so a bill that cannot be reported is refused while the
 // cashier can still fix it. These are the checks the sale can make from its own request. The branch's seller data is checked by the
 // daemon before it books an invoice number.
@@ -181,14 +196,14 @@ func verifyFinalSale(request *model.AddBillRequest) error {
 		return nil
 	}
 	if len(request.Products)+len(request.ManualProducts) == 0 && !request.MaintenanceCost.IsPositive() {
-		return errors.New("a final sale needs at least one line")
+		return refuse("no_lines", "a final sale needs at least one line")
 	}
 	for i, line := range slices.Concat(request.Products, request.ManualProducts) {
 		switch {
 		case !line.Quantity.IsPositive():
-			return fmt.Errorf("line %d: quantity must be positive", i+1)
+			return refuse("line_quantity", fmt.Sprintf("line %d: quantity must be positive", i+1))
 		case line.Price.IsNegative():
-			return fmt.Errorf("line %d: price must not be negative", i+1)
+			return refuse("line_price", fmt.Sprintf("line %d: price must not be negative", i+1))
 		}
 	}
 	return nil
@@ -201,9 +216,17 @@ const paymentCurrencyCode = "SAR"
 func paidAmountError(paid decimal.Decimal) error {
 	switch {
 	case paid.IsNegative():
-		return errors.New("paid_amount must not be negative")
+		return refuse("paid_amount_negative", "paid_amount must not be negative")
 	case !paid.Round(2).Equal(paid):
-		return errors.New("paid_amount must have at most two decimal places")
+		return refuse("paid_amount_precision", "paid_amount must have at most two decimal places")
+	}
+	return nil
+}
+
+// paymentAboveTotalError refuses a payment above the total of its bill.
+func paymentAboveTotalError(paid, total decimal.Decimal) error {
+	if paid.GreaterThan(total) {
+		return refuse("paid_amount_above_total", "paid_amount is more than the bill total")
 	}
 	return nil
 }
@@ -226,8 +249,8 @@ func recordSalePayment(c *gin.Context, qtx *db.Queries, request *model.AddBillRe
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return false
 	}
-	if request.PaidAmount.GreaterThan(total) {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": "paid_amount is more than the bill total"})
+	if err := paymentAboveTotalError(request.PaidAmount, total); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return false
 	}
 	currencyID, err := qtx.GetCurrencyIDByCode(ctx, paymentCurrencyCode)

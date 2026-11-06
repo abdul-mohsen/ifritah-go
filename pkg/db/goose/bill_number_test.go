@@ -24,7 +24,7 @@ func TestBillNumberCounter(t *testing.T) {
 		t.Fatalf("goose up to 00007: %v", err)
 	}
 	seedBillNumberFixture(t, db)
-	execInsert(t, db, "INSERT INTO branch_sequence (branch_id, scope, last_value) VALUES (1, 'bill', 6), (2, 'bill', 9), (1, 'stock', 42)")
+	execInsert(t, db, "INSERT INTO branch_sequence (branch_id, scope, `last_value`) VALUES (1, 'bill', 6), (2, 'bill', 9), (1, 'stock', 42)")
 	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("goose up to 00008: %v", err)
 	}
@@ -45,8 +45,8 @@ func TestBillNumberCounter(t *testing.T) {
 	var billCounters, otherScope, branchOne, branchTwo int
 	scanOne(t, db, &billCounters, "SELECT COUNT(*) FROM branch_sequence WHERE scope = 'bill'")
 	scanOne(t, db, &otherScope, "SELECT COUNT(*) FROM branch_sequence WHERE scope = 'stock'")
-	scanOne(t, db, &branchOne, "SELECT last_value FROM branch_sequence WHERE branch_id = 1 AND scope = 'bill'")
-	scanOne(t, db, &branchTwo, "SELECT last_value FROM branch_sequence WHERE branch_id = 2 AND scope = 'bill'")
+	scanOne(t, db, &branchOne, "SELECT `last_value` FROM branch_sequence WHERE branch_id = 1 AND scope = 'bill'")
+	scanOne(t, db, &branchTwo, "SELECT `last_value` FROM branch_sequence WHERE branch_id = 2 AND scope = 'bill'")
 	if billCounters != 4 || otherScope != 1 || branchOne != 8 || branchTwo != 10 {
 		t.Fatalf("after down, branch counters = bill %d, other %d, branch1 %d, branch2 %d; want bill 4, other 1, branch1 8, branch2 10",
 			billCounters, otherScope, branchOne, branchTwo)

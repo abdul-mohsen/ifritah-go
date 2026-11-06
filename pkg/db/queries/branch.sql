@@ -21,6 +21,9 @@ FROM branch_zatca_config as config join branches as b on b.id = config.branch_id
 -- name: GetBranchName :one
 SELECT name FROM branches WHERE id = ?;
 
+-- name: GetStoreBranchID :one
+SELECT branch_id FROM store WHERE id = ?;
+
 -- name: UpdateZatcaBranchConfig :exec
 INSERT INTO branch_zatca_config
 (branch_id, csr_org_identifier, csr_org_unit, csr_org_name,

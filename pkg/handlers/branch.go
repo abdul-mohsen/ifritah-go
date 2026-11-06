@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/pagination"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nats-io/nats.go"
 )
 
 const (
@@ -452,8 +454,22 @@ func (h *handler) OnboardBranchZatca(c *gin.Context) {
 		}
 	}
 
-	if err := h.pub.OnboadBranch(int64(branchID), otp); err != nil {
+	if err := h.pub.OnboardBranch(int64(branchID), otp); err != nil {
+		writeOnboardError(c, err)
+	}
+}
+
+// writeOnboardError answers a failed onboarding request. A refusal is 422 with the daemon's reason, and a daemon that does not
+// answer is 503.
+func writeOnboardError(c *gin.Context, err error) {
+	var rejected *OnboardRejectedError
+	switch {
+	case errors.As(err, &rejected):
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": rejected.Reason})
+	case errors.Is(err, nats.ErrNoResponders), errors.Is(err, nats.ErrTimeout):
+		c.JSON(http.StatusServiceUnavailable, gin.H{"detail": "the ZATCA service is not available"})
+	default:
+		log.Printf("onboarding request failed: %v", err)
 		c.Status(http.StatusInternalServerError)
-		return
 	}
 }

@@ -12,3 +12,7 @@ FROM company WHERE id = ? LIMIT 1;
 UPDATE company
    SET name = ?, name_ar = ?
  WHERE id = ?;
+
+-- name: GetTenantKey :one
+-- Each database hosts one company, so the first row is the tenant's.
+SELECT tenant_key FROM company ORDER BY id LIMIT 1;

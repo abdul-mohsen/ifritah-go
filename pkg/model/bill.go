@@ -65,6 +65,8 @@ type AddBillRequest struct {
 	PaymentMethod   int32           `json:"payment_method" binding:"required"`
 	BranchID        uint32          `json:"branch_id" binding:"required"`
 	DeliverDate     *time.Time      `json:"deliver_date"`
+	PosID           string          `json:"pos_id"`
+	BillRequestID   string          `json:"bill_request_id"`
 }
 
 type BillProduct struct {

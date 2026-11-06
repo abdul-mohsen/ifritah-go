@@ -1,9 +1,10 @@
 -- +goose Up
--- EGS chain reservation (B4). The committed chain is already on branch_zatca_config:
--- last_icv and previous_invoice_hash. A reservation holds one document's ICV while the document
--- is built and signed. The four reservation columns are set together or not at all, and only the
--- owner of a reservation can commit or release it (pkg/egschain). The columns are appended,
--- because sqlc appends them too.
+-- EGS chain reservation (B4). Backend Goose owns this tenant-schema DDL: the committed chain is
+-- already on branch_zatca_config (last_icv and previous_invoice_hash), and this migration adds
+-- the four reservation columns. queue.SQLChain in the external ZATCA daemon owns the runtime
+-- reservation protocol: booking and lease takeover, plus owner-guarded release and commit. The
+-- four reservation columns are set together or not at all; backend application code does not
+-- execute this runtime protocol. The columns are appended for existing schema compatibility.
 ALTER TABLE branch_zatca_config
   ADD COLUMN icv_reservation_key VARCHAR(255) NULL,
   ADD COLUMN icv_reservation_token VARCHAR(64) NULL,

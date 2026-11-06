@@ -16,6 +16,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	db "ifritah/web-service-gin/pkg/db/gen"
 	"ifritah/web-service-gin/pkg/model"
@@ -33,7 +34,6 @@ import (
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/models"
 	"github.com/abdul-mohsen/go-arabic-pdf-lib/pkg/pdf"
 	"github.com/gin-gonic/gin"
-	"github.com/shopspring/decimal"
 )
 
 // checkBillStoreAccess returns true when the caller has access to the given
@@ -42,6 +42,21 @@ func (h *handler) checkBillStoreAccess(c *gin.Context, storeID int32) bool {
 	storeIds := h.getStoreIds(c)
 	if !slices.Contains(storeIds, storeID) {
 		c.Status(http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+// checkStoreBelongsToBranch returns true when the store is in the given branch. A store with no branch, or one of another branch, gets
+// a 400 response and false. The sale is signed with its envelope's branch, so the store must match it.
+func (h *handler) checkStoreBelongsToBranch(c *gin.Context, storeID int32, branchID uint32) bool {
+	storeBranch, err := h.queries.GetStoreBranchID(c.Request.Context(), storeID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return false
+	}
+	if storeBranch == nil || *storeBranch != branchID {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"message": "store does not belong to the branch"})
 		return false
 	}
 	return true
@@ -167,283 +182,6 @@ func (h *handler) GetBills(c *gin.Context) {
 	c.JSON(http.StatusOK, envelope)
 }
 
-func (h *handler) AddBill(c *gin.Context) {
-
-	request := model.AddBillRequest{
-		State:         1,
-		PaymentMethod: 0,
-		PaidAmount:    decimal.NewFromInt(0),
-	}
-
-	if err := c.BindJSON(&request); err != nil {
-		log.Printf("AddBill: %v", err)
-		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	userSession := GetSessionInfo(c)
-
-	if !h.checkBillStoreAccess(c, request.StoreId) {
-		return
-	}
-
-	paymentDueDate := request.PaymentDueDate
-	effectiveDate := effectiveDateOr(request.EffectiveDate)
-	tx, err := h.DB.Begin()
-
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	defer tx.Rollback()
-	qtx := h.queries.WithTx(tx)
-
-	var squenceNumber uint64 = 0
-
-	if request.State > 0 {
-		squenceNumber = getNextSquenceNumber(qtx, c)
-	}
-
-	args := db.CreateBillParams{
-		EffectiveDate:   effectiveDate,
-		PaymentDueDate:  paymentDueDate,
-		State:           int32(request.State),
-		Discount:        request.Discount,
-		StoreID:         int32(request.StoreId),
-		SequenceNumber:  &squenceNumber,
-		MerchantID:      int32(userSession.id),
-		MaintenanceCost: request.MaintenanceCost,
-		Note:            request.Note,
-		Username:        request.UserName,
-		ClientID:        request.ClientID,
-		UserPhoneNumber: request.UserPhoneNumber,
-		PaymentMethod:   request.PaymentMethod,
-		DeliverDate:     request.DeliverDate,
-		BranchID:        &request.BranchID,
-	}
-
-	res, err := qtx.CreateBill(c.Request.Context(), args)
-	if err != nil {
-		log.Printf("AddBill: %v", err)
-		if IsDuplicate(err) {
-			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-				"message": "Supplier bill number already exists for this supplier",
-			})
-		}
-		return
-	}
-
-	id, err := res.LastInsertId()
-
-	if err != nil {
-		log.Printf("AddBill: %v", err)
-		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	// TODO @ssda work around when the frontend send id when he should not
-	for i := range request.ManualProducts {
-		request.ManualProducts[i].ProductId = nil
-	}
-
-	products := append(request.Products, request.ManualProducts...)
-
-	if request.MaintenanceCost.GreaterThan(decimal.Zero) {
-		product := model.BillProduct{
-			Name:     model.MaintenanceCost,
-			Price:    request.MaintenanceCost,
-			Quantity: decimal.NewFromInt(1),
-		}
-		products = append(products, product)
-	}
-
-	if err := addProductToBill(qtx, c, products, uint64(id)); err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
-		return
-	}
-
-	if err := qtx.RefreshBillTotals(c.Request.Context(), uint64(id)); err != nil {
-		log.Printf("AddBill refresh totals: %v", err)
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	// ── Stock tracking: deduct stock for catalog products ──
-	enforcement := h.getStockEnforcementMode(c)
-	if enforcement != model.StockEnforcementDisable && request.State > 0 {
-		warnings, err := recordSaleMovements(
-			qtx, c, uint64(id), int32(request.StoreId),
-			request.Products, int32(squenceNumber),
-			enforcement, int32(userSession.id),
-		)
-		if err != nil {
-			log.Printf("AddBill: %s", sanitizeForLog(err.Error()))
-			// enforce mode: block if insufficient stock
-			c.JSON(http.StatusBadRequest, gin.H{
-				"detail": err.Error(),
-				"type":   "stock_insufficient",
-			})
-			return
-		}
-		if len(warnings) > 0 {
-			// warn mode: set header with stock warnings
-			c.Header("X-Stock-Warning", "true")
-		}
-	}
-
-	if request.State > 0 {
-		if err := h.pub.SubmitBill(id, int64(request.BranchID)); err != nil {
-			log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-	c.JSON(http.StatusCreated, id)
-
-}
-
-func (h *handler) SubmitDraftBill(c *gin.Context) {
-	BillID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-
-	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
-		return
-	}
-
-	billID := uint64(BillID)
-
-	request := model.AddBillRequest{
-		State:         1,
-		PaymentMethod: 0,
-		PaidAmount:    decimal.NewFromInt(0),
-	}
-
-	if err := c.BindJSON(&request); err != nil {
-		log.Printf("SubmitDraftBill: %v", err)
-		c.Status(http.StatusBadRequest)
-		return
-	}
-
-	userSession := GetSessionInfo(c)
-
-	if !h.checkBillStoreAccess(c, request.StoreId) {
-		return
-	}
-
-	paymentDueDate := request.PaymentDueDate
-
-	tx, err := h.DB.Begin()
-
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	defer tx.Rollback()
-	qtx := h.queries.WithTx(tx)
-
-	var squenceNumber uint64 = 0
-	if request.State > 0 {
-		squenceNumber = getNextSquenceNumber(qtx, c)
-	}
-
-	args := db.UpdateBillByIDParams{
-		EffectiveDate:   effectiveDateOr(request.EffectiveDate),
-		PaymentDueDate:  paymentDueDate,
-		State:           request.State,
-		Discount:        request.Discount,
-		StoreID:         request.StoreId,
-		SequenceNumber:  &squenceNumber,
-		MerchantID:      int32(userSession.id),
-		MaintenanceCost: request.MaintenanceCost,
-		Note:            request.Note,
-		Username:        request.UserName,
-		ClientID:        request.ClientID,
-		UserPhoneNumber: request.UserPhoneNumber,
-		ID:              billID,
-		PaymentMethod:   request.PaymentMethod,
-		DeliverDate:     request.DeliverDate,
-		BranchID:        &request.BranchID,
-	}
-
-	err = qtx.UpdateBillByID(c.Request.Context(), args)
-
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	if err = qtx.DeleteProductToBill(c.Request.Context(), billID); err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
-		return
-	}
-
-	// TODO @ssda work around when the frontend send id when he should not
-	for i := range request.ManualProducts {
-		request.ManualProducts[i].ProductId = nil
-	}
-
-	products := append(request.Products, request.ManualProducts...)
-	if request.MaintenanceCost.GreaterThan(decimal.Zero) {
-		product := model.BillProduct{
-			Name:     model.MaintenanceCost,
-			Price:    request.MaintenanceCost,
-			Quantity: decimal.NewFromInt(1),
-		}
-		products = append(products, product)
-	}
-
-	if err := addProductToBill(qtx, c, products, billID); err != nil {
-		c.AbortWithError(http.StatusBadRequest, err)
-		return
-	}
-
-	if err := qtx.RefreshBillTotals(c.Request.Context(), billID); err != nil {
-		log.Printf("SubmitDraftBill refresh totals: %v", err)
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	// ── Stock tracking: deduct stock for catalog products ──
-	enforcement := h.getStockEnforcementMode(c)
-	if enforcement != model.StockEnforcementDisable && request.State > 0 {
-		warnings, err := recordSaleMovements(
-			qtx, c, billID, int32(request.StoreId),
-			request.Products, int32(squenceNumber),
-			enforcement, int32(userSession.id),
-		)
-		if err != nil {
-			log.Printf("SubmitDraftBill: %s", sanitizeForLog(err.Error()))
-			c.JSON(http.StatusBadRequest, gin.H{
-				"detail": err.Error(),
-				"type":   "stock_insufficient",
-			})
-			return
-		}
-		if len(warnings) > 0 {
-			c.Header("X-Stock-Warning", "true")
-		}
-	}
-
-	if request.State > 0 {
-		if err := h.pub.SubmitBill(BillID, int64(request.BranchID)); err != nil {
-			log.Printf("zatca publish failed: %s", sanitizeForLog(err.Error()))
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	c.Status(http.StatusCreated)
-
-}
-
 func CalSubtotal(subTotal *big.Float, price string, quantity int) error {
 	_price, success := stringToBigFloat(price)
 	if !success || quantity <= 0 {
@@ -465,6 +203,7 @@ func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.BillProd
 			Quantity:  product.Quantity,
 			PartName:  &product.PartName,
 			BillID:    billId,
+			Discount:  product.Discount,
 		}
 		err := qtx.AddProductToBill(c.Request.Context(), args)
 		if err != nil {
@@ -473,18 +212,6 @@ func addProductToBill(qtx *db.Queries, c *gin.Context, products []model.BillProd
 	}
 
 	return nil
-}
-
-func getNextSquenceNumber(qtx *db.Queries, c *gin.Context) uint64 {
-
-	var maxSequenceNumber int64
-	maxSequenceNumber, err := qtx.GetMaxSequenceNumber(c.Request.Context())
-	if err != nil {
-		log.Printf("getNextSquenceNumber: %v", err)
-		return 0
-	}
-
-	return uint64(maxSequenceNumber) + 1
 }
 
 func parseBillID(rawID string) (uint64, error) {
@@ -843,6 +570,22 @@ func (h *handler) DeleteBillDetail(c *gin.Context) {
 	}
 	defer tx.Rollback()
 	qtx := h.queries.WithTx(tx)
+
+	// Only a draft can be deleted. A final sale is an issued document, and a cancellation is a credit note (B6). The row lock
+	// taken here holds the sale until this transaction ends, and the check runs before any stock is put back.
+	state, err := qtx.GetBillStateForUpdate(c.Request.Context(), billID)
+	if errors.Is(err, sql.ErrNoRows) {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	if state != 0 {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"message": "a final sale cannot be deleted; cancel it with a credit note"})
+		return
+	}
 
 	// ── Stock tracking: restore stock BEFORE deleting the bill (need bill data intact) ──
 	if err := h.reverseSaleMovements(qtx, c, billID, int32(userSession.id)); err != nil {

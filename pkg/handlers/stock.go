@@ -328,51 +328,6 @@ func (h *handler) reversePurchaseMovements(tx *db.Queries, c *gin.Context, pbID 
 //   1. For each catalog item on the original bill → restore stock
 //   2. Insert stock_movement (credit_note, positive qty)
 
-func (h *handler) recordCreditNoteMovements(tx *db.Queries, c *gin.Context, creditNoteID uint64, billID uint64, userID int32) error {
-	enforcement := h.getStockEnforcementMode(c)
-	if enforcement == model.StockEnforcementDisable {
-		return nil
-	}
-
-	// Get bill's store_id and sequence_number
-	row, err := tx.GetStoreIDAndSequenceNumberFromBill(c.Request.Context(), billID)
-	if err != nil {
-		return fmt.Errorf("failed to get bill %d info: %w", billID, err)
-	}
-
-	rows, err := tx.GetBillProductsForCreditNote(c.Request.Context(), billID)
-	// Get all catalog products from the original bill
-	if err != nil {
-		return err
-	}
-
-	now := time.Now()
-
-	for _, item := range rows {
-		if item.ProductID == nil {
-			continue
-		}
-		productID := *item.ProductID
-
-		// 1. Actually restore product.quantity for the returned units.
-		if err := updateProductQuantity(tx, c, productID, item.Quantity); err != nil {
-			return fmt.Errorf("failed to restore stock for product %d: %w", productID, err)
-		}
-
-		// 2. Record the matching stock movement.
-		refType := model.ReferenceTypeCreditNote
-		note := fmt.Sprintf("إشعار دائن #%d لفاتورة #%d", creditNoteID, row.SequenceNumber)
-		uid := userID
-		if err := insertStockMovement(tx, c, productID, row.StoreID,
-			item.Quantity, model.MovementTypeCreditNote, refType,
-			&creditNoteID, &item.ID, nil, &note, &uid, now); err != nil {
-			return fmt.Errorf("failed to record credit note movement for product %d: %w", productID, err)
-		}
-	}
-
-	return nil
-}
-
 // ============================================================================
 // API ENDPOINTS
 // ============================================================================

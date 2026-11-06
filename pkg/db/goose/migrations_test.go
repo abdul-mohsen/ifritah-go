@@ -91,6 +91,26 @@ func TestBillCounterDownIsNonDestructive(t *testing.T) {
 	}
 }
 
+func TestBillCounterMigrationIsFreshSystemOnly(t *testing.T) {
+	body, err := fs.ReadFile(FS, "00008_bill_number_counter.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	up, _, found := strings.Cut(string(body), "-- +goose Down")
+	if !found {
+		t.Fatal("00008_bill_number_counter.sql has no Down section")
+	}
+	up = strings.ToLower(up)
+	if !strings.Contains(up, "select 1") {
+		t.Fatal("00008 Up must remain a no-op on fresh systems")
+	}
+	for _, legacy := range []string{"insert into branch_sequence", "from bill", "sequence_number"} {
+		if strings.Contains(up, legacy) {
+			t.Fatalf("00008 Up must not assume legacy bill data through %q", legacy)
+		}
+	}
+}
+
 func TestEGSReservationMigrationNamesDaemonOwner(t *testing.T) {
 	body, err := fs.ReadFile(FS, "00005_egs_chain_reservation.sql")
 	if err != nil {

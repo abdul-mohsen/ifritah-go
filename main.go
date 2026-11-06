@@ -220,6 +220,9 @@ func main() {
 		authorized.GET("zatca/monitor/stats", admin, h.ZatcaMonitorStats)
 		authorized.GET("zatca/monitor/branches", admin, h.ZatcaMonitorBranches)
 		authorized.GET("zatca/monitor/submissions", admin, h.ZatcaMonitorSubmissions)
+		authorized.GET("zatca/outbox/dead-lettered", admin, h.ListZatcaDeadLetterOutbox)
+		authorized.GET("zatca/outbox/:event_id/recovery-audit", admin, h.ListZatcaOutboxRecoveryAudit)
+		authorized.POST("zatca/outbox/:event_id/replay", admin, h.ReplayZatcaOutbox)
 	}
 
 	nonAuthGroup := router.Group(os.Getenv("BASEURL"))

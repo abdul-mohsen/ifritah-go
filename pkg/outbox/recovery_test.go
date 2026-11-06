@@ -76,6 +76,24 @@ func recoveryAuditRows(eventID, key string, operatorID int32, now time.Time) *sq
 	)
 }
 
+func seedRecoveryOperator(t *testing.T, sqlDB *sql.DB) int32 {
+	t.Helper()
+	result, err := sqlDB.Exec(
+		"INSERT INTO `user` (username, password, role) VALUES (?, ?, ?)",
+		"recovery-admin",
+		"unused",
+		"admin",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return int32(id)
+}
+
 func TestRecoverDeadLetterIsIdempotentAndPreservesAuditSnapshot(t *testing.T) {
 	sqlDB, mock, err := sqlmock.New()
 	if err != nil {
@@ -154,7 +172,7 @@ func TestRecoverDeadLetterIsIdempotentAndPreservesAuditSnapshot(t *testing.T) {
 }
 
 func TestRecoverDeadLetterPreservesPayloadAndDeliveryAudit(t *testing.T) {
-	sqlDB := testdb.Open(t, "outbox_recovery_audit", "outbox")
+	sqlDB := testdb.Open(t, "outbox_recovery_audit", "outbox", "user")
 	appendCommitted(t, sqlDB, testEvent(eventA))
 
 	const lastError = "ZATCA daemon unavailable"
@@ -166,7 +184,7 @@ func TestRecoverDeadLetterPreservesPayloadAndDeliveryAudit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	operatorID := int32(7)
+	operatorID := seedRecoveryOperator(t, sqlDB)
 	now := time.Now().UTC().Truncate(time.Second)
 	result, err := RecoverDeadLetter(context.Background(), sqlDB, RecoveryRequest{
 		EventID:          eventA,
@@ -217,7 +235,7 @@ func TestRecoverDeadLetterPreservesPayloadAndDeliveryAudit(t *testing.T) {
 }
 
 func TestRecoveredEventDispatchesWithItsOriginalEventID(t *testing.T) {
-	sqlDB := testdb.Open(t, "outbox_recovery_audit", "outbox")
+	sqlDB := testdb.Open(t, "outbox_recovery_audit", "outbox", "user")
 	appendCommitted(t, sqlDB, testEvent(eventA))
 	if _, err := sqlDB.Exec(
 		"UPDATE outbox SET status = 'dead_letter', attempt_count = 3, last_error = 'daemon unavailable' WHERE event_id = ?",
@@ -226,7 +244,7 @@ func TestRecoveredEventDispatchesWithItsOriginalEventID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	operatorID := int32(7)
+	operatorID := seedRecoveryOperator(t, sqlDB)
 	if _, err := RecoverDeadLetter(context.Background(), sqlDB, RecoveryRequest{
 		EventID:          eventA,
 		IdempotencyKey:   "replay-dispatch-001",

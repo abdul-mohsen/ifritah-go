@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
@@ -17,32 +18,34 @@ type Store struct {
 }
 
 func (h *handler) getStores(user userSession) []Store {
-
-	rows, err := h.DB.Query(`select store.id, addressId, store.name from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, user.id)
-
+	stores, err := h.getStoresWithError(context.Background(), user)
 	if err != nil {
-		log.Printf("getStores query: %v", err)
+		log.Printf("getStores: %v", err)
 		return nil
 	}
-
-	var stores []Store
-
-	for rows.Next() {
-		var store Store
-		if err := rows.Scan(&store.Id, &store.AddressId, &store.Name); err != nil {
-			log.Printf("getStores scan: %v", err)
-			return nil
-		}
-		stores = append(stores, store)
-	}
-
 	return stores
+}
 
+func (h *handler) getStoresWithError(ctx context.Context, user userSession) ([]Store, error) {
+	rows, err := h.listStoresForScope(ctx, user.id, "")
+	if err != nil {
+		return nil, err
+	}
+	return storesFromScopeRows(rows), nil
 }
 
 func (h *handler) getStoreIds(c *gin.Context) []int32 {
 
 	userSession := GetSessionInfo(c)
+	if role := authenticatedRole(c); role != "" {
+		ids, err := h.loadStoreIDs(c.Request.Context(), userSession.id, role)
+		if err != nil {
+			log.Printf("getStoreIds scoped query: %v", err)
+			return nil
+		}
+		return ids
+	}
+
 	rows, err := h.DB.Query(`select store.id from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, userSession.id)
 
 	if err != nil {
@@ -127,13 +130,29 @@ func (h *handler) GetStores(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 	applyStoresQueryStringOverlay(c, &req)
 
-	stores := h.getStores(GetSessionInfo(c))
-	if stores == nil {
-		stores = []Store{}
+	stores, err := h.getStoresForRequest(c)
+	if err != nil {
+		log.Printf("GetStores: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
 	}
 	stores = filterStoresByQuery(stores, req.Query)
 
 	c.JSON(http.StatusOK, pagination.Envelope[Store]{Items: stores})
+}
+
+func (h *handler) getStoresForRequest(c *gin.Context) ([]Store, error) {
+	role := authenticatedRole(c)
+	if role == "" {
+		return h.getStoresWithError(c.Request.Context(), GetSessionInfo(c))
+	}
+
+	userID := userIDFromContext(c)
+	rows, err := h.listStoresForScope(c.Request.Context(), userID, role)
+	if err != nil {
+		return nil, err
+	}
+	return storesFromScopeRows(rows), nil
 }
 
 // ── GET /api/v2/store/:id ───────────────────────────────────────────────────

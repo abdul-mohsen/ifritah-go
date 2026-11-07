@@ -20,6 +20,8 @@ FROM bill
 JOIN credit_note cn ON cn.bill_id = bill.id
 LEFT JOIN client  ON client.id = bill.client_id
 WHERE bill.state >= 0
+  AND bill.store_id IN (sqlc.slice('store_ids'))
+  AND (sqlc.narg('merchant_id') IS NULL OR bill.merchant_id = sqlc.narg('merchant_id'))
   AND (sqlc.narg('state_filter') IS NULL OR bill.state = sqlc.narg('state_filter'))
   AND (
         (sqlc.narg('query_name_like') IS NULL AND sqlc.narg('query_phone_digits') IS NULL)
@@ -54,6 +56,8 @@ SELECT bill.id AS id,
 FROM bill
 LEFT JOIN client ON client.id = bill.client_id
 WHERE bill.state >= 0
+  AND bill.store_id IN (sqlc.slice('store_ids'))
+  AND (sqlc.narg('merchant_id') IS NULL OR bill.merchant_id = sqlc.narg('merchant_id'))
   AND (sqlc.narg('state_filter') IS NULL OR bill.state = sqlc.narg('state_filter'))
   AND (
         (sqlc.narg('query_name_like') IS NULL AND sqlc.narg('query_phone_digits') IS NULL)
@@ -129,7 +133,19 @@ FROM bill b
 JOIN store on store.id = b.store_id
 JOIN company on company.id = store.company_id
 LEFT JOIN credit_note cn on cn.bill_id = b.id
-WHERE b.id = ? LIMIT 1 ;
+WHERE b.id = ?
+  AND b.store_id IN (sqlc.slice('store_ids'))
+  AND (sqlc.narg('merchant_id') IS NULL OR b.merchant_id = sqlc.narg('merchant_id'))
+LIMIT 1 ;
+
+
+-- name: GetBillIDForScope :one
+SELECT b.id
+FROM bill b
+WHERE b.id = ?
+  AND b.store_id IN (sqlc.slice('store_ids'))
+  AND (sqlc.narg('merchant_id') IS NULL OR b.merchant_id = sqlc.narg('merchant_id'))
+LIMIT 1;
 
 -- name: UpdateBillByID :exec
 UPDATE bill SET

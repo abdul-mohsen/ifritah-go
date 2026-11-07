@@ -66,6 +66,10 @@ func (h *handler) SendBillWhatsApp(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, model.WhatsAppSendResponse{Detail: ErrInvalidInvoiceID})
 		return
 	}
+	scope, ok := h.requireBillScope(c)
+	if !ok {
+		return
+	}
 
 	settings, err := h.loadWhatsAppSettings(c.Request.Context())
 	if err != nil {
@@ -82,7 +86,7 @@ func (h *handler) SendBillWhatsApp(c *gin.Context) {
 		return
 	}
 
-	bill, products, err := h.getBillDetailByID(c.Request.Context(), billID)
+	bill, products, err := h.getBillDetailByID(c.Request.Context(), billID, scope)
 	if err != nil {
 		log.Printf("SendBillWhatsApp: %v", err)
 		if errors.Is(err, sql.ErrNoRows) {

@@ -32,7 +32,10 @@ FROM bill b
 JOIN store on store.id = b.store_id
 JOIN company on company.id = store.company_id
 JOIN credit_note  cn on cn.bill_id = b.id
-WHERE b.id = ? LIMIT 1;
+WHERE b.id = ?
+  AND b.store_id IN (sqlc.slice('store_ids'))
+  AND (sqlc.narg('merchant_id') IS NULL OR b.merchant_id = sqlc.narg('merchant_id'))
+LIMIT 1;
 
 -- name: InsertCreditNote :execresult
 INSERT INTO credit_note (bill_id, state, note) VALUES (?, ?, ?)

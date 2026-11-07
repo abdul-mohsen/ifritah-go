@@ -172,7 +172,7 @@ func expectBillDetail(mock sqlmock.Sqlmock, id uint64, userPhone *string, userNa
 		nil,
 		nil,
 	)
-	mock.ExpectQuery(getBillPDFPattern).WithArgs(id).WillReturnRows(rows)
+	mock.ExpectQuery(getBillPDFPattern).WithArgs(id, int32(0), nil, nil).WillReturnRows(rows)
 	mock.ExpectQuery(getBillProductsPattern).WithArgs(id).WillReturnRows(sqlmock.NewRows([]string{
 		"id", "product_id", "bill_id", "vat", "price", "quantity", "name", "part_name", "type", "discount",
 		"total_before_discount", "total_before_vat", "vat_total", "total_including_vat",

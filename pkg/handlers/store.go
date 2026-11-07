@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"ifritah/web-service-gin/pkg/pagination"
 	"log"
 	"net/http"
@@ -17,27 +18,20 @@ type Store struct {
 }
 
 func (h *handler) getStores(user userSession) []Store {
-
-	rows, err := h.DB.Query(`select store.id, addressId, store.name from store join company on store.company_id = company.id join user on user.id= ? and company.id=user.company_id`, user.id)
-
+	stores, err := h.getStoresWithError(context.Background(), user)
 	if err != nil {
-		log.Printf("getStores query: %v", err)
+		log.Printf("getStores: %v", err)
 		return nil
 	}
-
-	var stores []Store
-
-	for rows.Next() {
-		var store Store
-		if err := rows.Scan(&store.Id, &store.AddressId, &store.Name); err != nil {
-			log.Printf("getStores scan: %v", err)
-			return nil
-		}
-		stores = append(stores, store)
-	}
-
 	return stores
+}
 
+func (h *handler) getStoresWithError(ctx context.Context, user userSession) ([]Store, error) {
+	rows, err := h.listStoresForScope(ctx, user.id, "")
+	if err != nil {
+		return nil, err
+	}
+	return storesFromScopeRows(rows), nil
 }
 
 func (h *handler) getStoreIds(c *gin.Context) []int32 {
@@ -136,55 +130,29 @@ func (h *handler) GetStores(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 	applyStoresQueryStringOverlay(c, &req)
 
-	stores := h.getStoresForRequest(c)
-	if stores == nil {
-		stores = []Store{}
+	stores, err := h.getStoresForRequest(c)
+	if err != nil {
+		log.Printf("GetStores: %v", err)
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
 	}
 	stores = filterStoresByQuery(stores, req.Query)
 
 	c.JSON(http.StatusOK, pagination.Envelope[Store]{Items: stores})
 }
 
-func (h *handler) getStoresForRequest(c *gin.Context) []Store {
+func (h *handler) getStoresForRequest(c *gin.Context) ([]Store, error) {
 	role := authenticatedRole(c)
 	if role == "" {
-		return h.getStores(GetSessionInfo(c))
+		return h.getStoresWithError(c.Request.Context(), GetSessionInfo(c))
 	}
 
 	userID := userIDFromContext(c)
-	rows, err := h.DB.QueryContext(c.Request.Context(), `
-		SELECT s.id, s.addressId, s.name
-		FROM store s
-		JOIN user u ON u.id = ?
-		LEFT JOIN branches b ON b.id = s.branch_id
-		WHERE s.company_id = u.company_id
-		  AND (
-		        ? IN ('admin', 'owner')
-		     OR (? = 'manager' AND b.manager_id = u.id)
-		     OR ? = 'employee'
-		  )
-		ORDER BY s.id
-	`, userID, role, role, role)
+	rows, err := h.listStoresForScope(c.Request.Context(), userID, role)
 	if err != nil {
-		log.Printf("getStores scoped query: %v", err)
-		return nil
+		return nil, err
 	}
-	defer rows.Close()
-
-	var stores []Store
-	for rows.Next() {
-		var store Store
-		if err := rows.Scan(&store.Id, &store.AddressId, &store.Name); err != nil {
-			log.Printf("getStores scoped scan: %v", err)
-			return nil
-		}
-		stores = append(stores, store)
-	}
-	if err := rows.Err(); err != nil {
-		log.Printf("getStores scoped rows: %v", err)
-		return nil
-	}
-	return stores
+	return storesFromScopeRows(rows), nil
 }
 
 // ── GET /api/v2/store/:id ───────────────────────────────────────────────────

@@ -60,4 +60,4 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace github.com/abdul-mohsen/go-whatsapp => github.com/abdulmohsenssda/go-whatsapp v0.0.0-20260518170500-3a99caa17469
+replace github.com/abdul-mohsen/go-whatsapp => github.com/abdulmohsenssda/go-whatsapp v0.0.0-20260518221046-6ad7504de147

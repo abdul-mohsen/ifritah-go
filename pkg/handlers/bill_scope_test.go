@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,12 +41,12 @@ func billScopeRequest(t *testing.T, role string, method, path, body string) *gin
 }
 
 func expectScopeStoreIDs(mock sqlmock.Sqlmock, role string, storeIDs ...int32) {
-	rows := sqlmock.NewRows([]string{"id"})
+	rows := sqlmock.NewRows([]string{"id", "addressId", "name"})
 	for _, id := range storeIDs {
-		rows.AddRow(id)
+		rows.AddRow(id, nil, nil)
 	}
 	mock.ExpectQuery("SELECT s\\.id").
-		WithArgs(int64(7), role, role, role).
+		WithArgs(int32(7), role, role, role, role, role).
 		WillReturnRows(rows)
 }
 
@@ -101,6 +102,21 @@ func TestBillVisibilityScopeRoleMatrix(t *testing.T) {
 			assertBillScope(t, scope, billVisibilityScope{storeIDs: tt.storeIDs, merchantID: tt.merchantID})
 			assertScopeStatus(t, mock, c, http.StatusOK)
 		})
+	}
+}
+
+func TestBillVisibilityScopePropagatesStoreScopeQueryError(t *testing.T) {
+	h, mock := newBillScopeHandler(t)
+	mock.ExpectQuery("SELECT s\\.id").
+		WithArgs(int32(7), RoleManager, RoleManager, RoleManager, RoleManager, RoleManager).
+		WillReturnError(errors.New("store scope unavailable"))
+
+	c := billScopeRequest(t, RoleManager, http.MethodGet, "/bill/1", "")
+	if _, err := h.billVisibilityScope(c); err == nil {
+		t.Fatal("billVisibilityScope should propagate store scope query errors")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 

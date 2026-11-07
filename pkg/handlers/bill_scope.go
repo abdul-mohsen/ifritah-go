@@ -106,35 +106,14 @@ func (h *handler) billVisibilityScope(c *gin.Context) (billVisibilityScope, erro
 }
 
 func (h *handler) loadStoreIDs(ctx context.Context, userID int64, role string) ([]int32, error) {
-	query := `
-		SELECT s.id
-		FROM store s
-		JOIN user u ON u.id = ?
-		LEFT JOIN branches b ON b.id = s.branch_id
-		WHERE s.company_id = u.company_id
-		  AND (
-		        ? IN ('admin', 'owner')
-		     OR (? = 'manager' AND b.manager_id = u.id)
-		     OR ? = 'employee'
-		  )
-		ORDER BY s.id
-	`
-	rows, err := h.DB.QueryContext(ctx, query, userID, role, role, role)
+	rows, err := h.listStoresForScope(ctx, userID, role)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var storeIDs []int32
-	for rows.Next() {
-		var id int32
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		storeIDs = append(storeIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	storeIDs := make([]int32, 0, len(rows))
+	for _, row := range rows {
+		storeIDs = append(storeIDs, row.ID)
 	}
 	return storeIDs, nil
 }

@@ -76,12 +76,29 @@ func TestBillEventRefusesAnIDTheEnvelopeCannotCarry(t *testing.T) {
 func TestNewZATCAPublisherStartsWhileNATSIsDown(t *testing.T) {
 	t.Setenv("DBNAME", "acme_db")
 	t.Setenv("NATS_URL", "nats://127.0.0.1:1")
+	t.Setenv("NATS_USER", "")
+	t.Setenv("NATS_PASSWORD", "")
 
 	p, err := NewZATCAPublisher("acme")
 	if err != nil {
 		t.Fatalf("NewZATCAPublisher with NATS down = %v; want the backend to start", err)
 	}
 	p.Close()
+}
+
+func TestNATSAuthOptionsRequireUsernameAndPasswordTogether(t *testing.T) {
+	if _, err := natsAuthOptions("", "secret"); err == nil {
+		t.Fatal("NATS password without username was accepted")
+	}
+	if _, err := natsAuthOptions("zatca_daemon", ""); err == nil {
+		t.Fatal("NATS username without password was accepted")
+	}
+	if options, err := natsAuthOptions("", ""); err != nil || len(options) != 0 {
+		t.Fatalf("empty NATS auth = (%d options, %v); want no auth options", len(options), err)
+	}
+	if options, err := natsAuthOptions("zatca_daemon", "secret"); err != nil || len(options) != 1 {
+		t.Fatalf("configured NATS auth = (%d options, %v); want one auth option", len(options), err)
+	}
 }
 
 // The daemon decodes the same two fixtures (zatca_integration queue/testdata). The tests below are the backend's half of
@@ -151,13 +168,26 @@ func TestOnboardReplyRefusalIsReportedWithTheDaemonsReason(t *testing.T) {
 
 func TestOnboardingErrorsReachTheOperatorWithTheirStatus(t *testing.T) {
 	cases := map[string]struct {
-		err    error
-		status int
+		err        error
+		status     int
+		wantDetail string
 	}{
-		"refused by the daemon": {&OnboardRejectedError{Reason: "onboarding of this branch is already running"}, http.StatusUnprocessableEntity},
-		"no daemon answers":     {nats.ErrNoResponders, http.StatusServiceUnavailable},
-		"the daemon is slow":    {nats.ErrTimeout, http.StatusServiceUnavailable},
-		"anything else":         {errors.New("connection reset"), http.StatusInternalServerError},
+		"refused by the daemon": {
+			err:        &OnboardRejectedError{Reason: "onboarding of this branch is already running"},
+			status:     http.StatusUnprocessableEntity,
+			wantDetail: "onboarding of this branch is already running",
+		},
+		"no daemon answers": {
+			err:        nats.ErrNoResponders,
+			status:     http.StatusServiceUnavailable,
+			wantDetail: "ZATCA daemon has no onboarding responder on the configured NATS server",
+		},
+		"the daemon is slow": {
+			err:        nats.ErrTimeout,
+			status:     http.StatusServiceUnavailable,
+			wantDetail: "ZATCA daemon did not respond before the onboarding request timed out",
+		},
+		"anything else": {err: errors.New("connection reset"), status: http.StatusInternalServerError},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -166,6 +196,15 @@ func TestOnboardingErrorsReachTheOperatorWithTheirStatus(t *testing.T) {
 			writeOnboardError(c, tc.err)
 			if c.Writer.Status() != tc.status {
 				t.Fatalf("status = %d; want %d", c.Writer.Status(), tc.status)
+			}
+			if tc.wantDetail != "" {
+				var response map[string]string
+				if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+					t.Fatalf("decode response: %v", err)
+				}
+				if response["detail"] != tc.wantDetail {
+					t.Fatalf("detail = %q; want %q", response["detail"], tc.wantDetail)
+				}
 			}
 		})
 	}

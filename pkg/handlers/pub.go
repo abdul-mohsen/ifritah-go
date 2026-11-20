@@ -82,7 +82,11 @@ func NewZATCAPublisher(tenantKey string) (*ZatcaPublisher, error) {
 		return nil, fmt.Errorf("DBNAME env var is required")
 	}
 
-	nc, err := nats.Connect(natsURL,
+	authOptions, err := natsAuthOptions(os.Getenv("NATS_USER"), os.Getenv("NATS_PASSWORD"))
+	if err != nil {
+		return nil, err
+	}
+	options := append(authOptions,
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(10*time.Second),
@@ -100,6 +104,7 @@ func NewZATCAPublisher(tenantKey string) (*ZatcaPublisher, error) {
 			log.Printf("[zatca-publisher] NATS connection closed")
 		}),
 	)
+	nc, err := nats.Connect(natsURL, options...)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}
@@ -110,6 +115,16 @@ func NewZATCAPublisher(tenantKey string) (*ZatcaPublisher, error) {
 	}
 
 	return &ZatcaPublisher{js: js, nc: nc, dbName: dbName, tenantKey: tenantKey}, nil
+}
+
+func natsAuthOptions(user, password string) ([]nats.Option, error) {
+	if user == "" && password == "" {
+		return nil, nil
+	}
+	if user == "" || password == "" {
+		return nil, fmt.Errorf("NATS_USER and NATS_PASSWORD must be configured together")
+	}
+	return []nats.Option{nats.UserInfo(user, password)}, nil
 }
 
 func (p *ZatcaPublisher) Close() {

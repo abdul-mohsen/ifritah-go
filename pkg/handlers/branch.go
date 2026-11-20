@@ -466,8 +466,12 @@ func writeOnboardError(c *gin.Context, err error) {
 	switch {
 	case errors.As(err, &rejected):
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"detail": rejected.Reason})
-	case errors.Is(err, nats.ErrNoResponders), errors.Is(err, nats.ErrTimeout):
-		c.JSON(http.StatusServiceUnavailable, gin.H{"detail": "the ZATCA service is not available"})
+	case errors.Is(err, nats.ErrNoResponders):
+		log.Printf("ZATCA onboarding has no NATS responder: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"detail": "ZATCA daemon has no onboarding responder on the configured NATS server"})
+	case errors.Is(err, nats.ErrTimeout):
+		log.Printf("ZATCA onboarding timed out waiting for NATS responder: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"detail": "ZATCA daemon did not respond before the onboarding request timed out"})
 	default:
 		log.Printf("onboarding request failed: %v", err)
 		c.Status(http.StatusInternalServerError)
